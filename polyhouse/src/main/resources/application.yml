@@ -15,16 +15,23 @@ spring:
     password: ${DB_PASSWORD:}
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      # Windows 通过 WSL 的本机端口转发访问 Redis，固定 IPv4 避免 localhost 解析差异。
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
       database: ${REDIS_DATABASE:0}
-      timeout: 5000ms
+      # 当前本地实例无认证；以后启用 ACL 或密码时，只从运行环境注入凭据。
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      client-type: lettuce
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:3s}
+      timeout: ${REDIS_TIMEOUT:5s}
 
 # MyBatis-Plus 企业级配置
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 禁止输出 SQL 及绑定参数，避免后续用户查询把凭据和个人信息写入日志。
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
   global-config:
     db-config:
       id-type: assign_id # 默认使用雪花算法生成 bigint 主键
