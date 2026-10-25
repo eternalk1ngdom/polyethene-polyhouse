@@ -1,0 +1,60 @@
+# Java
+target/
+*.class
+*.log
+logs/
+hs_err_pid*
+
+# IDE and editors
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+coverage/
+*.tsbuildinfo
+.eslintcache
+*.timestamp-*-*.mjs
+cypress/videos/
+cypress/screenshots/
+__screenshots__/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# Operating-system files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Runtime output
+uploads/
+temp/
+*.tmp
+
+# Configuration and lock files must remain tracked
+!*.yml
+!*.yaml
+!package-lock.json
+!pnpm-lock.yaml
