@@ -29,6 +29,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -63,6 +64,8 @@ class AuthHttpIntegrationTest {
     private StringRedisTemplate redis;
     @Autowired
     private JwtProperties jwt;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private final List<Fixture> ownedFixtures = new ArrayList<>();
 
@@ -110,6 +113,9 @@ class AuthHttpIntegrationTest {
         JsonNode profile = json.readTree(current.getBody()).path("data");
         assertThat(profile.path("id").asText()).isEqualTo(Long.toString(fixture.id()));
         assertThat(profile.path("role").asText()).isEqualTo("USER");
+        assertThat(profile.path("experience").asText()).isEqualTo("0");
+        assertThat(profile.path("level").asInt()).isEqualTo(1);
+        assertThat(profile.path("coins").asText()).isEqualTo("0");
         assertThat(profile.has("passwordHash")).isFalse();
         assertThat(profile.has("deleted")).isFalse();
         assertThat(profile.has("lastLoginIp")).isFalse();
@@ -186,12 +192,16 @@ class AuthHttpIntegrationTest {
         String username = "http_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         String password = UUID.randomUUID().toString();
         ResponseEntity<String> response = http.postForEntity("/api/auth/register",
-                Map.of("username", username, "password", password, "nickname", "真实 HTTP 验收", "role", "OWNER"), String.class);
+                Map.of("username", username, "password", password, "nickname", "真实 HTTP 验收", "role", "OWNER",
+                        "experience", "99999", "level", 99, "coins", "99999"), String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         JsonNode data = json.readTree(response.getBody()).path("data");
         Fixture fixture = new Fixture(Long.parseLong(data.path("id").asText()), username, password);
         ownedFixtures.add(fixture);
         assertThat(data.path("role").asText()).isEqualTo("USER");
+        assertThat(data.path("experience").asText()).isEqualTo("0");
+        assertThat(data.path("level").asInt()).isEqualTo(1);
+        assertThat(data.path("coins").asText()).isEqualTo("0");
         return fixture;
     }
 
@@ -227,6 +237,30 @@ class AuthHttpIntegrationTest {
                 .map(client -> RedisConstants.buildAuthTokenKey(userId, client)).toList();
     }
 
+    @Test
+    void shouldReadLatestGrowthWithoutGrantingRewardsOrRolePermissions() throws Exception {
+        Fixture fixture = register();
+        String oldToken = login(fixture, "PC");
+        // 仅定向修改本测试的随机账号，模拟未来奖励业务已经提交，检验接口读取数据库而非旧 Token。
+        assertThat(jdbc.update("UPDATE sys_user SET experience = ?, level = ?, coins = ? WHERE id = ? AND username = ?",
+                Long.MAX_VALUE, 12, Long.MAX_VALUE, fixture.id(), fixture.username())).isEqualTo(1);
+        JsonNode current = json.readTree(get("/api/auth/me", oldToken).getBody()).path("data");
+        assertThat(current.path("experience").isTextual()).isTrue();
+        assertThat(current.path("experience").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
+        assertThat(current.path("level").asInt()).isEqualTo(12);
+        assertThat(current.path("coins").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
+        ResponseEntity<String> login = http.postForEntity("/api/auth/login",
+                Map.of("username", fixture.username(), "password", fixture.password(),
+                        "experience", "1", "level", 99, "coins", "1"), String.class);
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+        JsonNode data = json.readTree(login.getBody()).path("data");
+        assertThat(data.path("user")).isEqualTo(current);
+        String token = data.path("accessToken").asText();
+        assertThat(get("/api/__integration-auth/insider", token).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(users.selectById(fixture.id()).getCoins()).isEqualTo(Long.MAX_VALUE);
+        assertThat(users.selectById(fixture.id()).getExperience()).isEqualTo(Long.MAX_VALUE);
+    }
+
     private record Fixture(long id, String username, String password) {
         /** 隐藏随机凭据，不能让测试夹具的默认文本泄露密码。 */
         @Override
@@ -249,7 +283,7 @@ class AuthHttpIntegrationTest {
 
         private Result<UserProfileVO> identity() {
             return Result.success(new UserProfileVO(UserContext.getUserId().toString(), "fixture", "身份验证", null,
-                    UserContext.getRole()));
+                    UserContext.getRole(), "0", 1, "0"));
         }
     }
 }

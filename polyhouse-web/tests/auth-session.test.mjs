@@ -25,7 +25,8 @@ const storeUrl = await moduleUrl('../src/stores/useUserStore.ts', { '../api/auth
 const { useUserStore } = await import(storeUrl)
 const { AuthCommandError } = await import(authUrl)
 const storage = new Map()
-const profile = { id: '42', username: 'fixture', nickname: '测试', avatar: null, role: 'USER' }
+const profile = { id: '42', username: 'fixture', nickname: '测试', avatar: null, role: 'USER',
+  experience: '9223372036854775807', level: 1, coins: '9223372036854775807' }
 
 function success(config) {
   return { config, data: { code: 0, message: '操作成功', data: null }, status: 200, statusText: 'OK', headers: {} }
@@ -98,4 +99,15 @@ test('旧退出请求完成不能清除等待期间建立的新会话', async ()
   await pending
   assert.equal(store.token, 'new-credential')
   assert.equal(storage.get('polyhouse_token'), 'new-credential')
+})
+
+test('经验与硬币按字符串缓存，保留大整数精度且不改变普通用户身份', () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const cached = JSON.parse(storage.get('polyhouse_user'))
+  assert.equal(cached.experience, '9223372036854775807')
+  assert.equal(cached.coins, '9223372036854775807')
+  assert.equal(cached.level, 1)
+  assert.equal(cached.role, 'USER')
+  assert.equal(store.user.experience, profile.experience)
 })

@@ -236,11 +236,12 @@ class AuthWebMvcTest {
     }
 
     private static UserProfileVO profile(UserRoleEnum role) {
-        return new UserProfileVO("42", "alice", "居民", null, role);
+        return new UserProfileVO("42", "alice", "居民", null, role, "0", 1, "0");
     }
 
     private static UserProfileVO contextProfile() {
-        return new UserProfileVO(UserContext.getUserId().toString(), "fixture", "请求身份", null, UserContext.getRole());
+        return new UserProfileVO(UserContext.getUserId().toString(), "fixture", "请求身份", null,
+                UserContext.getRole(), "0", 1, "0");
     }
 
     /** 未加角色注解的 API 仍默认要求登录，角色探针不调用收费服务。 */

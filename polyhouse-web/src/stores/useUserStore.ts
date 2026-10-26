@@ -14,6 +14,12 @@ export interface UserProfile {
   avatar: string | null
   /** 仅供界面展示，服务端仍使用数据库最新角色做权限判断。 */
   role: 'USER' | 'INSIDER' | 'OWNER'
+  /** 累计经验使用十进制字符串保留 bigint 精度，奖励规则尚未启用。 */
+  experience: string
+  /** 成长等级独立于角色权限，当前新旧账号均从 1 级开始。 */
+  level: number
+  /** 整数硬币余额使用十进制字符串传递，暂不支持发放或消费。 */
+  coins: string
 }
 
 const TOKEN_KEY = 'polyhouse_token'

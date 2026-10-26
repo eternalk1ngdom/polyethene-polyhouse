@@ -305,6 +305,9 @@ class AuthServiceImplTest {
         user.setRole(UserRoleEnum.USER);
         user.setStatus(1);
         user.setDeleted(0);
+        user.setExperience(0L);
+        user.setLevel(1);
+        user.setCoins(0L);
         return user;
     }
 

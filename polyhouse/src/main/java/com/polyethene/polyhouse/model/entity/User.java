@@ -34,6 +34,18 @@ public class User {
     /** 使用已有枚举的 @EnumValue 存取语义字符串，不能将权限权重写入 role 列。 */
     private UserRoleEnum role;
 
+    /** 累计经验由未来奖励业务定向更新；通用实体写入不能覆盖余额快照，初值交给数据库。 */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Long experience;
+
+    /** 成长等级独立于权限角色，暂从 1 级开始，升级规则尚未启用。 */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Integer level;
+
+    /** 整数硬币余额，暂不发放或消费；避免通用资料更新覆盖未来并发结算结果。 */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Long coins;
+
     private Integer status;
 
     private String lastLoginIp;
@@ -113,6 +125,36 @@ public class User {
     /** 接收数据库或受控管理逻辑提供的角色，不能绑定客户端注册字段。 */
     public void setRole(UserRoleEnum role) {
         this.role = role;
+    }
+
+    /** 返回数据库累计经验，供安全资料投影展示，不参与角色判断。 */
+    public Long getExperience() {
+        return experience;
+    }
+
+    /** 用于读取数据库经验；写入需由未来受控奖励业务使用定向 SQL 完成。 */
+    public void setExperience(Long experience) {
+        this.experience = experience;
+    }
+
+    /** 返回成长等级，不使用 UserRoleEnum 的权限权重充当等级。 */
+    public Integer getLevel() {
+        return level;
+    }
+
+    /** 用于读取数据库等级，不开放客户端修改或通用实体写回。 */
+    public void setLevel(Integer level) {
+        this.level = level;
+    }
+
+    /** 返回整数硬币余额，供本人资料展示。 */
+    public Long getCoins() {
+        return coins;
+    }
+
+    /** 用于读取数据库余额，未来发放和消费必须通过受控结算逻辑。 */
+    public void setCoins(Long coins) {
+        this.coins = coins;
     }
 
     /** 返回账号启停状态，供后续登录业务检查。 */

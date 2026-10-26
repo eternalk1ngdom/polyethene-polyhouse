@@ -89,11 +89,23 @@ node --test tests/auth-session.test.mjs
 
 `RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
 
-`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role`，不返回密码哈希、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID 以字符串传给前端，避免 JavaScript 数字精度丢失；注册、登录、当前用户 HTTP 接口均复用这些安全模型。
+`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins`，不返回密码哈希、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。注册、登录、当前用户 HTTP 接口均复用这些安全模型。
 
 初始化基线位于 [polyhouse/sql/001_init.sql](polyhouse/sql/001_init.sql)，按只读策划书归档四张表的结构，不自动执行。现有数据库无需重新初始化；该文件仅供空环境人工建表，不能当作迁移脚本反复执行。账号唯一索引与软删除并存，因此删除后账号仍占用，后续注册不得默认允许复用。
 
-本机核对时四张表的字段、默认值与索引符合策划书；现有表排序规则为 `utf8mb4_0900_ai_ci`，账号判重不区分大小写，本轮保留现状。未来变更字符比较规则必须先评估已有账号，不能直接改表。
+成长字段由追加迁移 [polyhouse/sql/002_user_growth.sql](polyhouse/sql/002_user_growth.sql) 提供。空环境依次执行 `001`、`002`；既有数据库仅执行 `002`，必须在运行新版应用或实例测试之前完成，不由应用启动自动改表。使用已有个人配置连接本机 `polyhouse_db` 后，可在 MySQL 客户端执行以下命令（示例为当前仓库路径，不包含凭据）：
+
+```sql
+source E:/project/java/polyethene-polyhouse/polyhouse/sql/002_user_growth.sql
+```
+
+迁移为 `sys_user` 追加 `experience bigint NOT NULL DEFAULT 0`、`level int NOT NULL DEFAULT 1`、`coins bigint NOT NULL DEFAULT 0`，包括非负经验/余额和至少 1 级的数据库约束，旧账号也自动取得初值。每列存在时跳过，重复执行不会清零余额；不会修正其他环境中已存在但定义不一致的同名列，升级时仍需核对结构。MySQL DDL 隐式提交，不能假定失败时可整批事务回滚；迁移支持中断后重跑。
+
+三项均为**成长数据预留**：当前登录、刷新资料和工具操作不增加经验或硬币，也不计算升级。前端 `UserProfile` 已同步字段类型，界面尚未展示。注册/登录 DTO 不接受成长属性，额外提交的同名 JSON 字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料快照覆盖未来的结算。等级与 `USER/INSIDER/OWNER` 权限完全独立，不进入 JWT，不提供任意加经验/加币接口。
+
+每日登录奖励、其他行为奖励、次数上限、升级门槛和硬币用途待确认。启用前需设计可审计的奖励流水、重复领取约束、每日结算时区和并发原子更新，不能直接信任浏览器上报的“完成行为”。
+
+原四张表保持策划书基线，用户表在此之上追加成长字段；现有表排序规则为 `utf8mb4_0900_ai_ci`，账号判重不区分大小写，本轮保留现状。未来变更字符比较规则必须先评估已有账号，不能直接改表。
 
 在 Maven 所在的同一个进程环境提供 `DB_USERNAME/DB_PASSWORD`（需要时也提供 `DB_URL`），然后在 `polyhouse/` 执行：
 

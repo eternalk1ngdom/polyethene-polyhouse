@@ -13,8 +13,12 @@ import java.util.Objects;
  * @param nickname 供右上角个人卡片展示的昵称
  * @param avatar 头像地址，允许现有数据库中的空值
  * @param role 以 USER/INSIDER/OWNER 语义字符串输出的身份
+ * @param experience 累计经验以十进制字符串输出，避免 JavaScript 大整数精度损失
+ * @param level 成长等级，暂以 1 为初始值，不授予任何角色权限
+ * @param coins 整数硬币余额以十进制字符串输出，奖励和用途尚未启用
  */
-public record UserProfileVO(String id, String username, String nickname, String avatar, UserRoleEnum role) {
+public record UserProfileVO(String id, String username, String nickname, String avatar, UserRoleEnum role,
+                            String experience, int level, String coins) {
 
     /**
      * 显式挑选资料字段，排除密码哈希、状态、登录 IP、逻辑删除与任意 JSON 扩展。
@@ -28,9 +32,17 @@ public record UserProfileVO(String id, String username, String nickname, String 
         if (id <= 0) {
             throw new IllegalArgumentException("persisted user id must be positive");
         }
+        // 数据库迁移必须先于新应用上线；拒绝缺失或非法成长数据，不伪造余额掩盖数据问题。
+        Long experience = Objects.requireNonNull(user.getExperience(), "persisted experience must not be null");
+        Integer level = Objects.requireNonNull(user.getLevel(), "persisted level must not be null");
+        Long coins = Objects.requireNonNull(user.getCoins(), "persisted coins must not be null");
+        if (experience < 0 || level < 1 || coins < 0) {
+            throw new IllegalArgumentException("persisted growth values are outside their valid range");
+        }
         return new UserProfileVO(id.toString(),
                 Objects.requireNonNull(user.getUsername(), "persisted username must not be null"),
                 user.getNickname(), user.getAvatar(),
-                Objects.requireNonNull(user.getRole(), "persisted user role must not be null"));
+                Objects.requireNonNull(user.getRole(), "persisted user role must not be null"),
+                experience.toString(), level, coins.toString());
     }
 }

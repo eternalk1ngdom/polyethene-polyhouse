@@ -11,10 +11,12 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,13 +40,14 @@ class UserMapperIntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
-    void shouldMatchBlueprintTablesUserColumnsAndUniqueIndex() {
+    void shouldMatchBaselineTablesGrowthMigrationAndUniqueIndex() {
         List<String> tables = jdbc.queryForList(
                 "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()", String.class);
         assertThat(tables).contains("sys_user", "tool_replace_template", "tool_targetkb_preset", "tool_user_preset");
         List<String> columns = jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' ORDER BY ORDINAL_POSITION", String.class);
         assertThat(columns).containsExactly("id", "username", "password_hash", "nickname", "avatar", "role",
+                "experience", "level", "coins",
                 "status", "last_login_ip", "last_login_time", "ext_json", "deleted", "create_time", "update_time");
         assertThat(jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' "
@@ -85,6 +88,9 @@ class UserMapperIntegrationTest {
         User loaded = mapper.selectById(user.getId());
         assertThat(loaded.getRole()).isEqualTo(UserRoleEnum.USER);
         assertThat(loaded.getStatus()).isEqualTo(1);
+        assertThat(loaded.getExperience()).isZero();
+        assertThat(loaded.getLevel()).isEqualTo(1);
+        assertThat(loaded.getCoins()).isZero();
         assertThat(loaded.getDeleted()).isZero();
         assertThat(loaded.getExtJson()).isNull();
         assertThat(loaded.getLastLoginTime()).isNull();
@@ -122,5 +128,38 @@ class UserMapperIntegrationTest {
         user.setPasswordHash(BCrypt.hashpw(UUID.randomUUID().toString(), BCrypt.gensalt(10)));
         user.setNickname("事务回滚验证");
         return user;
+    }
+
+    @Test
+    void shouldProtectGrowthBalancesFromGenericWritesAndEnforceDatabaseBounds() {
+        User user = newUser();
+        user.setExperience(999L);
+        user.setLevel(99);
+        user.setCoins(999L);
+        assertThat(mapper.insert(user)).isEqualTo(1);
+        User staleProfile = mapper.selectById(user.getId());
+        assertThat(staleProfile.getExperience()).isZero();
+        assertThat(staleProfile.getLevel()).isEqualTo(1);
+        assertThat(staleProfile.getCoins()).isZero();
+        assertThat(jdbc.update("UPDATE sys_user SET experience = ?, level = ?, coins = ? WHERE id = ?",
+                Long.MAX_VALUE, 7, Long.MAX_VALUE, user.getId())).isEqualTo(1);
+        staleProfile.setNickname("仅更新昵称");
+        assertThat(mapper.updateById(staleProfile)).isEqualTo(1);
+        User current = mapper.selectById(user.getId());
+        assertThat(current.getExperience()).isEqualTo(Long.MAX_VALUE);
+        assertThat(current.getLevel()).isEqualTo(7);
+        assertThat(current.getCoins()).isEqualTo(Long.MAX_VALUE);
+        // SQL 全为固定文本并绑定参数，验证存储边界而非仅依靠前端输入限制。
+        assertConstraintViolation(() -> jdbc.update("UPDATE sys_user SET experience = ? WHERE id = ?", -1L, user.getId()));
+        assertConstraintViolation(() -> jdbc.update("UPDATE sys_user SET level = ? WHERE id = ?", 0, user.getId()));
+        assertConstraintViolation(() -> jdbc.update("UPDATE sys_user SET coins = ? WHERE id = ?", -1L, user.getId()));
+    }
+
+    private static void assertConstraintViolation(Runnable action) {
+        // MySQL CHECK 违规为 3819/HY000，当前驱动不一定归类为 DataIntegrityViolationException；
+        // 检查真实数据库错误码，避免将任意连接故障也算作约束生效。
+        assertThatThrownBy(action::run).isInstanceOfSatisfying(DataAccessException.class, exception ->
+                assertThat(exception.getMostSpecificCause()).isInstanceOfSatisfying(SQLException.class,
+                        cause -> assertThat(cause.getErrorCode()).isEqualTo(3819)));
     }
 }

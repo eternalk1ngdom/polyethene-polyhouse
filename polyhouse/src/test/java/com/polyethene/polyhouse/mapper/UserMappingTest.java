@@ -57,6 +57,9 @@ class UserMappingTest {
         user.setPasswordHash("mapping-only-hash");
         user.setNickname("居民");
         user.setRole(UserRoleEnum.USER);
+        user.setExperience(100L);
+        user.setLevel(2);
+        user.setCoins(3L);
         user.setExtJson(Map.of("theme", "深色"));
         user.setCreateTime(java.time.LocalDateTime.of(2000, 1, 1, 0, 0));
         user.setUpdateTime(java.time.LocalDateTime.of(2000, 1, 1, 0, 0));
@@ -64,8 +67,10 @@ class UserMappingTest {
                 .getBoundSql(user);
         BoundSql update = factory.getConfiguration().getMappedStatement(UserMapper.class.getName() + ".updateById")
                 .getBoundSql(Map.of("et", user));
-        assertThat(insert.getSql()).doesNotContain("create_time", "update_time", "深色", "mapping-only-hash");
-        assertThat(update.getSql()).doesNotContain("create_time", "update_time", "深色", "mapping-only-hash");
+        assertThat(insert.getSql()).doesNotContain("create_time", "update_time", "深色", "mapping-only-hash",
+                "experience", "level", "coins");
+        assertThat(update.getSql()).doesNotContain("create_time", "update_time", "深色", "mapping-only-hash",
+                "experience", "level", "coins");
         assertThat(insert.getParameterMappings()).anyMatch(mapping -> mapping.getProperty().equals("extJson")
                 && mapping.getTypeHandler() instanceof JacksonTypeHandler);
     }

@@ -30,10 +30,15 @@ class UserProfileVOTest {
         JsonNode response = objectMapper.readTree(objectMapper.writeValueAsString(Result.success(UserProfileVO.from(user))));
         JsonNode profile = response.get("data");
         assertThat(profile.properties()).extracting(Map.Entry::getKey)
-                .containsExactlyInAnyOrder("id", "username", "nickname", "avatar", "role");
+                .containsExactlyInAnyOrder("id", "username", "nickname", "avatar", "role", "experience", "level", "coins");
         assertThat(profile.get("id").isTextual()).isTrue();
         assertThat(profile.get("id").asText()).isEqualTo("9223372036854775807");
         assertThat(profile.get("role").asText()).isEqualTo("INSIDER");
+        assertThat(profile.get("experience").isTextual()).isTrue();
+        assertThat(profile.get("experience").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
+        assertThat(profile.get("coins").isTextual()).isTrue();
+        assertThat(profile.get("coins").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
+        assertThat(profile.get("level").asInt()).isEqualTo(1);
         assertThat(response.toString()).doesNotContain("test-only-sensitive-hash", "192.0.2.1", "not-public");
     }
 
@@ -64,6 +69,28 @@ class UserProfileVOTest {
         user.setNickname("聚妙屋居民");
         user.setAvatar("https://example.invalid/avatar.png");
         user.setRole(UserRoleEnum.INSIDER);
+        user.setExperience(Long.MAX_VALUE);
+        user.setLevel(1);
+        user.setCoins(Long.MAX_VALUE);
         return user;
+    }
+
+    @Test
+    void shouldRejectMissingOrInvalidGrowthDataInsteadOfInventingBalances() {
+        User user = persistedUser();
+        user.setExperience(null);
+        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
+        user.setExperience(-1L);
+        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
+        user.setExperience(0L);
+        user.setLevel(null);
+        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
+        user.setLevel(0);
+        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
+        user.setLevel(1);
+        user.setCoins(null);
+        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
+        user.setCoins(-1L);
+        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
     }
 }
