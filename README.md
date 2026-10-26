@@ -24,7 +24,7 @@
 | `REDIS_PASSWORD` | Redis 认证密码 | 空，按实际服务配置填写 |
 | `REDIS_CONNECT_TIMEOUT` | 建立 Redis 连接的超时 | `3s` |
 | `REDIS_TIMEOUT` | Redis 命令超时 | `5s` |
-| `POLYHOUSE_JWT_SECRET` | JWT 的 HS256 签名密钥，32 字节安全随机数据的标准 Base64 编码 | 空；使用 JWT 工具前必须配置，登录接口尚未接入 |
+| `POLYHOUSE_JWT_SECRET` | JWT 的 HS256 签名密钥，32 字节安全随机数据的标准 Base64 编码 | 配置默认空；本机固定值由私有预设提供 |
 
 也可以在启动 Maven 的同一个 PowerShell 会话中设置环境变量。以下仅展示非敏感连接参数的设置方式：
 
@@ -63,7 +63,7 @@ mvn spring-boot:run
 
 框架产生的 HTTP 错误保留原状态和必要响应头，例如 405 的 `Allow`。错误体固定为 `application/json`，即使客户端请求了不支持的响应格式，也能收到 406 及统一错误体。请求输入、原始异常消息和异常链不进入错误响应；未知异常日志只记录异常类型及应用代码位置。
 
-MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器接入后，必须在请求结束时调用 `UserContext.clear()`；线程变量不会自动传递到异步任务。
+MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开始、认证失败、正常/异常完成及异步切换时清理 `UserContext`；线程变量不会自动传递到异步任务。
 
 ## 验证
 
@@ -87,9 +87,9 @@ node --test tests/auth-session.test.mjs
 
 `User` 映射现有 `sys_user` 表，角色使用 `UserRoleEnum` 的语义字符串，`ext_json` 映射为 JSON 对象，查询自动排除逻辑删除账号。创建、更新时间由 MySQL 维护，实体写入不会覆盖它们。
 
-`RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码。Service 已执行输入校验，未来 Controller 仍必须使用 `@Valid` 在 HTTP 入口校验。
+`RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
 
-`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role`，不返回密码哈希、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID 以字符串传给前端，避免 JavaScript 数字精度丢失。这些模型和 Mapper 不代表注册登录接口已经实现。
+`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role`，不返回密码哈希、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID 以字符串传给前端，避免 JavaScript 数字精度丢失；注册、登录、当前用户 HTTP 接口均复用这些安全模型。
 
 初始化基线位于 [polyhouse/sql/001_init.sql](polyhouse/sql/001_init.sql)，按只读策划书归档四张表的结构，不自动执行。现有数据库无需重新初始化；该文件仅供空环境人工建表，不能当作迁移脚本反复执行。账号唯一索引与软删除并存，因此删除后账号仍占用，后续注册不得默认允许复用。
 
@@ -111,15 +111,15 @@ mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true'
 
 ## JWT 基础工具
 
-当前完成签发、验签、配置读取及认证 Service 中的调用，退出和软注销 HTTP 接口已接入，注册/登录/me HTTP 接口及认证拦截器尚未接入。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
+当前五项认证 HTTP 接口和认证/角色拦截器均已接入。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
 
 `JwtUtils` 保持静态且不持有业务状态：`keyFromBase64` 校验外部密钥，`createToken` 签发访问令牌，`parseAndValidate` 验签后返回内部 `TokenClaims`。密钥、当前时间和有效期由调用方传入，工具不读取环境、不注入 Bean、不访问 MySQL/Redis，也不自动裁剪 `Bearer` 前缀。
 
 仅允许 HS256，固定签发方 `polyhouse`、接收方 `polyhouse-api` 和用途 `ACCESS`。载荷仅包含用户 ID、语义角色、终端类型、随机 `jti` 及签发/过期时间等必要声明；不携带密码、密码哈希、手机号或任意用户资料。JWT 载荷可以解码读取，签名提供防篡改校验，不提供内容保密。
 
-终端类型为 `PC/H5/PLUGIN`，签发时未指定则默认 PC。用户 ID 以字符串 subject 保存；随机 `jti` 保证同一用户同一秒内重复签发的令牌仍可区分。验证会拒绝错误签名、非 HS256 算法、错误归属/用途、缺失或无效身份、压缩载荷、未识别的关键头、未来签发及过期令牌；到达 `exp` 的同一时刻即失效。无效令牌统一抛出不携带原 Token 或异常链的安全异常，由后续认证入口转成 401。
+终端类型为 `PC/H5/PLUGIN`，签发时未指定则默认 PC。用户 ID 以字符串 subject 保存；随机 `jti` 保证同一用户同一秒内重复签发的令牌仍可区分。验证会拒绝错误签名、非 HS256 算法、错误归属/用途、缺失或无效身份、压缩载荷、未识别的关键头、未来签发及过期令牌；到达 `exp` 的同一时刻即失效。无效令牌统一抛出不携带原 Token 或异常链的安全异常，由 HTTP 认证入口转成 401。
 
-`JwtProperties` 从 `polyhouse.jwt` 读取配置。有效期唯一来源是 `application.yml` 的 `polyhouse.jwt.expiration-days`，当前为七天；已移除 Redis 中重复的七天常量。后续写入白名单时，应使用签发令牌的 `expiresAt` 减去当时时间作为剩余 TTL，避免保存延迟或重新写入延长会话。
+`JwtProperties` 从 `polyhouse.jwt` 读取配置。有效期唯一来源是 `application.yml` 的 `polyhouse.jwt.expiration-days`，当前为七天；已移除 Redis 中重复的七天常量。白名单使用签发令牌的 `expiresAt` 减去当时时间作为剩余 TTL，避免保存延迟或重新写入延长会话。
 
 密钥必须来自运行环境，禁止使用账号密码、示例短字符串或每次启动临时生成的替代密钥。当前其他模块允许在密钥为空时启动，但调用 `JwtProperties.signingKey()` 时会明确拒绝缺失、错误编码或长度不合格的配置。配置为空不代表 JWT 已能在本机实际使用。
 
@@ -147,7 +147,27 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 
 ## 注册登录 Service
 
-`AuthService` 提供 `register/login/getCurrentUser/logout/deregister` 业务方法，其中退出和账号软注销已有 HTTP 路由，目前没有自动拦截普通业务请求。注册返回安全用户资料，不自动登录；登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
+`AuthService` 提供 `register/login/getCurrentUser/logout/deregister` 业务方法，五项均已有 HTTP 入口。已映射的 `/api/**` 业务请求默认要求有效 Bearer 身份；注册、登录及独立核验请求体 Token 的撤销入口显式跳过统一 Bearer 检查。注册返回安全用户资料，不自动登录；登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
+
+### HTTP 入口与权限行为
+
+成功响应均为 `Result<T>` 的 `code/message/data`，命令型接口的 `data` 为 `null`。
+
+| 方法与路径 | 输入 | 成功数据 |
+| --- | --- | --- |
+| `POST /api/auth/register` | JSON：`username/password/nickname`，额外角色字段不生效，注册固定 USER | `UserProfileVO` |
+| `POST /api/auth/login` | JSON：`username/password/clientType`，终端可省略 | `LoginVO`，包含 Token、到期时间和安全资料 |
+| `GET /api/auth/me` | 唯一的 `Authorization: Bearer <JWT>` 请求头 | 最新 `UserProfileVO` |
+| `POST /api/auth/logout` | 保留原 JSON：`token`，值不含 Bearer 前缀 | `null` |
+| `POST /api/auth/deregister` | 保留原 JSON：`token`，值不含 Bearer 前缀 | `null` |
+
+`/me` 不接受查询参数中的 Token；缺失、重复、错误格式的 Bearer 头为 401。`ClientRequestDTO` 与请求头 Token 的 DTO 由专用解析器构造、校验，Controller 不接收 Entity 或可伪造的用户 ID。登录审计地址来自 Servlet 连接对端，忽略同名查询参数与 `X-Forwarded-For`；可信反向代理的真实地址处理尚未配置。
+
+`AuthInterceptor` 复用已有 `getCurrentUser` 验证签名、当前 jti 和数据库最新角色，再写入 `UserContext`。方法与类上的 `@RequireRole` 必须同时满足，低方法要求不能降低类级门槛；`@SkipBearerAuth` 也不能覆盖角色要求。未登录或失效会话返回 401，已登录而权限不足返回 403，依赖故障返回 503，不把缓存故障当作有效身份。
+
+当前角色受限探针只存在于测试源码，不提供生产管理或 AI 接口。请求失败、异常和异步切换均清理上下文；异步业务仍须显式传递身份，不能假定 ThreadLocal 会跨线程传播。
+
+跨域来源允许本机前端 `http://localhost:5173`、`http://127.0.0.1:5173` 和策划书预留的 `chrome-extension://*`，仅开放 GET/POST/OPTIONS，不携带 Cookie 凭据。预检先于身份认证；来源许可不授予登录或角色权限，拒绝来源/方法仍返回统一 JSON 403。部署到其他域名时需明确配置来源，当前不开放任意网站。
 
 新注册账号在业务层按 `Locale.ROOT` 转小写，查找和判重使用同一规范，匹配本机数据库不区分大小写的唯一索引。既有账号不批量改名；密码保持原样。注册只创建 USER，业务预查和唯一索引共同处理并发或软删除账号冲突，密码只保存 BCrypt 哈希。
 
@@ -173,7 +193,13 @@ mvn -q '-Dpolyhouse.auth.integration=true' '-Dtest=AuthServiceIntegrationTest' t
 mvn -q '-Dpolyhouse.redis.integration=true' '-Dtest=AuthRedisStoreIntegrationTest' test
 ```
 
-这不等于已完成 IDEA 日常运行密钥配置或浏览器登录验收；相关事项继续在 DEV_LOG 中跟进。
+本机固定运行密钥已单独配置并验收；上述业务测试不替代完整浏览器登录验收，相关边界见当前阶段日志。真实 HTTP 联调会用随机端口启动服务器，并连接本机 MySQL/Redis，使用本机预设的固定运行密钥：
+
+```powershell
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify
+```
+
+完整入口自动启用 `AuthHttpIntegrationTest`，验证注册/重复账号、连续失败立即重试、当前资料、过期/篡改/未登记令牌、数据库角色变更与禁用、多端退出和软注销。HTTP 账号用 `http_it_` 随机命名，结束时只清理本次登记的精确记录和会话；不开启请求/响应全文打印，也不把密码或 JWT 写进测试诊断。
 
 ### 软注销、回滚与真实并发验收
 

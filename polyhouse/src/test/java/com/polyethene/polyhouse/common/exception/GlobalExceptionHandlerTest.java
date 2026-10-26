@@ -5,6 +5,7 @@ import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.result.Result;
 import com.polyethene.polyhouse.model.dto.ValidationProbeDTO;
 import com.polyethene.polyhouse.model.vo.ValidationProbeVO;
+import com.polyethene.polyhouse.service.AuthService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
@@ -46,6 +48,10 @@ class GlobalExceptionHandlerTest {
 
     @Autowired
     private MockMvc mvc;
+
+    // MVC 配置现在依赖认证服务；此切片只验证公共异常，不连接外部身份存储。
+    @MockBean
+    private AuthService authService;
 
     @ParameterizedTest
     @EnumSource(value = ErrorCode.class, names = {"UNAUTHORIZED", "FORBIDDEN", "CONFLICT"})

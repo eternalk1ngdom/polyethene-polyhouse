@@ -1,16 +1,23 @@
 package com.polyethene.polyhouse.controller;
 
 import com.polyethene.polyhouse.common.result.Result;
+import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
+import com.polyethene.polyhouse.model.dto.ClientRequestDTO;
+import com.polyethene.polyhouse.model.dto.LoginDTO;
+import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.dto.SessionTokenDTO;
+import com.polyethene.polyhouse.model.vo.LoginVO;
+import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 将会话撤销请求交给服务层，身份只取自验签后的 Token，不接受客户端指定用户 ID。
+ * 提供认证 HTTP 入口，复用已有业务；身份只取自验签结果，不接受客户端指定角色或用户 ID。
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -23,7 +30,28 @@ public class AuthController {
         this.authService = authService;
     }
 
+    /** 注册只返回脱敏资料，不自动登录或允许客户端指定角色。 */
+    @SkipBearerAuth
+    @PostMapping("/register")
+    public Result<UserProfileVO> register(@Valid @RequestBody RegisterDTO request) {
+        return Result.success(authService.register(request));
+    }
+
+    /** 连接地址由专用解析器从 Servlet 获取，不采信请求体或转发头中的审计地址。 */
+    @SkipBearerAuth
+    @PostMapping("/login")
+    public Result<LoginVO> login(@Valid @RequestBody LoginDTO request, @Valid ClientRequestDTO client) {
+        return Result.success(authService.login(request, client.clientIp()));
+    }
+
+    /** 使用 Authorization Bearer 头中的 DTO 查询最新安全资料，不从客户端资料恢复权限。 */
+    @GetMapping("/me")
+    public Result<UserProfileVO> me(@Valid SessionTokenDTO session) {
+        return Result.success(authService.getCurrentUser(session.token()));
+    }
+
     /** 退出只撤销当前终端的匹配会话；成功后客户端应清理自己的 Token 和用户资料。 */
+    @SkipBearerAuth
     @PostMapping("/logout")
     public Result<Void> logout(@Valid @RequestBody SessionTokenDTO request) {
         authService.logout(request.token());
@@ -31,6 +59,7 @@ public class AuthController {
     }
 
     /** 注销当前有效会话所属账号并撤销所有支持终端的会话，禁止代他人注销。 */
+    @SkipBearerAuth
     @PostMapping("/deregister")
     public Result<Void> deregister(@Valid @RequestBody SessionTokenDTO request) {
         authService.deregister(request.token());
