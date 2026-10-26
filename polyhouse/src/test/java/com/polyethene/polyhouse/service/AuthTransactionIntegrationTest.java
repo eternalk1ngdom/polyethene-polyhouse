@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -62,6 +63,8 @@ class AuthTransactionIntegrationTest {
     private StringRedisTemplate redis;
     @Autowired
     private PlatformTransactionManager transactions;
+    @Autowired
+    private JdbcTemplate jdbc;
     @SpyBean
     private AuthRedisStore sessions;
 
@@ -162,7 +165,16 @@ class AuthTransactionIntegrationTest {
         var persisted = users.selectById(fixture.id());
         assertThat(persisted.getLastLoginTime()).isNull();
         assertThat(persisted.getLastLoginIp()).isNull();
+        assertThat(persisted.getExperience()).isZero();
+        assertThat(persisted.getLevel()).isEqualTo(1);
+        assertThat(persisted.getCoins()).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id = ?",
+                Integer.class, fixture.id())).isZero();
         assertThat(redis.countExistingKeys(sessionKeys(fixture.id()))).isZero();
+        doCallRealMethod().when(sessions).saveSession(any(), any());
+        assertThat(login(fixture, "PC").user().experience()).isEqualTo("10");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id = ?",
+                Integer.class, fixture.id())).isEqualTo(1);
     }
 
     @RepeatedTest(3)

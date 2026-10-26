@@ -43,7 +43,8 @@ class UserMapperIntegrationTest {
     void shouldMatchBaselineTablesGrowthMigrationAndUniqueIndex() {
         List<String> tables = jdbc.queryForList(
                 "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()", String.class);
-        assertThat(tables).contains("sys_user", "tool_replace_template", "tool_targetkb_preset", "tool_user_preset");
+        assertThat(tables).contains("sys_user", "tool_replace_template", "tool_targetkb_preset", "tool_user_preset",
+                "sys_user_growth_reward");
         List<String> columns = jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' ORDER BY ORDINAL_POSITION", String.class);
         assertThat(columns).containsExactly("id", "username", "password_hash", "nickname", "avatar", "role",
@@ -142,12 +143,12 @@ class UserMapperIntegrationTest {
         assertThat(staleProfile.getLevel()).isEqualTo(1);
         assertThat(staleProfile.getCoins()).isZero();
         assertThat(jdbc.update("UPDATE sys_user SET experience = ?, level = ?, coins = ? WHERE id = ?",
-                Long.MAX_VALUE, 7, Long.MAX_VALUE, user.getId())).isEqualTo(1);
+                Long.MAX_VALUE, 6, Long.MAX_VALUE, user.getId())).isEqualTo(1);
         staleProfile.setNickname("仅更新昵称");
         assertThat(mapper.updateById(staleProfile)).isEqualTo(1);
         User current = mapper.selectById(user.getId());
         assertThat(current.getExperience()).isEqualTo(Long.MAX_VALUE);
-        assertThat(current.getLevel()).isEqualTo(7);
+        assertThat(current.getLevel()).isEqualTo(6);
         assertThat(current.getCoins()).isEqualTo(Long.MAX_VALUE);
         // SQL 全为固定文本并绑定参数，验证存储边界而非仅依靠前端输入限制。
         assertConstraintViolation(() -> jdbc.update("UPDATE sys_user SET experience = ? WHERE id = ?", -1L, user.getId()));

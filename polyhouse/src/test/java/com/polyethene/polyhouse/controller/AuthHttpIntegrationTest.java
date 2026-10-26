@@ -113,9 +113,9 @@ class AuthHttpIntegrationTest {
         JsonNode profile = json.readTree(current.getBody()).path("data");
         assertThat(profile.path("id").asText()).isEqualTo(Long.toString(fixture.id()));
         assertThat(profile.path("role").asText()).isEqualTo("USER");
-        assertThat(profile.path("experience").asText()).isEqualTo("0");
+        assertThat(profile.path("experience").asText()).isEqualTo("10");
         assertThat(profile.path("level").asInt()).isEqualTo(1);
-        assertThat(profile.path("coins").asText()).isEqualTo("0");
+        assertThat(profile.path("coins").asText()).isEqualTo("1");
         assertThat(profile.has("passwordHash")).isFalse();
         assertThat(profile.has("deleted")).isFalse();
         assertThat(profile.has("lastLoginIp")).isFalse();
@@ -238,16 +238,16 @@ class AuthHttpIntegrationTest {
     }
 
     @Test
-    void shouldReadLatestGrowthWithoutGrantingRewardsOrRolePermissions() throws Exception {
+    void shouldReadLatestGrowthWithoutDuplicatingDailyRewardsOrGrantingRolePermissions() throws Exception {
         Fixture fixture = register();
         String oldToken = login(fixture, "PC");
         // 仅定向修改本测试的随机账号，模拟未来奖励业务已经提交，检验接口读取数据库而非旧 Token。
         assertThat(jdbc.update("UPDATE sys_user SET experience = ?, level = ?, coins = ? WHERE id = ? AND username = ?",
-                Long.MAX_VALUE, 12, Long.MAX_VALUE, fixture.id(), fixture.username())).isEqualTo(1);
+                Long.MAX_VALUE, 6, Long.MAX_VALUE, fixture.id(), fixture.username())).isEqualTo(1);
         JsonNode current = json.readTree(get("/api/auth/me", oldToken).getBody()).path("data");
         assertThat(current.path("experience").isTextual()).isTrue();
         assertThat(current.path("experience").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
-        assertThat(current.path("level").asInt()).isEqualTo(12);
+        assertThat(current.path("level").asInt()).isEqualTo(6);
         assertThat(current.path("coins").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
         ResponseEntity<String> login = http.postForEntity("/api/auth/login",
                 Map.of("username", fixture.username(), "password", fixture.password(),

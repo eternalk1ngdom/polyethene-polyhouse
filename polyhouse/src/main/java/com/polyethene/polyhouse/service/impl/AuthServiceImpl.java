@@ -14,6 +14,7 @@ import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthRedisStore;
 import com.polyethene.polyhouse.service.AuthService;
+import com.polyethene.polyhouse.service.UserGrowthService;
 import com.polyethene.polyhouse.utils.JwtUtils;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.JwtException;
@@ -51,20 +52,24 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProperties jwt;
     private final Validator validator;
     private final Clock clock;
+    private final UserGrowthService growth;
 
     /** 注入有状态依赖，真实运行使用 UTC 时钟，数据库审计时间显式转换到既有上海时区约定。 */
     @Autowired
-    public AuthServiceImpl(UserMapper mapper, AuthRedisStore sessions, JwtProperties jwt, Validator validator) {
-        this(mapper, sessions, jwt, validator, Clock.systemUTC());
+    public AuthServiceImpl(UserMapper mapper, AuthRedisStore sessions, JwtProperties jwt, Validator validator,
+                           UserGrowthService growth) {
+        this(mapper, sessions, jwt, validator, growth, Clock.systemUTC());
     }
 
     /** 包内构造入口允许测试提供固定时钟，不修改系统时间或在工具类中缓存时间。 */
-    AuthServiceImpl(UserMapper mapper, AuthRedisStore sessions, JwtProperties jwt, Validator validator, Clock clock) {
+    AuthServiceImpl(UserMapper mapper, AuthRedisStore sessions, JwtProperties jwt, Validator validator,
+                    UserGrowthService growth, Clock clock) {
         this.mapper = mapper;
         this.sessions = sessions;
         this.jwt = jwt;
         this.validator = validator;
         this.clock = clock;
+        this.growth = growth;
     }
 
     /** 注册只创建 USER，数据库插入与安全资料读取在同一事务内完成，冲突时回滚。 */
@@ -143,8 +148,9 @@ public class AuthServiceImpl implements AuthService {
         }
         // 更新的行锁保持到事务结束，注销必须等待本次会话发布，或先删除账号使本次更新失败。
         // Redis 不参与数据库事务；提交失败即使留下 jti，身份检查仍会复核数据库状态。
+        User rewarded = growth.rewardDailyLogin(user.getId());
         sessions.saveSession(claims, Duration.between(clock.instant(), claims.expiresAt()));
-        return new LoginVO(token, "Bearer", claims.expiresAt(), UserProfileVO.from(user));
+        return new LoginVO(token, "Bearer", claims.expiresAt(), UserProfileVO.from(rewarded));
     }
 
     /** 从数据库读取当前角色而非盲信 Token 中的旧角色快照，确保降权、禁用和软删除及时生效。 */
@@ -154,16 +160,8 @@ public class AuthServiceImpl implements AuthService {
         if (!sessions.isCurrentSession(claims)) {
             throw unauthorized();
         }
-        User user;
-        try {
-            user = mapper.selectById(claims.userId());
-        } catch (DataAccessException exception) {
-            throw unavailable();
-        }
-        if (user == null || !isActive(user)) {
-            throw unauthorized();
-        }
-        return UserProfileVO.from(user);
+        // 已通过签名和白名单校验的活跃访问也算每日登录；成长服务锁定读复核最新角色和账号状态。
+        return UserProfileVO.from(growth.rewardDailyLogin(claims.userId()));
     }
 
     /** 退出不要求账号仍启用，允许撤销自己的旧会话；Lua 确保不会误删新登录。 */

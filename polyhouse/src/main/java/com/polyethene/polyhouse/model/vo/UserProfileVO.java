@@ -14,8 +14,8 @@ import java.util.Objects;
  * @param avatar 头像地址，允许现有数据库中的空值
  * @param role 以 USER/INSIDER/OWNER 语义字符串输出的身份
  * @param experience 累计经验以十进制字符串输出，避免 JavaScript 大整数精度损失
- * @param level 成长等级，暂以 1 为初始值，不授予任何角色权限
- * @param coins 整数硬币余额以十进制字符串输出，奖励和用途尚未启用
+ * @param level 成长等级从 1 到 6，不授予任何角色权限
+ * @param coins 整数硬币余额以十进制字符串输出，每日奖励已启用，消费用途待定
  */
 public record UserProfileVO(String id, String username, String nickname, String avatar, UserRoleEnum role,
                             String experience, int level, String coins) {

@@ -13,6 +13,7 @@ import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.entity.User;
 import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.service.AuthRedisStore;
+import com.polyethene.polyhouse.service.UserGrowthService;
 import com.polyethene.polyhouse.utils.JwtUtils;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -50,6 +51,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /** 以真实密码/JWT 工具和固定时钟检查业务编排，外部存储使用可控替身验证失败边界。 */
 @ExtendWith(MockitoExtension.class)
@@ -64,6 +66,8 @@ class AuthServiceImplTest {
     private UserMapper mapper;
     @Mock
     private AuthRedisStore sessions;
+    @Mock
+    private UserGrowthService growth;
 
     private JwtProperties properties;
     private AuthServiceImpl service;
@@ -88,7 +92,8 @@ class AuthServiceImplTest {
         properties = new JwtProperties();
         properties.setExpirationDays(7);
         properties.setSecret(Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded()));
-        service = new AuthServiceImpl(mapper, sessions, properties, validatorFactory.getValidator(),
+        lenient().when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
+        service = new AuthServiceImpl(mapper, sessions, properties, validatorFactory.getValidator(), growth,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -145,6 +150,7 @@ class AuthServiceImplTest {
         // 凭据错误不访问 Redis，也不清除已经存在的登录会话。
         verifyNoInteractions(sessions);
         when(mapper.update(isNull(), any())).thenReturn(1);
+        verifyNoInteractions(growth);
         assertThat(service.login(new LoginDTO("alice", PASSWORD), null).user().id()).isEqualTo("42");
         verify(sessions).saveSession(any(), eq(Duration.ofDays(7)));
     }
@@ -218,17 +224,15 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void shouldUseCurrentDatabaseRoleAndRefuseRevokedOrDisabledSessions() {
+    void shouldDelegateLiveUserValidationToGrowthOnlyAfterSessionValidation() {
         String token = JwtUtils.createToken(42L, UserRoleEnum.OWNER, "PC", properties.signingKey(), NOW, Duration.ofDays(7));
         when(sessions.isCurrentSession(any())).thenReturn(true);
         User current = activeUser();
         current.setRole(UserRoleEnum.USER);
-        when(mapper.selectById(42L)).thenReturn(current);
+        when(growth.rewardDailyLogin(42L)).thenReturn(current);
         assertThat(service.getCurrentUser(token).role()).isEqualTo(UserRoleEnum.USER);
-        current.setStatus(0);
-        assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
-        current.setStatus(1);
-        current.setDeleted(1);
+        doThrow(new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录"))
+                .when(growth).rewardDailyLogin(42L);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
         when(sessions.isCurrentSession(any())).thenReturn(false);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
@@ -237,7 +241,7 @@ class AuthServiceImplTest {
     @Test
     void shouldRejectMalformedTokenAndAllowCompareAndDeleteLogoutWithoutDatabaseQuery() {
         assertBusiness(() -> service.getCurrentUser("invalid-fixture-token"), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
-        verifyNoInteractions(mapper, sessions);
+        verifyNoInteractions(mapper, sessions, growth);
         String token = JwtUtils.createToken(42L, UserRoleEnum.USER, "PC", properties.signingKey(), NOW, Duration.ofDays(7));
         service.logout(token);
         ArgumentCaptor<JwtUtils.TokenClaims> claims = ArgumentCaptor.forClass(JwtUtils.TokenClaims.class);

@@ -34,15 +34,15 @@ public class User {
     /** 使用已有枚举的 @EnumValue 存取语义字符串，不能将权限权重写入 role 列。 */
     private UserRoleEnum role;
 
-    /** 累计经验由未来奖励业务定向更新；通用实体写入不能覆盖余额快照，初值交给数据库。 */
+    /** 累计经验由成长服务定向更新；通用实体写入不能覆盖余额快照，初值交给数据库。 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Long experience;
 
-    /** 成长等级独立于权限角色，暂从 1 级开始，升级规则尚未启用。 */
+    /** 成长等级独立于权限角色，从 1 级开始，由成长服务按累计经验计算。 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Integer level;
 
-    /** 整数硬币余额，暂不发放或消费；避免通用资料更新覆盖未来并发结算结果。 */
+    /** 整数硬币余额，每日奖励入账但消费尚未开放；通用资料更新不能覆盖并发结算结果。 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Long coins;
 
@@ -132,7 +132,7 @@ public class User {
         return experience;
     }
 
-    /** 用于读取数据库经验；写入需由未来受控奖励业务使用定向 SQL 完成。 */
+    /** 用于读取数据库经验；写入需由受控成长服务使用定向 SQL 完成。 */
     public void setExperience(Long experience) {
         this.experience = experience;
     }
@@ -152,7 +152,7 @@ public class User {
         return coins;
     }
 
-    /** 用于读取数据库余额，未来发放和消费必须通过受控结算逻辑。 */
+    /** 用于读取数据库余额，发放和未来消费必须通过受控结算逻辑。 */
     public void setCoins(Long coins) {
         this.coins = coins;
     }
