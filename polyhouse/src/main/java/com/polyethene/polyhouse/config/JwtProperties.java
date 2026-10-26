@@ -11,7 +11,7 @@ import java.time.Duration;
 
 /**
  * 由 Spring 绑定外部 JWT 配置；工具类只接收参数，不负责环境读取或 Bean 管理。
- * 当前尚无 HTTP 认证入口，允许未配置密钥时启动其他模块；认证 Service 取用密钥时必须验证且不提供默认密钥。
+ * 允许未配置密钥时启动其他模块；退出、注销和其他认证 Service 取用密钥时必须验证且不提供默认密钥。
  */
 @Component
 @Validated

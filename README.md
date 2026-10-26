@@ -36,6 +36,25 @@ mvn spring-boot:run
 
 真实密码或密钥应在本地运行配置中填写，不复制进 Git 跟踪的文件，也不在终端输出。已打开的 IDE 不会继承另一个终端后来设置的变量。
 
+### 本机认证预设（后续会话优先复用）
+
+本机数据库凭据和固定 JWT 运行密钥保存在 Git 忽略的 `polyhouse/.idea/workspace.xml`，对应 `PolyhouseApplication` 个人运行配置。后续开发和验收先检查并复用这个预设，不重复询问或复制凭据；仅在配置缺失、失效或用户要求更换时重新配置。Git 忽略不等于加密，个人文件不能共享或强制加入版本库。
+
+在仓库根目录执行：
+
+```powershell
+# 只输出是否配置、密钥格式和 Git 忽略状态，不输出实际值。
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Inspect
+# 编译并执行全部本机 MySQL、Redis、认证事务及真实运行密钥验收。
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify
+# 使用同一预设启动后端。
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Run
+```
+
+入口只读取允许的环境变量名，导入当前进程后调用 Maven，并在成功或失败退出时恢复原环境；不修改系统环境，不执行 XML 内容。实例验收限制为本机 `polyhouse_db` 和本机 Redis，避免误继承外部连接。IDEA 自身启动应用时直接使用同一份个人配置。
+
+新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
+
 ## 公共层响应约定
 
 成功响应为 HTTP 200，JSON 字段固定为 `code`、`message`、`data`，成功业务码为 `0`。失败响应保留相同 JSON 结构，`data` 为 `null`。
@@ -104,7 +123,7 @@ mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true'
 
 密钥必须来自运行环境，禁止使用账号密码、示例短字符串或每次启动临时生成的替代密钥。当前其他模块允许在密钥为空时启动，但调用 `JwtProperties.signingKey()` 时会明确拒绝缺失、错误编码或长度不合格的配置。配置为空不代表 JWT 已能在本机实际使用。
 
-如需在本地终端准备一个开发密钥，可在启动后端的同一个 PowerShell 会话执行以下代码；它只设置进程环境，不打印密钥、不写系统环境或项目文件：
+日常开发优先复用上面的本机预设，不在每次启动或会话中换密钥。以下代码仅用于有意隔离的临时实验，它只设置进程环境，不打印密钥、不写系统环境或项目文件：
 
 ```powershell
 $jwtBytes = New-Object byte[] 32
@@ -155,6 +174,28 @@ mvn -q '-Dpolyhouse.redis.integration=true' '-Dtest=AuthRedisStoreIntegrationTes
 ```
 
 这不等于已完成 IDEA 日常运行密钥配置或浏览器登录验收；相关事项继续在 DEV_LOG 中跟进。
+
+### 软注销、回滚与真实并发验收
+
+在本机开发数据库和 Redis 在线、当前 Maven 进程已提供数据库环境变量时执行：
+
+```powershell
+mvn -q '-Dpolyhouse.auth.integration=true' '-Dtest=AuthServiceIntegrationTest,AuthTransactionIntegrationTest' test
+```
+
+`AuthTransactionIntegrationTest` 不使用测试类外层回滚事务，而让服务实际提交或回滚，验证软删除标记、全部终端撤销、其他账号不受影响，以及 Redis 故障前后不同的回滚边界。两种登录/注销竞争顺序各重复三次，通过门闩控制执行位置，并读取 `performance_schema.data_lock_waits` 证明竞争线程确实等待了用户行锁，不以固定睡眠代替并发证据。
+
+本测试需要 MySQL 8 的实时锁观察表读取权限，仅限本机开发环境。随机账号为 `auth_tx_` 前缀，测试登记精确 ID 和账号后才允许清理；已提交的测试记录与三类会话在结束时清除，失败也尝试清理，不扫描或删除业务用户。原 `AuthServiceIntegrationTest` 继续使用外层回滚事务。
+
+故障模拟只拦截测试上下文中的 Redis 调用，不停止 Redis 服务。DEL 执行前失败时，账号回滚且原会话保留；DEL 执行后确认失败时，账号仍回滚，但 Redis 会话不会自动恢复，用户需要重新登录。测试随机密钥不等于日常运行密钥。
+
+运行密钥另用真实配置核对，不覆盖为临时测试密钥：先在当前 Maven 进程提供 `POLYHOUSE_JWT_SECRET`，再执行：
+
+```powershell
+mvn -q '-Dpolyhouse.jwt.runtime=true' '-Dtest=JwtRuntimeConfigurationIntegrationTest' test
+```
+
+该用例读取实际 `application.yml` 及进程环境，在内存签发、验签并核对配置有效期，不输出密钥或 Token，也不写入数据库或 Redis。IDEA 个人运行配置的变量只传给 IDEA 启动的应用，不会自动传给其他终端；根 `.env` 仍不自动加载。
 
 ### 退出登录与注销账号的范围
 
