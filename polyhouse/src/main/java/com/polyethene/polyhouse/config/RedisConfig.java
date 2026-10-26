@@ -13,7 +13,7 @@ import org.springframework.data.redis.serializer.RedisSerializer;
 public class RedisConfig {
 
     /**
-     * 为登录白名单、失败计数等文本数据提供模板，避免默认 JDK 序列化造成键和值不可读。
+     * 为登录白名单等文本数据提供模板，避免默认 JDK 序列化造成键和值不可读。
      *
      * @param connectionFactory Spring Boot 自动配置的连接工厂
      * @return 使用 UTF-8 字符串序列化键、值及 Hash 字段的模板

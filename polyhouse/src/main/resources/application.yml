@@ -42,5 +42,7 @@ mybatis-plus:
 # 聚妙屋自定义安全配置
 polyhouse:
   jwt:
+    # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}
+    # JWT 的唯一有效期来源；Redis 白名单后续按 Token 的 expiresAt 计算剩余 TTL。
     expiration-days: 7
