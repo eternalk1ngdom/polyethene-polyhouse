@@ -1,7 +1,12 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import ToolComingSoon from '../components/ToolComingSoon.vue'
+import { toolRegistry } from '../config/toolRegistry'
+
+const tool = toolRegistry.find((entry) => entry.code === 'poly-replace')
+</script>
 
 <template>
-  <main />
+  <ToolComingSoon v-if="tool" :tool="tool" />
 </template>
 
 <style scoped></style>
