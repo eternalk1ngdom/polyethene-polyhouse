@@ -11,7 +11,8 @@
 - `polyhouse/`：后端，Spring Boot 3 + JDK 21 + MyBatis，根包固定为 `com.polyethene.polyhouse`
 - `polyhouse-web/`：前端，Vue 3 + TypeScript + Vite + Element Plus
 - `Polyhouse_Ultimate_Master_Blueprint.docx`：设计文档，**只读**，不要修改
-- `polyhouse/scripts/`：本机预设初始化、检查、验收与启动入口；使用方式见 `README.md`，不保存真实凭据
+- `polyhouse/scripts/`：本机预设、唯一屋主初始化、检查、验收与启动入口；使用方式见 `README.md`，不保存真实凭据
+- `docs/operations/`：屋主初始化、失败处理与部署权限说明；运维命令不作为网页静态资源或公开 HTTP 接口
 - `DEV_LOG.md`：精简的当前状态入口，包含当前阶段链接、最近验证、后续顺序和历史索引，原则上控制在约 100 行以内
 - `docs/dev-log/`：按版本或开发阶段保存详细日志；当前文件由根入口指定，归档按需读取，不重复存放工程约束
 

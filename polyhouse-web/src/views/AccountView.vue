@@ -183,12 +183,15 @@ onMounted(() => {
         <div class="management-row cancellation-row">
           <div>
             <h3>注销账号</h3>
-            <p>停用账号并退出所有终端。资料仍会保留，操作前请查看详细说明。</p>
+            <p v-if="userStore.user.role === 'OWNER'">
+              屋主账号不能直接注销，需先完成专门的移交或恢复流程。
+            </p>
+            <p v-else>停用账号并退出所有终端。资料仍会保留，操作前请查看详细说明。</p>
           </div>
           <ElButton
             type="danger"
             plain
-            :disabled="!!accountUi.pending || refreshing"
+            :disabled="!!accountUi.pending || refreshing || !accountUi.canDeregister"
             @click="accountUi.openCancellation()"
             >注销账号</ElButton
           >

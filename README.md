@@ -97,6 +97,12 @@ node --test tests/auth-session.test.mjs tests/growth.test.mjs
 
 ## 用户模型与本地 MySQL
 
+### 唯一屋主与运维入口
+
+普通注册固定为 USER。唯一屋主通过 `polyhouse/scripts/Initialize-Owner.ps1 -UserId "编号" -Username "小写账号"` 只读检查，再显式加 `-Apply` 首次授予；不是网页或数据库命令。先执行追加迁移 [004_owner_bootstrap.sql](polyhouse/sql/004_owner_bootstrap.sql)，已完成的库不要重放初始化基线。脚本只连接本机，复用忽略的私有预设，不要求网站密码，不随服务启动运行，不提供 HTTP 授权接口。
+
+数据库唯一槽位防止多个 OWNER，单行锁串行初始化并保留首次目标/执行人/时间；重复执行同一屋主不改首次记录，清理旧会话后重新登录。历史记录冲突或已有其他屋主会拒绝，普通注销接口对屋主返回 403，正常退出仍可用。详细操作、失败回滚、部署权限边界及测试隔离见 [屋主初始化与部署说明](docs/operations/owner-bootstrap.md)。正式授予后，全量 OWNER 测试须放在独立测试数据库，不能为测试清空真实屋主。
+
 `User` 映射现有 `sys_user` 表，角色使用 `UserRoleEnum` 的语义字符串，`ext_json` 映射为 JSON 对象，查询自动排除逻辑删除账号。创建、更新时间由 MySQL 维护，实体写入不会覆盖它们。
 
 `RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
@@ -291,7 +297,7 @@ mvn -q '-Dpolyhouse.jwt.runtime=true' '-Dtest=JwtRuntimeConfigurationIntegration
 
 前端 `api/auth.ts` 和 `useUserStore.logout()/deregister()` 已可调用：成功后同步清除内存状态与 `polyhouse_token/polyhouse_user`；401 清理失效会话但仍报告操作失败；网络或服务故障保留状态供重试。等待请求期间取得了新 Token 或新会话版本时，旧响应不会清掉新会话，也不删除另一标签页新写入的缓存。登录/注册弹窗、刷新恢复、个人卡片/个人中心、退出反馈及注销确认均已接入；注销始终只针对当前已核实身份，页面不提交用户 ID 或任意用户名来指定对象。
 
-本次实现的是软注销：账号不能再登录，用户名继续被唯一索引占用；未物理删除或匿名化个人资料、云端模板和个人预设，也未新增恢复期、二次密码验证或 OWNER 移交策略。上述能力应单独确定规则后实施，不将软删除宣称为个人数据永久清除。当前新增 MySQL 软注销联调用例默认按开关跳过，需配置本机数据库凭据后使用上面的认证业务联调命令执行。
+本次实现的是软注销：账号不能再登录，用户名继续被唯一索引占用；未物理删除或匿名化个人资料、云端模板和个人预设，也未新增恢复期、二次密码验证或 OWNER 移交策略。OWNER 已禁止通过普通注销入口停用自己，移交/恢复仍须独立设计。上述能力应单独确定规则后实施，不将软删除宣称为个人数据永久清除。MySQL 软注销联调用例默认按开关跳过，需配置本机数据库凭据后使用上面的认证业务联调命令执行。
 
 ## 本地 Redis
 

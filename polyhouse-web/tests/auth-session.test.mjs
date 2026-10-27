@@ -493,6 +493,30 @@ test('个人资料展示保留大整数和 emoji，并将三种角色与等级�
   assert.equal(userRoleLabel('OWNER'), '聚妙屋屋主')
 })
 
+test('屋主不能普通注销，同一账号确认期间升权使旧确认失效，退出仍可用', async () => {
+  const store = useUserStore()
+  const ui = useAccountUiStore()
+  store.setSession('fixture-credential', profile)
+  ui.openCancellation()
+  assert.equal(ui.cancellationVisible, true)
+  store.setSession('fixture-credential', { ...profile, role: 'OWNER' })
+  assert.equal(ui.cancellationVisible, false)
+  assert.equal(ui.canDeregister, false)
+  let calls = 0
+  apiClient.defaults.adapter = async (config) => {
+    calls += 1
+    assert.equal(config.url, '/auth/logout')
+    return success(config)
+  }
+  ui.openCancellation()
+  assert.equal(ui.cancellationVisible, false)
+  assert.match(ui.actionError, /屋主账号不能直接注销/)
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(calls, 0)
+  assert.equal(await ui.logout(), true)
+  assert.equal(calls, 1)
+})
+
 test('未确认身份不能打开注销确认，也不会发出注销请求', async () => {
   storage.set('polyhouse_token', 'cached-credential')
   const store = useUserStore()

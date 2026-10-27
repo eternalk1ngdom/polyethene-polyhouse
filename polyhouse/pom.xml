@@ -22,6 +22,8 @@
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <hutool.version>5.8.28</hutool.version>
         <jjwt.version>0.11.5</jjwt.version>
+        <!-- 两个 main 入口并存，固定普通启动/打包入口；运维脚本使用 Boot 已有属性显式覆盖。 -->
+        <start-class>com.polyethene.polyhouse.PolyhouseApplication</start-class>
     </properties>
 
     <dependencies>

@@ -162,7 +162,12 @@ public class AuthServiceImpl implements AuthService {
             throw unauthorized();
         }
         // 已通过签名和白名单校验的活跃访问也算每日登录；成长服务锁定读复核最新角色和账号状态。
-        return UserProfileVO.from(growth.rewardDailyLogin(claims.userId()));
+        User current = growth.rewardDailyLogin(claims.userId());
+        // 等待用户行锁期间可能发生屋主初始化并撤销旧会话，不能让预先通过检查的旧 Token 取得新角色。
+        if (!sessions.isCurrentSession(claims)) {
+            throw unauthorized();
+        }
+        return UserProfileVO.from(current);
     }
 
     /** 与资料查询一样独立核对会话，成长服务再锁定读复核账号状态，不依赖客户端资料。 */
@@ -172,7 +177,11 @@ public class AuthServiceImpl implements AuthService {
         if (!sessions.isCurrentSession(claims)) {
             throw unauthorized();
         }
-        return growth.getStatus(claims.userId());
+        UserGrowthVO current = growth.getStatus(claims.userId());
+        if (!sessions.isCurrentSession(claims)) {
+            throw unauthorized();
+        }
+        return current;
     }
 
     /** 退出不要求账号仍启用，允许撤销自己的旧会话；Lua 确保不会误删新登录。 */
@@ -192,6 +201,10 @@ public class AuthServiceImpl implements AuthService {
                     .eq(User::getId, claims.userId()).last("FOR UPDATE"));
             if (user == null || !isActive(user) || !sessions.isCurrentSession(claims)) {
                 throw unauthorized();
+            }
+            // 在用户行锁内核对最新角色；旧 USER Token 或绕过前端都不能注销已经提升的屋主。
+            if (user.getRole() == UserRoleEnum.OWNER) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "屋主账号不能通过普通注销入口停用，请先完成专门的移交或恢复流程");
             }
             // @TableLogic 将 deleteById 转为 deleted=1，保留用户名唯一索引和原始业务关联。
             if (mapper.deleteById(claims.userId()) != 1) {

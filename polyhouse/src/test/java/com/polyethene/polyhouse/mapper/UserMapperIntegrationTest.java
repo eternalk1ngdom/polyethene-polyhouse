@@ -44,12 +44,16 @@ class UserMapperIntegrationTest {
         List<String> tables = jdbc.queryForList(
                 "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()", String.class);
         assertThat(tables).contains("sys_user", "tool_replace_template", "tool_targetkb_preset", "tool_user_preset",
-                "sys_user_growth_reward");
+                "sys_user_growth_reward", "sys_owner_bootstrap");
         List<String> columns = jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' ORDER BY ORDINAL_POSITION", String.class);
         assertThat(columns).containsExactly("id", "username", "password_hash", "nickname", "avatar", "role",
                 "experience", "level", "coins",
-                "status", "last_login_ip", "last_login_time", "ext_json", "deleted", "create_time", "update_time");
+                "status", "last_login_ip", "last_login_time", "ext_json", "deleted", "create_time", "update_time", "owner_slot");
+        assertThat(jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.STATISTICS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' "
+                + "AND INDEX_NAME = 'uk_sys_user_owner_slot' AND NON_UNIQUE = 0 ORDER BY SEQ_IN_INDEX", String.class))
+                .containsExactly("owner_slot");
         assertThat(jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' "
                 + "AND INDEX_NAME = 'uk_username' AND NON_UNIQUE = 0 ORDER BY SEQ_IN_INDEX", String.class))

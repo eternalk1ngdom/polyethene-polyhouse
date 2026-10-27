@@ -296,6 +296,27 @@ class AuthServiceImplTest {
                 "认证服务暂时不可用，请稍后重试");
     }
 
+    @Test
+    void shouldBlockOwnerBeforeAnyDeletionOrSessionRevocation() {
+        User owner = activeUser();
+        owner.setRole(UserRoleEnum.OWNER);
+        when(mapper.selectOne(any())).thenReturn(owner);
+        when(sessions.isCurrentSession(any())).thenReturn(true);
+        assertBusiness(() -> service.deregister(currentToken()), ErrorCode.FORBIDDEN,
+                "屋主账号不能通过普通注销入口停用，请先完成专门的移交或恢复流程");
+        verify(mapper, never()).deleteById(any(Long.class));
+        verify(sessions, never()).removeAllSessions(42L);
+    }
+
+    @Test
+    void shouldRecheckSessionAfterReadingTheCurrentRole() {
+        User promoted = activeUser();
+        promoted.setRole(UserRoleEnum.OWNER);
+        when(growth.rewardDailyLogin(42L)).thenReturn(promoted);
+        when(sessions.isCurrentSession(any())).thenReturn(true, false);
+        assertBusiness(() -> service.getCurrentUser(currentToken()), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
+    }
+
     private String currentToken() {
         return JwtUtils.createToken(42L, UserRoleEnum.USER, "PC", properties.signingKey(), NOW, Duration.ofDays(7));
     }

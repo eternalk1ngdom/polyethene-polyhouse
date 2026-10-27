@@ -224,6 +224,22 @@ class AuthHttpIntegrationTest {
         assertThat(loginAfterDeletion.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void shouldRejectOwnerDeregistrationEvenWithAnOlderUserTokenAndKeepLogoutAvailable() throws Exception {
+        Fixture fixture = register();
+        String oldUserToken = login(fixture, "PC");
+        // 仅精确修改本测试夹具，刻意保留旧 USER Token，证明决定来自锁定读取的数据库角色。
+        assertThat(users.update(null, new LambdaUpdateWrapper<User>().eq(User::getId, fixture.id())
+                .set(User::getRole, UserRoleEnum.OWNER))).isEqualTo(1);
+        ResponseEntity<String> rejected = command("deregister", oldUserToken);
+        assertThat(rejected.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(json.readTree(rejected.getBody()).path("message").asText()).contains("屋主");
+        assertThat(fixtures.deleted(fixture.id(), fixture.username())).isZero();
+        assertThat(get("/api/auth/me", oldUserToken).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(command("logout", oldUserToken).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(get("/api/auth/me", oldUserToken).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
     private Fixture register() throws Exception {
         String username = "http_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         String password = UUID.randomUUID().toString();
