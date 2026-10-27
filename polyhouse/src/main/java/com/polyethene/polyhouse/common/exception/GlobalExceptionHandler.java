@@ -16,6 +16,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.Arrays;
 
@@ -55,6 +56,12 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
     public ResponseEntity<Result<Void>> handleInvalidRequest(Exception exception) {
         return response(ErrorCode.INVALID_PARAMETER);
+    }
+
+    /** 容器在绑定 DTO 前发现上传超限，也必须返回稳定的 413 JSON 而非默认错误页。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result<Void>> handleOversizedUpload(MaxUploadSizeExceededException exception) {
+        return response(ErrorCode.PAYLOAD_TOO_LARGE);
     }
 
     /**

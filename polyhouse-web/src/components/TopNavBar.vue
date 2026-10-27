@@ -80,7 +80,12 @@ watch(
       >
         <template #reference>
           <button class="account-trigger" type="button" aria-label="打开账号菜单">
-            <UserAvatar v-if="userStore.user" :name="userDisplayName(userStore.user)" :size="36" />
+            <UserAvatar
+              v-if="userStore.user"
+              :name="userDisplayName(userStore.user)"
+              :src="userStore.user.avatar"
+              :size="36"
+            />
             <span class="account-label">{{
               userStore.user?.nickname || userStore.user?.username
             }}</span>

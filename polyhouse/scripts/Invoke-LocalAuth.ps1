@@ -36,7 +36,7 @@ if ($runConfigurations.Count -ne 1) {
 # 只导入本项目允许的连接及密钥变量，不能执行 XML 内容、导入 PATH 或把任意变量送入子进程。
 $allowedNames = @('DB_USERNAME', 'DB_PASSWORD', 'DB_URL', 'POLYHOUSE_JWT_SECRET',
     'REDIS_HOST', 'REDIS_PORT', 'REDIS_DATABASE', 'REDIS_USERNAME', 'REDIS_PASSWORD',
-    'REDIS_CONNECT_TIMEOUT', 'REDIS_TIMEOUT')
+    'REDIS_CONNECT_TIMEOUT', 'REDIS_TIMEOUT', 'POLYHOUSE_AVATAR_DIRECTORY')
 $preset = @{}
 foreach ($name in $allowedNames) {
     $nodes = $runConfigurations[0].SelectNodes("./envs/env[@name='$name']")

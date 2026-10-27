@@ -8,7 +8,7 @@ export interface UserProfile {
   username: string
   /** 兼容旧资料的空昵称。 */
   nickname: string | null
-  /** 本轮不加载远程头像，保留后续个人区域使用。 */
+  /** 服务端管理的头像路径；展示组件仅加载本项目受控图片。 */
   avatar: string | null
   /** 展示角色，实际权限始终由后端决定。 */
   role: 'USER' | 'INSIDER' | 'OWNER'
@@ -158,6 +158,41 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
 /** 恢复会话必须请求后端，缓存中的用户资料和角色不能替代认证。 */
 export function getCurrentUser(token: string): Promise<UserProfile> {
   return apiRequest({ method: 'GET', url: '/auth/me' }, decodeUserProfile, token)
+}
+
+/** 上传只修改头像，避免返回整份旧资料覆盖并发成长状态。 */
+export interface AvatarChange {
+  /** 随机版本路径使缓存自然失效。 */
+  avatar: string
+  /** 成功后由后端返回当日剩余次数。 */
+  remainingToday: number
+}
+
+/** 只允许本项目的版本化头像路径，拒绝第三方跟踪地址和可执行协议。 */
+export function isAvatarPath(value: unknown): value is string {
+  return typeof value === 'string' && /^\/api\/media\/avatars\/[a-f0-9]{32}\.jpg$/.test(value)
+}
+
+/** 浏览器只上传裁剪后的小图，不把原图、路径、角色或用户编号发给后端。 */
+export function uploadAvatar(file: Blob, token: string): Promise<AvatarChange> {
+  const data = new FormData()
+  data.append('file', file, 'avatar.jpg')
+  return apiRequest(
+    { method: 'POST', url: '/auth/avatar', data },
+    (value) => {
+      if (
+        !isRecord(value) ||
+        !isAvatarPath(value.avatar) ||
+        typeof value.remainingToday !== 'number' ||
+        !Number.isInteger(value.remainingToday) ||
+        value.remainingToday < 0 ||
+        value.remainingToday > 4
+      )
+        throw new ApiError('头像响应不完整，请刷新资料确认保存结果', 502)
+      return { avatar: value.avatar, remainingToday: value.remainingToday }
+    },
+    token,
+  )
 }
 
 async function endSession(path: 'logout' | 'deregister', token: string): Promise<void> {

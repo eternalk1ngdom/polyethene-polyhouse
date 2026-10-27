@@ -24,6 +24,8 @@ app.mount('#app')
 void userStore.restoreSession()
 window.addEventListener('storage', (event: StorageEvent) => {
   if (event.key === 'polyhouse_token' || event.key === null) void userStore.syncStoredSession()
+  // 其他页修改头像后重新读取服务端，不把 localStorage 中的头像或角色当作可信响应。
+  else if (event.key === 'polyhouse_user' && userStore.isLoggedIn) void userStore.restoreSession()
 })
 document.addEventListener('visibilitychange', async () => {
   // 回到页面时核对最新身份，也让有效 Token 的跨日活跃奖励在服务端正常结算。

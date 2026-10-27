@@ -42,6 +42,7 @@ const { usernameError, passwordError, nicknameError } = await import(
   await moduleUrl('../src/utils/authValidation.ts')
 )
 const storage = new Map()
+const avatarPath = `/api/media/avatars/${'a'.repeat(32)}.jpg`
 const profile = {
   id: '42',
   username: 'fixture',
@@ -85,6 +86,94 @@ beforeEach(() => {
   }
   apiClient.defaults.adapter = async (config) => success(config)
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
+})
+
+test('上传只发送小图和当前 Bearer，成功头像不会被在途旧资料覆盖', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  let finishRestore
+  apiClient.defaults.adapter = async (config) => {
+    if (config.url === '/auth/me')
+      return new Promise((resolve) => {
+        finishRestore = () => resolve(success(config, profile))
+      })
+    assert.equal(config.url, '/auth/avatar')
+    assert.equal(config.headers.Authorization, 'Bearer fixture-credential')
+    assert.ok(config.data instanceof FormData)
+    assert.deepEqual([...config.data.keys()], ['file'])
+    return success(config, { avatar: avatarPath, remainingToday: 4 })
+  }
+  const restoring = store.restoreSession()
+  await store.uploadAvatar(new Blob(['fixture'], { type: 'image/jpeg' }))
+  finishRestore()
+  await restoring
+  assert.equal(store.user.avatar, avatarPath)
+  assert.equal(store.user.experience, profile.experience)
+})
+
+test('换号后的旧上传结果不能修改新用户，错误或非法图片响应不覆盖原头像', async () => {
+  const store = useUserStore()
+  store.setSession('old-credential', profile)
+  let finish
+  apiClient.defaults.adapter = (config) =>
+    new Promise((resolve) => {
+      finish = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+    })
+  const pending = store.uploadAvatar(new Blob(['fixture']))
+  store.setSession('new-credential', { ...profile, id: '99', avatar: null })
+  finish()
+  assert.equal(await pending, null)
+  assert.equal(store.user.id, '99')
+  assert.equal(store.user.avatar, null)
+  for (const value of [
+    { avatar: 'https://example.test/tracker', remainingToday: 4 },
+    { avatar: avatarPath, remainingToday: 9 },
+  ]) {
+    apiClient.defaults.adapter = async (config) => success(config, value)
+    await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), ApiError)
+    assert.equal(store.user.avatar, null)
+  }
+})
+
+test('头像变更不会取消同一会话已经发出的退出意图', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  let finishUpload
+  let finishLogout
+  apiClient.defaults.adapter = (config) =>
+    new Promise((resolve) => {
+      if (config.url === '/auth/avatar')
+        finishUpload = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+      else finishLogout = () => resolve(success(config))
+    })
+  const uploading = store.uploadAvatar(new Blob(['fixture']))
+  const loggingOut = store.logout()
+  finishUpload()
+  await uploading
+  finishLogout()
+  await loggingOut
+  assert.equal(store.token, '')
+  assert.equal(store.user, null)
+})
+
+test('上传返回前另一标签已换号时，不等待存储事件也不能写回旧 Token', async () => {
+  const store = useUserStore()
+  store.setSession('old-credential', profile)
+  let finishUpload
+  apiClient.defaults.adapter = (config) => {
+    if (config.url === '/auth/avatar')
+      return new Promise((resolve) => {
+        finishUpload = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+      })
+    return Promise.resolve(success(config, { ...profile, id: '99' }))
+  }
+  const pending = store.uploadAvatar(new Blob(['fixture']))
+  storage.set('polyhouse_token', 'other-tab-credential')
+  finishUpload()
+  assert.equal(await pending, null)
+  assert.equal(store.token, 'other-tab-credential')
+  assert.equal(store.user.id, '99')
+  assert.equal(storage.get('polyhouse_token'), 'other-tab-credential')
 })
 
 test('退出和账号注销分别调用对应接口，成功后清除内存与两个缓存键', async () => {

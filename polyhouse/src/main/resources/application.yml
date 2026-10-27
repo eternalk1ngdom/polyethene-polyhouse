@@ -2,6 +2,12 @@ server:
   port: 8080
 
 spring:
+  servlet:
+    multipart:
+      # 原图在浏览器裁剪；小文件直接驻留内存，避免默认临时目录继续占用 C 盘。
+      max-file-size: 256KB
+      max-request-size: 272KB
+      file-size-threshold: 272KB
   application:
     name: polyhouse
   # 开启 JDK 21 虚拟线程协程 (为未来高并发与 Spring AI 预留)
@@ -41,6 +47,9 @@ mybatis-plus:
 
 # 聚妙屋自定义安全配置
 polyhouse:
+  avatar:
+    # 本机私有预设指定 E 盘独立目录，部署时必须指定可持久化且不在静态根目录内的位置。
+    directory: ${POLYHOUSE_AVATAR_DIRECTORY:}
   jwt:
     # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}

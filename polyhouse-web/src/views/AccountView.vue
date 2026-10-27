@@ -13,6 +13,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import AvatarUploadDialog from '../components/AvatarUploadDialog.vue'
 import UserGrowthPanel from '../components/UserGrowthPanel.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -25,7 +26,14 @@ const accountUi = useAccountUiStore()
 const growth = useUserGrowthStore()
 const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
+const avatarVisible = ref(false)
+const avatarNotice = ref('')
 const toolIcons = { Document, Picture }
+
+function openAvatar(): void {
+  avatarVisible.value = true
+  avatarNotice.value = ''
+}
 
 async function refreshProfile(): Promise<void> {
   if (refreshing.value || accountUi.pending) return
@@ -56,7 +64,20 @@ onMounted(() => {
           ><span class="cover-star" aria-hidden="true">✳</span>
         </div>
         <div class="profile-overview">
-          <UserAvatar :name="userDisplayName(userStore.user)" :size="92" />
+          <button
+            class="avatar-edit"
+            type="button"
+            aria-label="更换头像"
+            :disabled="!!accountUi.pending"
+            @click="openAvatar"
+          >
+            <UserAvatar
+              :name="userDisplayName(userStore.user)"
+              :src="userStore.user.avatar"
+              :size="92"
+            />
+            <span class="avatar-edit-label">更换头像</span>
+          </button>
           <div class="identity-copy">
             <p class="eyebrow">很高兴，在小屋见到你</p>
             <h1 id="profile-name">
@@ -90,6 +111,18 @@ onMounted(() => {
       </section>
 
       <UserGrowthPanel />
+      <ElAlert
+        v-if="avatarNotice"
+        class="avatar-notice"
+        :title="avatarNotice"
+        type="success"
+        show-icon
+        @close="avatarNotice = ''"
+      />
+      <AvatarUploadDialog
+        v-model="avatarVisible"
+        @saved="(remaining) => (avatarNotice = `头像已更新，今天还可以修改 ${remaining} 次。`)"
+      />
 
       <div class="account-grid">
         <section class="info-panel" aria-labelledby="profile-details-title">
@@ -120,7 +153,7 @@ onMounted(() => {
               <dd>{{ userRoleLabel(userStore.user.role) }}</dd>
             </div>
           </dl>
-          <p class="panel-note">当前展示只读资料，头像上传与资料修改稍后开放。</p>
+          <p class="panel-note">点击上方头像即可更换图片，其他资料编辑稍后开放。</p>
         </section>
         <section class="info-panel" aria-labelledby="my-tools-title">
           <div class="panel-title">
@@ -292,6 +325,34 @@ onMounted(() => {
   align-self: flex-start;
   border-width: 5px;
   font-size: 34px;
+}
+.avatar-edit {
+  align-self: flex-start;
+  flex-shrink: 0;
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.avatar-edit > .avatar-edit-label {
+  position: absolute;
+  bottom: 4px;
+  left: 7px;
+  right: 7px;
+  padding: 4px 0;
+  background: #325e4dd9;
+  color: white;
+  border-radius: 0 0 28px 28px;
+  font-size: 10px;
+}
+.avatar-edit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.avatar-notice {
+  margin-top: 18px;
 }
 .identity-copy {
   min-width: 0;

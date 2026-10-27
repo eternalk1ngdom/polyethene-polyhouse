@@ -55,6 +55,7 @@ function safeError(status: number, code: number | null = null): ApiError {
   if (status === 400 || code === 40000)
     return new ApiError('填写的信息不符合要求，请检查后重试', 400, code)
   if (status === 429) return new ApiError('请求过于频繁，请稍后重试', 429, code)
+  if (status === 413) return new ApiError('图片体积超过限制，请重新选择图片', 413, code)
   if (status === 0) return new ApiError('暂时无法连接服务，请检查网络后重试')
   return new ApiError('服务暂时不可用，请稍后重试', status, code)
 }

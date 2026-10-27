@@ -8,7 +8,8 @@
 [CmdletBinding()]
 param(
     [string]$DatabaseUsername,
-    [Security.SecureString]$DatabasePassword
+    [Security.SecureString]$DatabasePassword,
+    [string]$AvatarDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,7 +50,7 @@ if ($null -eq $environment) {
 
 function Set-PrivateEnvironmentValue {
     param([string]$Name, [string]$Value)
-    # Name 只由本脚本固定的三个变量名提供，不把外部输入拼进 XPath。
+    # Name 只由本脚本固定的变量名提供，不把外部输入拼进 XPath。
     $nodes = $environment.SelectNodes("./env[@name='$Name']")
     if ($nodes.Count -gt 1) {
         throw '个人运行配置存在重复环境变量，请先在 IDEA 中消除歧义。'
@@ -115,6 +116,16 @@ if ($keyCreated) {
         $existingSecret = $null
     }
 }
+
+$avatarNode = $environment.SelectSingleNode('./env[@name="POLYHOUSE_AVATAR_DIRECTORY"]')
+if ([string]::IsNullOrWhiteSpace($AvatarDirectory)) {
+    # 默认选项目所在磁盘的独立目录，保留已有个人选择，不在 C 盘或源码下保存原图。
+    $AvatarDirectory = if ($null -ne $avatarNode) { $avatarNode.GetAttribute('value') } else {
+        Join-Path ([IO.Path]::GetPathRoot($projectDirectory)) 'polyhouse-data/avatars'
+    }
+}
+if (-not [IO.Path]::IsPathFullyQualified($AvatarDirectory)) { throw '头像目录必须为绝对路径。' }
+Set-PrivateEnvironmentValue -Name 'POLYHOUSE_AVATAR_DIRECTORY' -Value ([IO.Path]::GetFullPath($AvatarDirectory))
 
 try {
     # 只生成个人配置的环境变量节点，保留原有运行参数及 XML 空白，不重建整个 IDEA 项目配置。

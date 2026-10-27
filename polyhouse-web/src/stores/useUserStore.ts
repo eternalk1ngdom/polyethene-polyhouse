@@ -7,6 +7,8 @@ import {
   logout as logoutSession,
   getCurrentUser,
   login as loginAccount,
+  uploadAvatar as uploadAvatarImage,
+  type AvatarChange,
   type LoginRequest,
   type UserProfile,
 } from '../api/auth'
@@ -35,7 +37,10 @@ export const useUserStore = defineStore('user', () => {
   )
   // 每次建立/清理会话都推进版本，连同 Token 比较一起拦住旧请求和同 Token 的 ABA 变化。
   let revision = 0
-  let pendingRestore: { revision: number; promise: Promise<void> } | undefined
+  // 资料变更单独计数，不使同一会话正在进行的退出命令失效。
+  let profileRevision = 0
+  let restoreSequence = 0
+  let pendingRestore: { revision: number; requestId: number; promise: Promise<void> } | undefined
 
   function readStoredToken(): string {
     try {
@@ -128,11 +133,18 @@ export const useUserStore = defineStore('user', () => {
     const submittedToken = token.value
     const submittedRevision = revision
     const wasAuthenticated = isLoggedIn.value
+    const submittedProfileRevision = profileRevision
+    const requestId = ++restoreSequence
     if (!wasAuthenticated) status.value = 'checking'
     const promise = (async () => {
       try {
         const profile = await getCurrentUser(submittedToken)
-        if (revision !== submittedRevision || token.value !== submittedToken) return
+        if (
+          revision !== submittedRevision ||
+          token.value !== submittedToken ||
+          profileRevision !== submittedProfileRevision
+        )
+          return
         // 存储事件与网络响应的到达顺序不固定，提交资料前再次核对共享缓存。
         const stored = readStoredToken()
         if (storageAvailable.value && stored !== submittedToken) {
@@ -144,7 +156,12 @@ export const useUserStore = defineStore('user', () => {
         sessionMessage.value = ''
         cacheProfile()
       } catch (error: unknown) {
-        if (revision !== submittedRevision || token.value !== submittedToken) return
+        if (
+          revision !== submittedRevision ||
+          token.value !== submittedToken ||
+          profileRevision !== submittedProfileRevision
+        )
+          return
         if (error instanceof ApiError && error.sessionExpired) {
           expireSession(submittedToken)
         } else {
@@ -155,11 +172,37 @@ export const useUserStore = defineStore('user', () => {
             error instanceof ApiError ? error.message : '暂时无法确认登录状态，请稍后重试'
         }
       } finally {
-        if (pendingRestore?.revision === submittedRevision) pendingRestore = undefined
+        if (pendingRestore?.requestId === requestId) pendingRestore = undefined
       }
     })()
-    pendingRestore = { revision: submittedRevision, promise }
+    pendingRestore = { revision: submittedRevision, requestId, promise }
     return promise
+  }
+
+  /** 旧上传不能污染后来登录的账号；成功时推进版本，使在途旧 /me 不能覆盖新头像。 */
+  async function uploadAvatar(file: Blob): Promise<AvatarChange | null> {
+    if (!isLoggedIn.value || !user.value) throw new ApiError('请先登录再修改头像', 401)
+    const submittedToken = token.value
+    const submittedRevision = revision
+    const submittedId = user.value.id
+    const change = await uploadAvatarImage(file, submittedToken)
+    if (
+      revision !== submittedRevision ||
+      token.value !== submittedToken ||
+      user.value?.id !== submittedId
+    )
+      return null
+    // 共享缓存可能先于 storage 事件变化，不能用旧上传响应把另一页的新会话写回去。
+    const stored = readStoredToken()
+    if (storageAvailable.value && stored !== submittedToken) {
+      await syncStoredSession()
+      return null
+    }
+    profileRevision += 1
+    pendingRestore = undefined
+    user.value = { ...user.value, avatar: change.avatar }
+    cacheProfile()
+    return change
   }
 
   async function endCurrentSession(cancelAccount: boolean): Promise<void> {
@@ -210,6 +253,7 @@ export const useUserStore = defineStore('user', () => {
     login,
     restoreSession,
     syncStoredSession,
+    uploadAvatar,
     logout,
     deregister,
   }

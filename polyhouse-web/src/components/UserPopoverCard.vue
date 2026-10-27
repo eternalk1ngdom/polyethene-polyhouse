@@ -33,7 +33,7 @@ const stats = computed(() => growth.summary ?? props.profile)
   <section class="user-card" aria-label="个人资料卡">
     <div class="card-cover" aria-hidden="true"><span>MY LITTLE SPACE</span></div>
     <div class="card-identity">
-      <UserAvatar :name="userDisplayName(profile)" :size="64" />
+      <UserAvatar :name="userDisplayName(profile)" :src="profile.avatar" :size="64" />
       <h2>{{ userDisplayName(profile) }}</h2>
       <span class="role-badge">{{ userRoleLabel(profile.role) }}</span>
       <p class="username">@{{ profile.username }}</p>
