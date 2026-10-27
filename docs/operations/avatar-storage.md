@@ -31,6 +31,10 @@ multipart 限制为文件 256 KB、整包 272 KB，内存阈值 272 KB，服务�
 
 ## 上线前接 OSS
 
+当前下载由 Spring 静态资源处理，已提供 `Cache-Control: max-age=86400, public`；图片读取不调用用户查询或图片解码。后续单机部署可以改由 Nginx 直接读取同一受限图片目录，保留既有 URL 和缓存规则，并拒绝隐藏清理目录/目录列表。这样可减少应用处理图片下载的负担，但不能代替备份、磁盘容量规划或多实例共享存储；本轮仅讨论，未配置 Nginx。参考 [Nginx 静态文件与 sendfile](https://docs.nginx.com/nginx/admin-guide/web-server/serving-static-content/)。
+
+数据库 BLOB 会增加数据传输及存储资源需求，但是否影响缓存命中率取决于访问模式和资源预算；不能把它等同于 HTTP 缓存失效或应用内存固定翻倍。HTTP 缓存由响应头等协议语义决定，与图片最终取自磁盘还是数据库没有必然绑定。当前方案没有向 MySQL/Redis 写图片本体。参考 [MySQL BLOB 优化](https://dev.mysql.com/doc/refman/8.0/en/optimize-blob.html)、[HTTP 缓存说明](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching)。
+
 `AvatarStorage` 隔离保存/删除操作，当前实现为 `LocalAvatarStorage`。以后新增 OSS 实现，并明确访问域名、最小写入权限和费用提醒；长期 AccessKey 不进入浏览器。
 
 迁移还要复制现有文件、检查完整性、兼容旧访问地址或更新资料，并安排数据库和图片一致的备份。不能只改一个配置就断言迁移完成；容器部署必须挂载持久卷，多个后端实例不能各自保存到互不共享的磁盘。候选方案和当时的价格资料见[方案比较](../design/avatar-upload-options.md)。
