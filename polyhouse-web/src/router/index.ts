@@ -38,7 +38,13 @@ const router = createRouter({
   scrollBehavior(to, _from, savedPosition) {
     // 浏览器后退优先恢复原位置，锚点等待已挂载的页面，普通切页回到顶部。
     if (savedPosition) return savedPosition
-    if (to.hash === '#tools' || to.hash === '#about') return { el: to.hash, top: 24 }
+    if (to.hash === '#tools' || to.hash === '#about') {
+      // 原生平滑滚动随距离自然缓入缓出；系统要求减少动态时立即定位，不强制播放动画。
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth'
+      return { el: to.hash, top: 24, behavior }
+    }
     return { top: 0 }
   },
 })

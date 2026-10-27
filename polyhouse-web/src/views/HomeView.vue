@@ -16,12 +16,12 @@ const toolIcons = { Document, Picture }
         <h1 id="hero-title">少一点繁琐，<br />多一点<span class="highlight">从容。</span></h1>
         <p class="hero-description">把重复的工作交给工具，<br />把时间留给更喜欢的事。</p>
         <div class="hero-actions">
-          <a class="primary-action" href="#tools"
+          <RouterLink class="primary-action" :to="{ path: '/', hash: '#tools' }"
             >发现小工具<ElIcon><ArrowDown /></ElIcon
-          ></a>
-          <a class="secondary-action" href="#about"
+          ></RouterLink>
+          <RouterLink class="secondary-action" :to="{ path: '/', hash: '#about' }"
             >认识聚妙屋<ElIcon><ArrowRight /></ElIcon
-          ></a>
+          ></RouterLink>
         </div>
         <p class="hero-note">
           <span class="tiny-cross" aria-hidden="true">✳</span> 简单一点，刚刚好。
