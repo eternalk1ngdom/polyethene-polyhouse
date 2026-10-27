@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import {
@@ -13,13 +13,17 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import UserGrowthPanel from '../components/UserGrowthPanel.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
 import { useUserStore } from '../stores/useUserStore'
+import { useUserGrowthStore } from '../stores/useUserGrowthStore'
 import { formatAccountNumber, userDisplayName, userRoleLabel } from '../utils/userPresentation'
 
 const userStore = useUserStore()
 const accountUi = useAccountUiStore()
+const growth = useUserGrowthStore()
+const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
 const toolIcons = { Document, Picture }
 
@@ -28,6 +32,7 @@ async function refreshProfile(): Promise<void> {
   refreshing.value = true
   try {
     await userStore.restoreSession()
+    if (userStore.isLoggedIn) await growth.refresh()
   } finally {
     refreshing.value = false
   }
@@ -71,18 +76,20 @@ onMounted(() => {
         <dl class="profile-stats">
           <div>
             <dt>当前等级</dt>
-            <dd>Lv.{{ userStore.user.level }}</dd>
+            <dd>Lv.{{ stats?.level }}</dd>
           </div>
           <div>
             <dt>累计经验</dt>
-            <dd>{{ formatAccountNumber(userStore.user.experience) }}</dd>
+            <dd>{{ formatAccountNumber(stats?.experience ?? userStore.user.experience) }}</dd>
           </div>
           <div>
             <dt>硬币余额</dt>
-            <dd>{{ formatAccountNumber(userStore.user.coins) }}</dd>
+            <dd>{{ formatAccountNumber(stats?.coins ?? userStore.user.coins) }}</dd>
           </div>
         </dl>
       </section>
+
+      <UserGrowthPanel />
 
       <div class="account-grid">
         <section class="info-panel" aria-labelledby="profile-details-title">

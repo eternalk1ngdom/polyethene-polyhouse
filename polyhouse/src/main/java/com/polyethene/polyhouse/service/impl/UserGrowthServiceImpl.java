@@ -8,6 +8,8 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.mapper.UserGrowthMapper;
 import com.polyethene.polyhouse.mapper.UserMapper;
 import com.polyethene.polyhouse.model.entity.User;
+import com.polyethene.polyhouse.model.entity.DailyLoginReward;
+import com.polyethene.polyhouse.model.vo.UserGrowthVO;
 import com.polyethene.polyhouse.service.UserGrowthService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -79,6 +82,54 @@ public class UserGrowthServiceImpl implements UserGrowthService {
             return user;
         } catch (DataAccessException | ArithmeticException exception) {
             // 异常穿过事务代理触发回滚；安全提示不包含 SQL、余额、凭据或底层异常链。
+            throw unavailable();
+        }
+    }
+
+    /**
+     * 按“用户 -> 流水”的既有顺序读取，避免旧事务快照和并发注销产生混合资料。
+     * FOR UPDATE 需要普通事务；此读取不修改余额，HTTP 的既有认证过程仍会自动结算每日登录。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public UserGrowthVO getStatus(long userId) {
+        if (userId <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+        }
+        try {
+            User user = users.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, userId).last("FOR UPDATE"));
+            if (user == null || !Objects.equals(user.getStatus(), 1) || !Objects.equals(user.getDeleted(), 0)
+                    || user.getRole() == null) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
+            }
+            if (user.getExperience() == null || user.getExperience() < 0 || user.getCoins() == null || user.getCoins() < 0) {
+                throw unavailable();
+            }
+            // 等到用户行锁之后再捕获一次时间，避免跨零点等待锁时把今日状态算成昨日。
+            Instant observedAt = clock.instant();
+            LocalDate rewardDate = LocalDate.ofInstant(observedAt, UserGrowthRules.REWARD_ZONE);
+            DailyLoginReward daily = rewards.findRewardDetailsForUpdate(userId, UserGrowthRules.DAILY_LOGIN_ACTION, rewardDate);
+            if (daily != null && (daily.experienceDelta() < 0 || daily.coinsDelta() < 0)) {
+                throw unavailable();
+            }
+            boolean claimed = daily != null;
+            long experience = user.getExperience();
+            int level = UserGrowthRules.levelForExperience(experience);
+            boolean maximum = level == UserGrowthRules.MAX_LEVEL;
+            long start = UserGrowthRules.experienceForLevel(level);
+            Long next = maximum ? null : UserGrowthRules.experienceForLevel(level + 1);
+            // 非满级经验严格处于相邻门槛内，乘 100 的中间值有界；满级单独处理，Long.MAX_VALUE 也不会溢出。
+            int percent = maximum ? 100 : (int) ((experience - start) * 100 / (next - start));
+            long remaining = maximum ? 0 : next - experience;
+            return new UserGrowthVO(Long.toString(userId), Long.toString(experience), user.getCoins().toString(),
+                    level, UserGrowthRules.MAX_LEVEL, maximum, Long.toString(start),
+                    next == null ? null : next.toString(), Long.toString(remaining), percent,
+                    rewardDate, UserGrowthRules.REWARD_ZONE.getId(), claimed,
+                    claimed ? daily.experienceDelta() : UserGrowthRules.DAILY_LOGIN_EXPERIENCE,
+                    claimed ? daily.coinsDelta() : UserGrowthRules.DAILY_LOGIN_COINS,
+                    observedAt, rewardDate.plusDays(1).atStartOfDay(UserGrowthRules.REWARD_ZONE).toInstant(),
+                    UserGrowthRules.RULE_VERSION);
+        } catch (DataAccessException exception) {
             throw unavailable();
         }
     }

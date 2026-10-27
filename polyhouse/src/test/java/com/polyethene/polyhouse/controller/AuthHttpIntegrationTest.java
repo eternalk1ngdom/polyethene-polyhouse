@@ -124,6 +124,42 @@ class AuthHttpIntegrationTest {
     }
 
     @Test
+    void shouldExposeOnlyOwnGrowthWithoutDuplicatingDailyRewardsAcrossClients() throws Exception {
+        Fixture fixture = register();
+        Fixture other = register();
+        assertThat(get("/api/auth/growth", null).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        String pc = login(fixture, "PC");
+        String h5 = login(fixture, "H5");
+        for (String token : List.of(pc, h5, pc)) {
+            ResponseEntity<String> response = get("/api/auth/growth?userId=" + other.id(), token);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            JsonNode status = json.readTree(response.getBody()).path("data");
+            assertThat(status.path("userId").asText()).isEqualTo(Long.toString(fixture.id()));
+            assertThat(status.path("experience").asText()).isEqualTo("10");
+            assertThat(status.path("coins").asText()).isEqualTo("1");
+            assertThat(status.path("progressPercent").asInt()).isEqualTo(33);
+            assertThat(status.path("experienceToNextLevel").asText()).isEqualTo("20");
+            assertThat(status.path("dailyLoginRewardClaimed").asBoolean()).isTrue();
+            assertThat(status.path("nextLevelExperience").asText()).isEqualTo("30");
+            assertThat(status.has("passwordHash")).isFalse();
+            assertThat(status.has("role")).isFalse();
+            assertThat(response.getBody().contains(token)).isFalse();
+            assertThat(response.getBody().contains(fixture.password())).isFalse();
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id = ?", Integer.class, fixture.id())).isEqualTo(1);
+        assertThat(users.update(null, new LambdaUpdateWrapper<User>().eq(User::getId, fixture.id())
+                .set(User::getExperience, Long.MAX_VALUE).set(User::getCoins, Long.MAX_VALUE).set(User::getLevel, 6))).isEqualTo(1);
+        JsonNode maximum = json.readTree(get("/api/auth/growth", pc).getBody()).path("data");
+        assertThat(maximum.path("maxLevelReached").asBoolean()).isTrue();
+        assertThat(maximum.path("nextLevelExperience").isNull()).isTrue();
+        assertThat(maximum.path("experienceToNextLevel").asText()).isEqualTo("0");
+        assertThat(maximum.path("experience").asText()).isEqualTo(Long.toString(Long.MAX_VALUE));
+        assertThat(maximum.path("progressPercent").asInt()).isEqualTo(100);
+        assertThat(command("logout", pc).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(get("/api/auth/growth", pc).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void shouldUseLiveDatabaseRoleAndRejectDisabledAccountOverHttp() throws Exception {
         Fixture fixture = register();
         String token = login(fixture, "PC");

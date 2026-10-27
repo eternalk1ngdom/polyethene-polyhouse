@@ -12,6 +12,7 @@ import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.entity.User;
 import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
+import com.polyethene.polyhouse.model.vo.UserGrowthVO;
 import com.polyethene.polyhouse.service.AuthRedisStore;
 import com.polyethene.polyhouse.service.AuthService;
 import com.polyethene.polyhouse.service.UserGrowthService;
@@ -162,6 +163,16 @@ public class AuthServiceImpl implements AuthService {
         }
         // 已通过签名和白名单校验的活跃访问也算每日登录；成长服务锁定读复核最新角色和账号状态。
         return UserProfileVO.from(growth.rewardDailyLogin(claims.userId()));
+    }
+
+    /** 与资料查询一样独立核对会话，成长服务再锁定读复核账号状态，不依赖客户端资料。 */
+    @Override
+    public UserGrowthVO getGrowthStatus(String token) {
+        JwtUtils.TokenClaims claims = parseToken(token);
+        if (!sessions.isCurrentSession(claims)) {
+            throw unauthorized();
+        }
+        return growth.getStatus(claims.userId());
     }
 
     /** 退出不要求账号仍启用，允许撤销自己的旧会话；Lua 确保不会误删新登录。 */

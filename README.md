@@ -78,7 +78,7 @@ mvn -q test
 
 ```powershell
 npm run build
-node --test tests/auth-session.test.mjs
+node --test tests/auth-session.test.mjs tests/growth.test.mjs
 ```
 
 编译通过和 Spring 上下文启动成功不等于数据库或 Redis 已完成连接验证；实际数据读写需要另行集成测试。普通测试不会执行 MySQL 查询，MySQL 和 Redis 实例测试默认跳过。
@@ -91,7 +91,7 @@ node --test tests/auth-session.test.mjs
 
 刷新或回到页面时，请求 `/api/auth/me` 确认最新身份；`polyhouse_user` 仅为既有缓存格式，不从其恢复昵称、角色或权限。确认前显示恢复状态；网络/服务故障、403 或响应格式异常不清除 Token，也不显示未确认身份，提供重试。认证请求的 401 清除匹配的旧会话，公开登录的错误密码不触发全局清理。其他标签页登录/退出会同步并重新核验，旧请求不能覆盖新会话。
 
-浏览器禁止保存或缓存写入失败时，仍可使用已确认的内存身份，并提示刷新后可能需要重新登录。右上角个人卡片展示真实昵称、身份、等级、累计经验与硬币，并提供个人中心和退出。`/account` 展示只读资料、工具入口及账号管理；身份未确认时不展示资料。头像采用昵称首字，头像上传和资料修改尚未开放；经验进度和每日奖励状态为下一步。请求错误只向界面传播固定提示，不附带包含凭据的 Axios 对象。
+浏览器禁止保存或缓存写入失败时，仍可使用已确认的内存身份，并提示刷新后可能需要重新登录。右上角个人卡片展示真实昵称、身份、等级、累计经验与硬币，并提供个人中心和退出。`/account` 展示只读资料、成长进度、下级门槛、满级状态、每日奖励状态、工具入口及账号管理；身份未确认时不展示资料。头像采用昵称首字，头像上传和资料修改尚未开放。请求错误只向界面传播固定提示，不附带包含凭据的 Axios 对象。
 
 个人中心的注销弹窗必须勾选影响说明，并准确输入“注销账号”；取消或确认期间切换账号后，旧确认失效。注销会停用账号并撤销全部终端会话，原账号名不能复用，已有资料和历史记录仍保留，不代表永久删除个人数据。前端成功反馈只在服务端确认后显示；网络/服务故障不能冒充操作成功，也不能据此断言服务端未执行。退出与注销共用命令占用状态，防止跨入口重复提交。
 
@@ -114,7 +114,7 @@ source E:/project/java/polyethene-polyhouse/polyhouse/sql/003_daily_growth_rewar
 
 迁移为 `sys_user` 追加 `experience bigint NOT NULL DEFAULT 0`、`level int NOT NULL DEFAULT 1`、`coins bigint NOT NULL DEFAULT 0`，包括非负经验/余额和至少 1 级的数据库约束，旧账号也自动取得初值。每列存在时跳过，重复执行不会清零余额；不会修正其他环境中已存在但定义不一致的同名列，升级时仍需核对结构。MySQL DDL 隐式提交，不能假定失败时可整批事务回滚；迁移支持中断后重跑。
 
-三项由**独立成长服务**管理：`UserGrowthService.rewardDailyLogin(userId)` 是受信任业务唯一的每日结算入口，`UserGrowthRules` 集中管理奖励和等级曲线，`UserGrowthConfig` 提供服务端时钟，`UserGrowthMapper` 记录流水。Controller 不接受奖励数值，不新增直接加经验/加币的公开接口。注册/登录 DTO 的额外成长字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料覆盖余额。等级与 `USER/INSIDER/OWNER` 权限独立，不进入 JWT；前端类型已同步，展示尚未实现。
+三项由**独立成长服务**管理：`UserGrowthService.rewardDailyLogin(userId)` 是受信任业务唯一的每日结算入口，`UserGrowthRules` 集中管理奖励和等级曲线，`UserGrowthConfig` 提供服务端时钟，`UserGrowthMapper` 记录流水。Controller 不接受奖励数值，不新增直接加经验/加币的公开接口。注册/登录 DTO 的额外成长字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料覆盖余额。等级与 `USER/INSIDER/OWNER` 权限独立，不进入 JWT；前端已接入真实数值及成长状态展示。
 
 ### 每日登录奖励与升级
 
@@ -137,6 +137,14 @@ source E:/project/java/polyethene-polyhouse/polyhouse/sql/003_daily_growth_rewar
 
 当前只启用服务端可验证的每日登录行为。其他行为奖励及其次数上限、硬币消费待后续需求；工具在浏览器本地运行，不应仅凭浏览器自报“完成一次处理”发奖。未来增加行为时须通过受控成长服务定义验证方式、限次策略与流水，不直接修改资料字段。
 
+### 成长展示与当日到账状态
+
+`GET /api/auth/growth` 只接受当前 Bearer 身份，返回 `UserGrowthVO`：累计经验/硬币、当前等级/上限、当前等级起点、下级累计门槛、还需经验、等级内整数百分比，以及奖励日/时区、当日到账标志、经验/硬币增量、服务端观测时间和下次零点。编号、累计值和门槛使用十进制字符串；满级的下级门槛为 `null`、还需经验为 `"0"`、进度为 100，累计经验和硬币继续保留。
+
+`UserGrowthService.getStatus` 按既有“用户 → 流水”顺序锁定读取，本身不写余额或新增奖励；HTTP 的统一认证仍会结算有效登录。已到账标志及数额读取当日真实流水，即使以后奖励规则改变，也不会把旧流水重新解释为新数额；尚未到账只显示当前规则的“预计”值。现有资料响应保持兼容，无新增数据库迁移或公开领取接口。
+
+个人中心与头像小窗共用 `useUserGrowthStore` 的内存快照，不把到账标志写入本地缓存，不重复弹领取成功消息。相同身份并发查询去重，退出/换号后旧响应失效；跨日间隔使用两个服务端时刻的差值，避免客户端日期错误。零点使旧快照失效，隐藏页面不主动发送活跃请求，重新可见时先核验身份再刷新。网络失败提供重试，不能据此宣称奖励到账。
+
 原四张表保持策划书基线，用户表追加成长字段，并另建每日奖励流水表；原有表排序规则为 `utf8mb4_0900_ai_ci`，账号判重不区分大小写，本轮保留现状。未来变更字符比较规则必须先评估已有账号，不能直接改表。
 
 在 Maven 所在的同一个进程环境提供 `DB_USERNAME/DB_PASSWORD`（需要时也提供 `DB_URL`），然后在 `polyhouse/` 执行：
@@ -155,7 +163,7 @@ mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true'
 
 ## JWT 基础工具
 
-当前五项认证 HTTP 接口和认证/角色拦截器均已接入。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
+当前六项认证 HTTP 接口和认证/角色拦截器均已接入。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
 
 `JwtUtils` 保持静态且不持有业务状态：`keyFromBase64` 校验外部密钥，`createToken` 签发访问令牌，`parseAndValidate` 验签后返回内部 `TokenClaims`。密钥、当前时间和有效期由调用方传入，工具不读取环境、不注入 Bean、不访问 MySQL/Redis，也不自动裁剪 `Bearer` 前缀。
 
@@ -191,7 +199,7 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 
 ## 注册登录 Service
 
-`AuthService` 提供 `register/login/getCurrentUser/logout/deregister` 业务方法，五项均已有 HTTP 入口。已映射的 `/api/**` 业务请求默认要求有效 Bearer 身份；注册、登录及独立核验请求体 Token 的撤销入口显式跳过统一 Bearer 检查。注册返回安全用户资料，不自动登录；登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
+`AuthService` 提供 `register/login/getCurrentUser/getGrowthStatus/logout/deregister` 业务方法，六项均已有 HTTP 入口。已映射的 `/api/**` 业务请求默认要求有效 Bearer 身份；注册、登录及独立核验请求体 Token 的撤销入口显式跳过统一 Bearer 检查。注册返回安全用户资料，不自动登录；登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
 
 ### HTTP 入口与权限行为
 
@@ -202,6 +210,7 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 | `POST /api/auth/register` | JSON：`username/password/nickname`，额外角色字段不生效，注册固定 USER | `UserProfileVO` |
 | `POST /api/auth/login` | JSON：`username/password/clientType`，终端可省略 | `LoginVO`，包含 Token、到期时间和安全资料 |
 | `GET /api/auth/me` | 唯一的 `Authorization: Bearer <JWT>` 请求头 | 最新 `UserProfileVO` |
+| `GET /api/auth/growth` | 唯一的 `Authorization: Bearer <JWT>` 请求头，无领取参数 | 当前账号的 `UserGrowthVO` |
 | `POST /api/auth/logout` | 保留原 JSON：`token`，值不含 Bearer 前缀 | `null` |
 | `POST /api/auth/deregister` | 保留原 JSON：`token`，值不含 Bearer 前缀 | `null` |
 

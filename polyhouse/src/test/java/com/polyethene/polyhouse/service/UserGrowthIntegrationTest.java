@@ -277,6 +277,48 @@ class UserGrowthIntegrationTest {
         assertThat(rewardCount(other.id())).isEqualTo(1);
     }
 
+    @Test
+    void shouldReadStatusWithoutRewardAndRefreshAcrossShanghaiMidnight() {
+        Fixture fixture = register();
+        var before = growth.getStatus(fixture.id());
+        assertThat(before.experience()).isEqualTo("0");
+        assertThat(before.dailyLoginRewardClaimed()).isFalse();
+        assertThat(rewardCount(fixture.id())).isZero();
+        growth.rewardDailyLogin(fixture.id());
+        var first = growth.getStatus(fixture.id());
+        assertThat(first.dailyLoginRewardClaimed()).isTrue();
+        assertThat(first.progressPercent()).isEqualTo(33);
+        assertThat(first.experienceToNextLevel()).isEqualTo("20");
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T16:00:00Z"));
+        var nextDayBeforeReward = growth.getStatus(fixture.id());
+        assertThat(nextDayBeforeReward.rewardDate()).isEqualTo(LocalDate.of(2026, 1, 2));
+        assertThat(nextDayBeforeReward.dailyLoginRewardClaimed()).isFalse();
+        assertThat(nextDayBeforeReward.experience()).isEqualTo("10");
+        assertThat(rewardCount(fixture.id())).isEqualTo(1);
+        growth.rewardDailyLogin(fixture.id());
+        var nextDayAfterReward = growth.getStatus(fixture.id());
+        assertThat(nextDayAfterReward.dailyLoginRewardClaimed()).isTrue();
+        assertThat(nextDayAfterReward.experience()).isEqualTo("20");
+        assertThat(nextDayAfterReward.coins()).isEqualTo("2");
+        assertThat(nextDayAfterReward.nextRewardAt()).isEqualTo(Instant.parse("2026-01-02T16:00:00Z"));
+        assertThat(rewardCount(fixture.id())).isEqualTo(2);
+    }
+
+    @Test
+    void shouldShowRecordedDailyAmountsInsteadOfReinterpretingHistoryWithCurrentRules() {
+        Fixture fixture = register();
+        assertThat(rewards.insertReward(fixture.id(), "DAILY_LOGIN", LocalDate.of(2026, 1, 1),
+                5, 2, "historical-rule-fixture")).isEqualTo(1);
+        assertThat(users.update(null, new LambdaUpdateWrapper<User>().eq(User::getId, fixture.id())
+                .set(User::getExperience, 5L).set(User::getCoins, 2L).set(User::getLevel, 1))).isEqualTo(1);
+        var status = growth.getStatus(fixture.id());
+        assertThat(status.dailyLoginRewardClaimed()).isTrue();
+        assertThat(status.dailyLoginExperience()).isEqualTo(5);
+        assertThat(status.dailyLoginCoins()).isEqualTo(2);
+        assertThat(status.experience()).isEqualTo("5");
+        assertThat(rewardCount(fixture.id())).isEqualTo(1);
+    }
+
     private Fixture register() {
         String username = "growth_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         String password = UUID.randomUUID().toString();

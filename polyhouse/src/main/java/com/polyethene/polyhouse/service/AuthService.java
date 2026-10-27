@@ -4,6 +4,7 @@ import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
+import com.polyethene.polyhouse.model.vo.UserGrowthVO;
 
 /**
  * 组织账号与会话业务，注册登录接收 DTO、资料返回安全 VO，撤销操作接收原始 Token。
@@ -35,6 +36,9 @@ public interface AuthService {
      * @return 当前有效会话对应的安全资料，供后续拦截器及 me 接口使用
      */
     UserProfileVO getCurrentUser(String token);
+
+    /** 验签及核对白名单后读取自己的成长快照，不接收浏览器指定的用户编号或奖励数值。 */
+    UserGrowthVO getGrowthStatus(String token);
 
     /**
      * 只撤销与传入令牌编号一致的会话，避免旧令牌删除同端新登录。

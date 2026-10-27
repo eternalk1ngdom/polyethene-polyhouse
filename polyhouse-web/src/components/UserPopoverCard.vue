@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
 import { ElButton, ElIcon } from 'element-plus'
 import { ArrowRight, SwitchButton, User } from '@element-plus/icons-vue'
 import type { UserProfile } from '../api/auth'
 import { formatAccountNumber, userDisplayName, userRoleLabel } from '../utils/userPresentation'
 import UserAvatar from './UserAvatar.vue'
+import UserGrowthPanel from './UserGrowthPanel.vue'
+import { useUserGrowthStore } from '../stores/useUserGrowthStore'
 
 /** 卡片只展示已验证资料，账号请求由外部共享操作层负责。 */
 interface Props {
@@ -20,8 +23,10 @@ interface Emits {
   (event: 'navigate'): void
   (event: 'logout'): void
 }
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+const growth = useUserGrowthStore()
+const stats = computed(() => growth.summary ?? props.profile)
 </script>
 
 <template>
@@ -36,17 +41,18 @@ const emit = defineEmits<Emits>()
     <dl class="card-stats">
       <div>
         <dt>等级</dt>
-        <dd>Lv.{{ profile.level }}</dd>
+        <dd>Lv.{{ stats.level }}</dd>
       </div>
       <div>
         <dt>累计经验</dt>
-        <dd>{{ formatAccountNumber(profile.experience) }}</dd>
+        <dd>{{ formatAccountNumber(stats.experience) }}</dd>
       </div>
       <div>
         <dt>硬币</dt>
-        <dd>{{ formatAccountNumber(profile.coins) }}</dd>
+        <dd>{{ formatAccountNumber(stats.coins) }}</dd>
       </div>
     </dl>
+    <UserGrowthPanel compact />
     <RouterLink class="profile-link" to="/account" @click="emit('navigate')"
       ><span
         ><ElIcon><User /></ElIcon>个人中心</span
@@ -62,6 +68,9 @@ const emit = defineEmits<Emits>()
 <style scoped>
 .user-card {
   color: var(--ph-ink);
+  max-height: calc(100dvh - 130px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .card-cover {
   height: 64px;

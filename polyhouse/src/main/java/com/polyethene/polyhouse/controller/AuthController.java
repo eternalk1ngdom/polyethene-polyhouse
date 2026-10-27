@@ -8,6 +8,7 @@ import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.dto.SessionTokenDTO;
 import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
+import com.polyethene.polyhouse.model.vo.UserGrowthVO;
 import com.polyethene.polyhouse.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,6 +49,12 @@ public class AuthController {
     @GetMapping("/me")
     public Result<UserProfileVO> me(@Valid SessionTokenDTO session) {
         return Result.success(authService.getCurrentUser(session.token()));
+    }
+
+    /** 身份只来自唯一 Bearer 头的 DTO，统一认证仍按既定规则结算每日登录；展示查询不提供发奖入参。 */
+    @GetMapping("/growth")
+    public Result<UserGrowthVO> growth(@Valid SessionTokenDTO session) {
+        return Result.success(authService.getGrowthStatus(session.token()));
     }
 
     /** 退出只撤销当前终端的匹配会话；成功后客户端应清理自己的 Token 和用户资料。 */
