@@ -1,12 +1,38 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { ref } from 'vue'
-import { ElIcon, ElPopover } from 'element-plus'
+import { ElButton, ElIcon, ElPopover } from 'element-plus'
 import { ArrowDown, User } from '@element-plus/icons-vue'
 import { toolRegistry } from '../config/toolRegistry'
+import AuthDialog from './AuthDialog.vue'
+import { ApiError } from '../api'
+import { useUserStore } from '../stores/useUserStore'
 
 // 显式管理展开状态，让键盘 Escape 与鼠标点击外部都能关闭账号说明。
 const accountVisible = ref(false)
+const authVisible = ref(false)
+const signingOut = ref(false)
+const accountError = ref('')
+const userStore = useUserStore()
+
+async function logout(): Promise<void> {
+  if (signingOut.value) return
+  signingOut.value = true
+  accountError.value = ''
+  try {
+    await userStore.logout()
+    accountVisible.value = false
+  } catch (error: unknown) {
+    accountError.value = error instanceof ApiError ? error.message : '暂时无法退出，请稍后重试'
+  } finally {
+    signingOut.value = false
+  }
+}
+
+function openLogin(): void {
+  accountError.value = ''
+  authVisible.value = true
+}
 </script>
 
 <template>
@@ -27,8 +53,24 @@ const accountVisible = ref(false)
           {{ tool.title }}<span class="nav-description">{{ tool.tag }}</span>
         </RouterLink>
       </nav>
-      <!-- 只说明账号入口的开发状态，不把本地缓存误认为已验证身份。 -->
+      <button
+        v-if="!userStore.isLoggedIn"
+        class="account-trigger login-trigger"
+        type="button"
+        :disabled="userStore.status === 'checking'"
+        :aria-busy="userStore.status === 'checking'"
+        @click="openLogin"
+      >
+        <span class="account-avatar"
+          ><ElIcon><User /></ElIcon
+        ></span>
+        <span class="account-label">{{
+          userStore.status === 'checking' ? '正在恢复' : '登录 / 注册'
+        }}</span>
+      </button>
+      <!-- 只有 /me 或登录响应确认的资料才显示为已登录，缓存用户资料不会进入此分支。 -->
       <ElPopover
+        v-else
         v-model:visible="accountVisible"
         trigger="click"
         :width="272"
@@ -36,22 +78,49 @@ const accountVisible = ref(false)
         :teleported="false"
       >
         <template #reference>
-          <button class="account-trigger" type="button" aria-label="账号功能说明">
+          <button class="account-trigger" type="button" aria-label="打开账号菜单">
             <span class="account-avatar"
               ><ElIcon><User /></ElIcon
             ></span>
-            <span class="account-label">个人空间</span>
+            <span class="account-label">{{
+              userStore.user?.nickname || userStore.user?.username
+            }}</span>
             <ElIcon class="account-chevron"><ArrowDown /></ElIcon>
           </button>
         </template>
         <div class="account-preview">
-          <span class="preview-eyebrow">你的个人空间</span>
-          <h2>在这里，积攒一点成长。</h2>
-          <p>登录、个人资料与等级硬币将在接下来的版本接入。</p>
-          <span class="preview-status">账号功能准备中</span>
+          <span class="preview-eyebrow"
+            >欢迎回到小屋 <span class="verified-label">已登录</span></span
+          >
+          <h2>{{ userStore.user?.nickname || userStore.user?.username }}</h2>
+          <p class="account-username">账号：{{ userStore.user?.username }}</p>
+          <p v-if="accountError" class="account-error" role="alert">{{ accountError }}</p>
+          <ElButton class="logout-button" :loading="signingOut" @click="logout">退出登录</ElButton>
         </div>
       </ElPopover>
     </div>
+    <div
+      v-if="userStore.sessionMessage || userStore.storageMessage"
+      class="session-notice"
+      role="status"
+    >
+      <span>{{ userStore.sessionMessage || userStore.storageMessage }}</span>
+      <button
+        v-if="userStore.status === 'unavailable'"
+        type="button"
+        @click="userStore.restoreSession()"
+      >
+        重试连接
+      </button>
+      <button
+        v-if="!userStore.isLoggedIn && userStore.status !== 'checking'"
+        type="button"
+        @click="openLogin"
+      >
+        重新登录
+      </button>
+    </div>
+    <AuthDialog v-model="authVisible" />
   </header>
 </template>
 
@@ -164,6 +233,67 @@ const accountVisible = ref(false)
   padding: 8px 0 8px 8px;
   color: var(--ph-ink);
 }
+.account-trigger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.account-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.login-trigger {
+  padding: 5px 12px 5px 5px;
+  background: #edf2e8;
+  border: 1px solid #e0e7d8;
+  border-radius: 28px;
+}
+.login-trigger:hover:not(:disabled) {
+  background: #e3ebdc;
+}
+.verified-label {
+  margin-left: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #edf3ee;
+  color: #325e4d;
+  font-size: 10px;
+}
+.account-username {
+  overflow-wrap: anywhere;
+}
+.account-preview h2 {
+  overflow-wrap: anywhere;
+}
+.account-preview .account-error {
+  color: #a74738;
+}
+.logout-button {
+  width: 100%;
+}
+.session-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-top: 1px solid #e5e8da;
+  background: #f2f5eb;
+  padding: 11px 24px;
+  color: #59664c;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.session-notice button {
+  flex-shrink: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  padding: 0;
+  color: var(--ph-green);
+  cursor: pointer;
+  font-size: 12px;
+}
 .account-avatar {
   width: 34px;
   height: 34px;
@@ -199,14 +329,6 @@ const accountVisible = ref(false)
   font-size: 13px;
   margin-bottom: 20px;
 }
-.preview-status {
-  display: inline-block;
-  background: #edf3ee;
-  border-radius: 6px;
-  padding: 7px 10px;
-  color: #325e4d;
-  font-size: 12px;
-}
 @media (max-width: 960px) {
   .header-inner {
     gap: 36px;
@@ -239,9 +361,20 @@ const accountVisible = ref(false)
   }
   .account-label {
     font-size: 12px;
+    max-width: 110px;
   }
   .account-trigger {
     padding-left: 0;
+  }
+  .login-trigger {
+    padding-left: 4px;
+    padding-right: 10px;
+  }
+  .session-notice {
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
   }
 }
 </style>

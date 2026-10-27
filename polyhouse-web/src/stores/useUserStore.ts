@@ -1,54 +1,170 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { AuthCommandError, deregister as deregisterAccount, logout as logoutSession } from '../api/auth'
+import { ApiError } from '../api/index'
+import {
+  AuthCommandError,
+  deregister as deregisterAccount,
+  logout as logoutSession,
+  getCurrentUser,
+  login as loginAccount,
+  type LoginRequest,
+  type UserProfile,
+} from '../api/auth'
 
-/** 只保存后端已脱敏的资料；ID 使用字符串保留雪花主键精度。 */
-export interface UserProfile {
-  /** 后端雪花 ID 保留为字符串，避免 number 精度损失。 */
-  id: string
-  /** 只展示自己的账号，不用于授权或指定注销对象。 */
-  username: string
-  /** 允许兼容已有资料中的空昵称。 */
-  nickname: string | null
-  /** 未配置头像时由未来界面使用默认展示。 */
-  avatar: string | null
-  /** 仅供界面展示，服务端仍使用数据库最新角色做权限判断。 */
-  role: 'USER' | 'INSIDER' | 'OWNER'
-  /** 累计经验使用十进制字符串保留 bigint 精度，由后端结算每日奖励。 */
-  experience: string
-  /** 成长等级独立于角色权限，从 1 级开始，达到后端累计门槛后升级。 */
-  level: number
-  /** 整数硬币余额使用十进制字符串传递，后端已支持每日发放，消费用途待定。 */
-  coins: string
-}
+// 保留原有类型导入位置，资料契约集中在 API 层，避免 API 反向依赖状态管理。
+export type { UserProfile } from '../api/auth'
+
+/** 缓存存在只进入 checking，身份确认失败时单独显示 unavailable，不能伪装成已登录。 */
+export type SessionStatus = 'anonymous' | 'checking' | 'authenticated' | 'unavailable'
 
 const TOKEN_KEY = 'polyhouse_token'
 const USER_KEY = 'polyhouse_user'
 
 /** 管理当前页面的会话，退出或注销后同步清除内存状态和既有本地缓存键。 */
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem(TOKEN_KEY) ?? '')
+  const storageAvailable = ref(true)
+  const token = ref(readStoredToken())
   const user = ref<UserProfile | null>(null)
-  const isLoggedIn = computed(() => token.value.length > 0)
+  const status = ref<SessionStatus>(token.value ? 'checking' : 'anonymous')
+  const sessionMessage = ref('')
+  const isLoggedIn = computed(
+    () => status.value === 'authenticated' && !!token.value && user.value !== null,
+  )
+  const storageMessage = computed(() =>
+    storageAvailable.value ? '' : '浏览器暂不允许保存登录状态，刷新后可能需要重新登录',
+  )
+  // 每次建立/清理会话都推进版本，连同 Token 比较一起拦住旧请求和同 Token 的 ABA 变化。
+  let revision = 0
+  let pendingRestore: { revision: number; promise: Promise<void> } | undefined
 
-  /** 由未来登录入口交付已验证的 Token 与安全资料，本地缓存不作为后端授权依据。 */
+  function readStoredToken(): string {
+    try {
+      return localStorage.getItem(TOKEN_KEY) ?? ''
+    } catch {
+      storageAvailable.value = false
+      return ''
+    }
+  }
+
+  function removeCache(expectedToken?: string): void {
+    try {
+      // 另一标签页可能已写入新会话；旧撤销响应不能删除它尚未同步到内存的凭据。
+      if (expectedToken !== undefined && localStorage.getItem(TOKEN_KEY) !== expectedToken) return
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_KEY)
+    } catch {
+      storageAvailable.value = false
+    }
+  }
+
+  function cacheProfile(): void {
+    try {
+      localStorage.setItem(TOKEN_KEY, token.value)
+      localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+    } catch {
+      storageAvailable.value = false
+      // 缓存只写了一半时清掉属于当前会话的片段，页面仍可使用已验证的内存身份。
+      removeCache(token.value)
+    }
+  }
+
+  /** 只由真实登录结果或受信任业务交付身份，页面渲染不读取缓存资料。 */
   function setSession(accessToken: string, profile: UserProfile): void {
+    revision += 1
     token.value = accessToken
     user.value = profile
-    localStorage.setItem(TOKEN_KEY, accessToken)
-    localStorage.setItem(USER_KEY, JSON.stringify(profile))
+    status.value = 'authenticated'
+    sessionMessage.value = ''
+    cacheProfile()
   }
 
   /** 内存与 localStorage 一并失效，防止刷新页面又恢复已退出的 Token。 */
   function clearSession(): void {
+    const previousToken = token.value
+    revision += 1
     token.value = ''
     user.value = null
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    status.value = 'anonymous'
+    sessionMessage.value = ''
+    removeCache(previousToken || undefined)
+  }
+
+  /** 请求只允许使发出时的身份失效；公开登录的 401 不触发此回调。 */
+  function expireSession(submittedToken: string): void {
+    if (token.value !== submittedToken) return
+    clearSession()
+    sessionMessage.value = '登录状态已失效，请重新登录'
+  }
+
+  /** 主动登录会替换本地待确认身份；旧恢复或旧登录结果不能覆盖后续操作。 */
+  async function login(request: LoginRequest): Promise<boolean> {
+    clearSession()
+    const submittedRevision = revision
+    const result = await loginAccount(request)
+    if (revision !== submittedRevision) return false
+    setSession(result.accessToken, result.user)
+    return true
+  }
+
+  /** 多标签页只同步 Token 并重新向服务端确认，绝不信任另一页写入的角色资料。 */
+  async function syncStoredSession(): Promise<void> {
+    const stored = readStoredToken()
+    if (!storageAvailable.value || stored === token.value) return
+    revision += 1
+    token.value = stored
+    user.value = null
+    status.value = stored ? 'checking' : 'anonymous'
+    sessionMessage.value = ''
+    if (stored) await restoreSession()
+  }
+
+  /** 启动、回到页面或手动重试时读取 /me；并发触发复用同一次请求。 */
+  function restoreSession(): Promise<void> {
+    if (!token.value) {
+      if (status.value !== 'anonymous') clearSession()
+      return Promise.resolve()
+    }
+    if (pendingRestore?.revision === revision) return pendingRestore.promise
+    const submittedToken = token.value
+    const submittedRevision = revision
+    const wasAuthenticated = isLoggedIn.value
+    if (!wasAuthenticated) status.value = 'checking'
+    const promise = (async () => {
+      try {
+        const profile = await getCurrentUser(submittedToken)
+        if (revision !== submittedRevision || token.value !== submittedToken) return
+        // 存储事件与网络响应的到达顺序不固定，提交资料前再次核对共享缓存。
+        const stored = readStoredToken()
+        if (storageAvailable.value && stored !== submittedToken) {
+          await syncStoredSession()
+          return
+        }
+        user.value = profile
+        status.value = 'authenticated'
+        sessionMessage.value = ''
+        cacheProfile()
+      } catch (error: unknown) {
+        if (revision !== submittedRevision || token.value !== submittedToken) return
+        if (error instanceof ApiError && error.sessionExpired) {
+          expireSession(submittedToken)
+        } else {
+          // 网络错误、403 或格式错误都不等于令牌失效；隐藏旧资料但保留凭据以供重试。
+          user.value = null
+          status.value = 'unavailable'
+          sessionMessage.value =
+            error instanceof ApiError ? error.message : '暂时无法确认登录状态，请稍后重试'
+        }
+      } finally {
+        if (pendingRestore?.revision === submittedRevision) pendingRestore = undefined
+      }
+    })()
+    pendingRestore = { revision: submittedRevision, promise }
+    return promise
   }
 
   async function endCurrentSession(cancelAccount: boolean): Promise<void> {
     const submittedToken = token.value
+    const submittedRevision = revision
     if (!submittedToken) {
       clearSession()
       if (cancelAccount) throw new AuthCommandError('请先登录再注销账号', true)
@@ -57,13 +173,18 @@ export const useUserStore = defineStore('user', () => {
     try {
       await (cancelAccount ? deregisterAccount(submittedToken) : logoutSession(submittedToken))
     } catch (error: unknown) {
-      if (error instanceof AuthCommandError && error.sessionExpired && token.value === submittedToken) {
-        clearSession()
+      if (
+        error instanceof ApiError &&
+        error.sessionExpired &&
+        token.value === submittedToken &&
+        revision === submittedRevision
+      ) {
+        expireSession(submittedToken)
       }
       throw error
     }
     // 请求等待期间若已登录另一账号或取得新 Token，旧响应不能清掉新会话。
-    if (token.value === submittedToken) clearSession()
+    if (token.value === submittedToken && revision === submittedRevision) clearSession()
   }
 
   /** 等待后端撤销成功后退出；网络故障会保留本地状态并提示重试。 */
@@ -76,5 +197,20 @@ export const useUserStore = defineStore('user', () => {
     return endCurrentSession(true)
   }
 
-  return { token, user, isLoggedIn, setSession, clearSession, logout, deregister }
+  return {
+    token,
+    user,
+    status,
+    isLoggedIn,
+    sessionMessage,
+    storageMessage,
+    setSession,
+    clearSession,
+    expireSession,
+    login,
+    restoreSession,
+    syncStoredSession,
+    logout,
+    deregister,
+  }
 })
