@@ -67,6 +67,14 @@ MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开�
 
 ## 验证
 
+项目根目录可执行统一普通验收（先准备 JDK 21、Maven、满足 `package.json` 的 Node 版本，并在 `polyhouse-web/` 安装锁定依赖）：
+
+```powershell
+.\polyhouse\scripts\Test-Project.ps1
+```
+
+按顺序执行后端编译、普通测试、前端只检查不修复的 ESLint、`npm test`、类型检查及生产构建；任何阶段失败立即停止，并恢复终端工作目录。不读取 IDEA 私有凭据、不自动安装/迁移/授权/部署，也不自动打开真实实例测试。真实 MySQL/Redis 验收仍通过 `Invoke-LocalAuth.ps1 -Action Verify` 显式执行；默认普通验收中被关闭的实例测试会报告跳过，不能把它当作真实连接验收成功。
+
 使用 JDK 21，在 `polyhouse/` 中执行：
 
 ```powershell
@@ -78,7 +86,8 @@ mvn -q test
 
 ```powershell
 npm run build
-node --test tests/auth-session.test.mjs tests/growth.test.mjs
+npm test
+npm run lint:check
 ```
 
 编译通过和 Spring 上下文启动成功不等于数据库或 Redis 已完成连接验证；实际数据读写需要另行集成测试。普通测试不会执行 MySQL 查询，MySQL 和 Redis 实例测试默认跳过。
