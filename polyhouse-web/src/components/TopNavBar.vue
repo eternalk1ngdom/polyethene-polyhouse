@@ -1,38 +1,39 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
-import { ref } from 'vue'
-import { ElButton, ElIcon, ElPopover } from 'element-plus'
+import { RouterLink, useRoute } from 'vue-router'
+import { ref, watch } from 'vue'
+import { ElIcon, ElPopover } from 'element-plus'
 import { ArrowDown, User } from '@element-plus/icons-vue'
 import { toolRegistry } from '../config/toolRegistry'
 import AuthDialog from './AuthDialog.vue'
-import { ApiError } from '../api'
+import DeregisterDialog from './DeregisterDialog.vue'
+import UserAvatar from './UserAvatar.vue'
+import UserPopoverCard from './UserPopoverCard.vue'
+import { useAccountUiStore } from '../stores/useAccountUiStore'
 import { useUserStore } from '../stores/useUserStore'
+import { userDisplayName } from '../utils/userPresentation'
 
-// 显式管理展开状态，让键盘 Escape 与鼠标点击外部都能关闭账号说明。
+// 点击与键盘都能打开；切页或会话变化时收起，避免旧资料留在小窗中。
 const accountVisible = ref(false)
-const authVisible = ref(false)
-const signingOut = ref(false)
-const accountError = ref('')
 const userStore = useUserStore()
+const accountUi = useAccountUiStore()
+const route = useRoute()
 
 async function logout(): Promise<void> {
-  if (signingOut.value) return
-  signingOut.value = true
-  accountError.value = ''
-  try {
-    await userStore.logout()
-    accountVisible.value = false
-  } catch (error: unknown) {
-    accountError.value = error instanceof ApiError ? error.message : '暂时无法退出，请稍后重试'
-  } finally {
-    signingOut.value = false
-  }
+  if (await accountUi.logout()) accountVisible.value = false
 }
 
-function openLogin(): void {
-  accountError.value = ''
-  authVisible.value = true
-}
+watch(
+  () => route.fullPath,
+  () => {
+    accountVisible.value = false
+  },
+)
+watch(
+  () => userStore.isLoggedIn,
+  (loggedIn) => {
+    if (!loggedIn) accountVisible.value = false
+  },
+)
 </script>
 
 <template>
@@ -59,7 +60,7 @@ function openLogin(): void {
         type="button"
         :disabled="userStore.status === 'checking'"
         :aria-busy="userStore.status === 'checking'"
-        @click="openLogin"
+        @click="accountUi.openLogin"
       >
         <span class="account-avatar"
           ><ElIcon><User /></ElIcon
@@ -73,30 +74,27 @@ function openLogin(): void {
         v-else
         v-model:visible="accountVisible"
         trigger="click"
-        :width="272"
+        width="min(288px, calc(100vw - 48px))"
         placement="bottom-end"
         :teleported="false"
       >
         <template #reference>
           <button class="account-trigger" type="button" aria-label="打开账号菜单">
-            <span class="account-avatar"
-              ><ElIcon><User /></ElIcon
-            ></span>
+            <UserAvatar v-if="userStore.user" :name="userDisplayName(userStore.user)" :size="36" />
             <span class="account-label">{{
               userStore.user?.nickname || userStore.user?.username
             }}</span>
             <ElIcon class="account-chevron"><ArrowDown /></ElIcon>
           </button>
         </template>
-        <div class="account-preview">
-          <span class="preview-eyebrow"
-            >欢迎回到小屋 <span class="verified-label">已登录</span></span
-          >
-          <h2>{{ userStore.user?.nickname || userStore.user?.username }}</h2>
-          <p class="account-username">账号：{{ userStore.user?.username }}</p>
-          <p v-if="accountError" class="account-error" role="alert">{{ accountError }}</p>
-          <ElButton class="logout-button" :loading="signingOut" @click="logout">退出登录</ElButton>
-        </div>
+        <UserPopoverCard
+          v-if="userStore.user"
+          :profile="userStore.user"
+          :busy="!!accountUi.pending"
+          :error="accountUi.actionError"
+          @navigate="accountVisible = false"
+          @logout="logout"
+        />
       </ElPopover>
     </div>
     <div
@@ -115,12 +113,19 @@ function openLogin(): void {
       <button
         v-if="!userStore.isLoggedIn && userStore.status !== 'checking'"
         type="button"
-        @click="openLogin"
+        @click="accountUi.openLogin"
       >
         重新登录
       </button>
     </div>
-    <AuthDialog v-model="authVisible" />
+    <div v-if="accountUi.notice" class="account-notice" role="status">
+      <span>{{ accountUi.notice }}</span
+      ><button type="button" aria-label="收起账号操作提示" @click="accountUi.dismissNotice">
+        收起
+      </button>
+    </div>
+    <AuthDialog v-model="accountUi.authVisible" />
+    <DeregisterDialog />
   </header>
 </template>
 
@@ -252,26 +257,6 @@ function openLogin(): void {
 .login-trigger:hover:not(:disabled) {
   background: #e3ebdc;
 }
-.verified-label {
-  margin-left: 8px;
-  padding: 3px 6px;
-  border-radius: 4px;
-  background: #edf3ee;
-  color: #325e4d;
-  font-size: 10px;
-}
-.account-username {
-  overflow-wrap: anywhere;
-}
-.account-preview h2 {
-  overflow-wrap: anywhere;
-}
-.account-preview .account-error {
-  color: #a74738;
-}
-.logout-button {
-  width: 100%;
-}
 .session-notice {
   display: flex;
   align-items: center;
@@ -294,6 +279,28 @@ function openLogin(): void {
   cursor: pointer;
   font-size: 12px;
 }
+.account-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 11px 20px;
+  background: #edf3e8;
+  color: #42623c;
+  border-top: 1px solid #dce6d4;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.account-notice button {
+  flex-shrink: 0;
+  font-size: 11px;
+  border: 0;
+  background: none;
+  color: #42623c;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .account-avatar {
   width: 34px;
   height: 34px;
@@ -310,24 +317,6 @@ function openLogin(): void {
 .account-chevron {
   color: var(--ph-muted);
   font-size: 11px;
-}
-.account-preview {
-  padding: 12px 8px;
-}
-.preview-eyebrow {
-  color: #69716d;
-  font-size: 12px;
-}
-.account-preview h2 {
-  font-size: 17px;
-  margin: 12px 0 10px;
-  color: var(--ph-ink);
-}
-.account-preview p {
-  color: #69716d;
-  line-height: 1.8;
-  font-size: 13px;
-  margin-bottom: 20px;
 }
 @media (max-width: 960px) {
   .header-inner {

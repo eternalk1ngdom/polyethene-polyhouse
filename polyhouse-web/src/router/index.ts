@@ -12,6 +12,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { title: '日常小事，顺手一点' } },
+    {
+      path: '/account',
+      name: 'account',
+      component: () => import('../views/AccountView.vue'),
+      meta: { title: '个人中心' },
+    },
     ...toolRegistry.map((tool) => {
       // 遗漏页面映射时及早报错，避免发布一个能点击却空白的工具入口。
       if (!(tool.code in toolViews)) throw new Error(`工具缺少页面映射：${tool.code}`)

@@ -27,6 +27,15 @@ const storeUrl = await moduleUrl('../src/stores/useUserStore.ts', {
   '../api/index': apiUrl,
 })
 const { useUserStore } = await import(storeUrl)
+const { useAccountUiStore } = await import(
+  await moduleUrl('../src/stores/useAccountUiStore.ts', {
+    '../api': apiUrl,
+    './useUserStore': storeUrl,
+  })
+)
+const { userDisplayName, userRoleLabel, avatarInitial, formatAccountNumber } = await import(
+  await moduleUrl('../src/utils/userPresentation.ts')
+)
 const { AuthCommandError, login, register, getCurrentUser } = await import(authUrl)
 const { ApiError, apiClient, apiRequest, setUnauthorizedHandler } = await import(apiUrl)
 const { usernameError, passwordError, nicknameError } = await import(
@@ -470,4 +479,187 @@ test('前端校验对齐账号白名单、昵称长度及 BCrypt 多字节边界
   assert.equal(nicknameError('屋'.repeat(32)), null)
   assert.ok(nicknameError('屋'.repeat(33)))
   assert.ok(nicknameError('   '))
+})
+
+test('个人资料展示保留大整数和 emoji，并将三种角色与等级分开展示', () => {
+  assert.equal(userDisplayName({ ...profile, nickname: '   ' }), 'fixture')
+  assert.equal(userDisplayName(profile), '测试')
+  assert.equal(avatarInitial('😀小屋'), '😀')
+  assert.equal(avatarInitial(''), '屋')
+  assert.equal(formatAccountNumber(profile.coins), '9,223,372,036,854,775,807')
+  assert.equal(formatAccountNumber('0'), '0')
+  assert.equal(userRoleLabel('USER'), '普通居民')
+  assert.equal(userRoleLabel('INSIDER'), '特邀熟人')
+  assert.equal(userRoleLabel('OWNER'), '聚妙屋屋主')
+})
+
+test('未确认身份不能打开注销确认，也不会发出注销请求', async () => {
+  storage.set('polyhouse_token', 'cached-credential')
+  const store = useUserStore()
+  const ui = useAccountUiStore()
+  let calls = 0
+  apiClient.defaults.adapter = async (config) => {
+    calls += 1
+    return success(config)
+  }
+  ui.openCancellation()
+  assert.equal(ui.authVisible, true)
+  assert.equal(ui.cancellationVisible, false)
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(await ui.logout(), false)
+  assert.equal(calls, 0)
+  assert.equal(store.token, 'cached-credential')
+})
+
+test('注销必须打开确认、同意影响且输入完全一致的确认词，取消后旧确认作废', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const ui = useAccountUiStore()
+  let calls = 0
+  apiClient.defaults.adapter = async (config) => {
+    calls += 1
+    return success(config)
+  }
+  assert.equal(await ui.deregister('注销账号', true), false)
+  ui.openCancellation()
+  assert.equal(ui.cancellationUsername, profile.username)
+  for (const [text, agreed] of [
+    ['', true],
+    ['注销', true],
+    ['注销账号 ', true],
+    ['注销账号', false],
+  ]) {
+    assert.equal(await ui.deregister(text, agreed), false)
+  }
+  ui.closeCancellation()
+  assert.equal(ui.cancellationUsername, '')
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(calls, 0)
+  assert.equal(store.isLoggedIn, true)
+})
+
+test('确认期间换号会关闭弹窗，不能用旧确认注销新身份', async () => {
+  const store = useUserStore()
+  store.setSession('old-credential', profile)
+  const ui = useAccountUiStore()
+  ui.openCancellation()
+  store.setSession('new-credential', { ...profile, id: '99', username: 'another' })
+  assert.equal(ui.cancellationVisible, false)
+  assert.equal(ui.cancellationUsername, '')
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(store.user.id, '99')
+})
+
+test('注销提交期间跨入口阻止重复命令和关闭，成功后再显示确认反馈', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const ui = useAccountUiStore()
+  ui.openCancellation()
+  let finish
+  let calls = 0
+  apiClient.defaults.adapter = (config) => {
+    calls += 1
+    assert.equal(config.url, '/auth/deregister')
+    assert.deepEqual(JSON.parse(config.data), { token: 'fixture-credential' })
+    return new Promise((resolve) => {
+      finish = () => resolve(success(config))
+    })
+  }
+  const pending = ui.deregister('注销账号', true)
+  assert.equal(ui.pending, 'deregister')
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(await ui.logout(), false)
+  ui.closeCancellation()
+  assert.equal(ui.cancellationVisible, true)
+  assert.equal(ui.notice, '')
+  finish()
+  assert.equal(await pending, true)
+  assert.equal(calls, 1)
+  assert.equal(store.isLoggedIn, false)
+  assert.equal(ui.cancellationVisible, false)
+  assert.match(ui.notice, /账号已注销/)
+})
+
+test('注销网络失败保留身份与确认，不把未确认结果显示成成功', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const ui = useAccountUiStore()
+  ui.openCancellation()
+  apiClient.defaults.adapter = async () => {
+    throw new Error('private-failure')
+  }
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(store.isLoggedIn, true)
+  assert.equal(ui.cancellationVisible, true)
+  assert.equal(ui.notice, '')
+  assert.ok(ui.actionError)
+  assert.ok(!ui.actionError.includes('private-failure'))
+  apiClient.defaults.adapter = async (config) => success(config)
+  assert.equal(await ui.deregister('注销账号', true), true)
+})
+
+test('注销返回401只显示身份失效，不把注销命令冒充成功', async () => {
+  const store = useUserStore()
+  store.setSession('expired-credential', profile)
+  const ui = useAccountUiStore()
+  ui.openCancellation()
+  apiClient.defaults.adapter = async (config) => {
+    throw statusFailure(config, 401)
+  }
+  assert.equal(await ui.deregister('注销账号', true), false)
+  assert.equal(store.isLoggedIn, false)
+  assert.equal(ui.notice, '')
+  assert.equal(ui.cancellationVisible, false)
+  assert.match(store.sessionMessage, /失效/)
+})
+
+for (const failure of [false, true]) {
+  test(`注销${failure ? '失败' : '成功'}旧响应不影响等待期间建立的新身份`, async () => {
+    const store = useUserStore()
+    store.setSession('old-credential', profile)
+    const ui = useAccountUiStore()
+    ui.openCancellation()
+    let finish
+    apiClient.defaults.adapter = (config) =>
+      new Promise((resolve, reject) => {
+        finish = () => (failure ? reject(statusFailure(config, 401)) : resolve(success(config)))
+      })
+    const pending = ui.deregister('注销账号', true)
+    store.setSession('new-credential', { ...profile, id: '99', username: 'another' })
+    finish()
+    assert.equal(await pending, false)
+    assert.equal(store.user.id, '99')
+    assert.equal(store.isLoggedIn, true)
+    assert.equal(ui.notice, '')
+    assert.equal(ui.actionError, '')
+    assert.equal(ui.cancellationVisible, false)
+  })
+}
+
+test('退出成功反馈可收起，新登录自动清除旧反馈', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const ui = useAccountUiStore()
+  assert.equal(await ui.logout(), true)
+  assert.match(ui.notice, /已退出登录/)
+  ui.dismissNotice()
+  assert.equal(ui.notice, '')
+  store.setSession('another-credential', profile)
+  await ui.logout()
+  store.setSession('new-credential', profile)
+  assert.equal(ui.notice, '')
+})
+
+test('退出网络失败保留资料并提供错误，不发成功反馈', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  const ui = useAccountUiStore()
+  apiClient.defaults.adapter = async () => {
+    throw new Error('private-failure')
+  }
+  assert.equal(await ui.logout(), false)
+  assert.equal(store.isLoggedIn, true)
+  assert.equal(ui.notice, '')
+  assert.ok(ui.actionError)
+  assert.equal(ui.pending, null)
 })
