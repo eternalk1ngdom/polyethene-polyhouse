@@ -1,4 +1,4 @@
-import { replaceText, type ReplaceRule } from './acReplacer'
+import { createTextReplacer, type ReplaceRule } from './acReplacer'
 import type { VirtualFileEntry } from './types'
 import type { InputEncoding, ReplaceMode } from './polyReplaceProtocol'
 
@@ -90,6 +90,7 @@ export function replaceBatch(
     files.map((file) => ({ relativePath: file.relativePath, size: file.content.byteLength })),
     mode,
   )
+  const replaceText = createTextReplacer(rules)
   const output: ReplacedFile[] = []
   let total = 0
   for (const [index, file] of files.entries()) {
@@ -104,7 +105,7 @@ export function replaceBatch(
     } catch {
       throw new Error(`第 ${index + 1} 个文件无法按所选编码读取，请检查文件及输入编码`)
     }
-    const result = replaceText(text, rules)
+    const result = replaceText(text)
     // TextEncoder 会静默替换孤立代理项；拒绝这类不完整字符以避免导出内容变化。
     if (hasInvalidUnicode(result.text))
       throw new Error(`第 ${index + 1} 个文件的替换结果包含无效字符，请检查规则`)
