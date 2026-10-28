@@ -160,6 +160,32 @@ class AuthHttpIntegrationTest {
     }
 
     @Test
+    void shouldRefreshMeFromLiveRoleAndStatusWithoutReusingPriorHttpIdentity() throws Exception {
+        Fixture fixture = register();
+        String token = login(fixture, "PC");
+        assertThat(json.readTree(get("/api/auth/me", token).getBody()).path("data").path("role").asText())
+                .isEqualTo("USER");
+        changeRole(fixture, UserRoleEnum.INSIDER);
+        assertThat(json.readTree(get("/api/auth/me", token).getBody()).path("data").path("role").asText())
+                .isEqualTo("INSIDER");
+        changeRole(fixture, UserRoleEnum.USER);
+        assertThat(get("/api/__integration-auth/insider", token).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(json.readTree(get("/api/auth/me?profile.role=OWNER&profile.id=99", token).getBody())
+                .path("data").path("role").asText()).isEqualTo("USER");
+        // 仅更新随机夹具；不占用全库 OWNER 唯一槽位，也不修改真实屋主的账号或会话。
+        assertThat(users.update(null, new LambdaUpdateWrapper<User>().eq(User::getId, fixture.id())
+                .set(User::getStatus, 0))).isEqualTo(1);
+        assertThat(get("/api/auth/me", token).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(users.update(null, new LambdaUpdateWrapper<User>().eq(User::getId, fixture.id())
+                .set(User::getStatus, 1))).isEqualTo(1);
+        assertThat(get("/api/auth/me", token).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id=?",
+                Integer.class, fixture.id())).isEqualTo(1);
+        assertThat(command("logout", token).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(get("/api/auth/me", token).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void shouldUseLiveDatabaseRoleAndRejectDisabledAccountOverHttp() throws Exception {
         Fixture fixture = register();
         String token = login(fixture, "PC");

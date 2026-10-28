@@ -3,6 +3,7 @@ package com.polyethene.polyhouse.controller;
 import com.polyethene.polyhouse.common.result.Result;
 import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
 import com.polyethene.polyhouse.model.dto.ClientRequestDTO;
+import com.polyethene.polyhouse.model.dto.CurrentUserDTO;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.dto.SessionTokenDTO;
@@ -45,10 +46,10 @@ public class AuthController {
         return Result.success(authService.login(request, client.clientIp()));
     }
 
-    /** 使用 Authorization Bearer 头中的 DTO 查询最新安全资料，不从客户端资料恢复权限。 */
+    /** 返回本次拦截器已核验的本人资料，省去同一请求第二次完整认证，不跨请求缓存身份。 */
     @GetMapping("/me")
-    public Result<UserProfileVO> me(@Valid SessionTokenDTO session) {
-        return Result.success(authService.getCurrentUser(session.token()));
+    public Result<UserProfileVO> me(@Valid CurrentUserDTO current) {
+        return Result.success(current.profile());
     }
 
     /** 身份只来自唯一 Bearer 头的 DTO，统一认证仍按既定规则结算每日登录；展示查询不提供发奖入参。 */

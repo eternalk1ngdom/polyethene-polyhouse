@@ -16,7 +16,7 @@ import org.springframework.web.servlet.AsyncHandlerInterceptor;
 
 /**
  * 统一保护 API 请求，复用业务层验证 Token、Redis 和数据库最新角色，不直接访问存储。
- * 请求开始及所有完成路径均清理 ThreadLocal，避免拒绝、异常或异步线程切换后残留身份。
+ * 请求开始及所有完成路径均清理 ThreadLocal 和请求资料，避免拒绝、异常或异步切换后残留身份。
  */
 public class AuthInterceptor implements AsyncHandlerInterceptor {
 
@@ -33,6 +33,7 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         UserContext.clear();
+        arguments.clearCurrentUser(request);
         if (!(handler instanceof HandlerMethod method)) {
             // 让静态资源和未找到的路由维持框架的 404 等语义，不把不存在的地址误报为未登录。
             return true;
@@ -50,10 +51,13 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
                 throw new BusinessException(ErrorCode.FORBIDDEN);
             }
             UserContext.set(Long.parseLong(user.id()), user.role());
+            // 只复用本次已核验的脱敏资料，读取 /me 不必重复进入奖励事务；写业务仍自行复核。
+            arguments.bindCurrentUser(request, user);
             return true;
         } catch (RuntimeException | Error exception) {
             // preHandle 抛出时 Spring 不保证调用当前拦截器的 afterCompletion，必须在此清理。
             UserContext.clear();
+            arguments.clearCurrentUser(request);
             throw exception;
         }
     }
@@ -63,6 +67,7 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
                                 Exception exception) {
         UserContext.clear();
+        arguments.clearCurrentUser(request);
     }
 
     /** 异步处理把请求移出原线程时立即清理，不把 ThreadLocal 身份隐式传播给工作线程。 */
@@ -70,5 +75,6 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
     public void afterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response,
                                               Object handler) {
         UserContext.clear();
+        arguments.clearCurrentUser(request);
     }
 }

@@ -7,13 +7,17 @@ import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.context.UserContext;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.common.result.Result;
+import com.polyethene.polyhouse.config.AuthRequestArgumentResolver;
 import com.polyethene.polyhouse.config.CorsConfig;
 import com.polyethene.polyhouse.config.WebMvcConfig;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
+import com.polyethene.polyhouse.model.dto.CurrentUserDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.vo.LoginVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
+import jakarta.validation.Valid;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,10 +43,13 @@ import java.time.Instant;
 import java.util.concurrent.Callable;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
@@ -69,6 +76,8 @@ class AuthWebMvcTest {
     private MockMvc mvc;
     @MockBean
     private AuthService service;
+    @Autowired
+    private Validator validator;
 
     @AfterEach
     void ensureNoIdentityRemainsOnCallerThread() {
@@ -118,9 +127,45 @@ class AuthWebMvcTest {
     @Test
     void shouldGetCurrentUserFromBearerAndIgnoreTokenQueryParameter() throws Exception {
         when(service.getCurrentUser(TOKEN)).thenReturn(profile(UserRoleEnum.INSIDER));
-        mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "bEaReR " + TOKEN)
-                        .param("token", "ignored-query-credential"))
+        var completed = mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "bEaReR " + TOKEN)
+                        .param("token", "ignored-query-credential").param("profile.id", "99")
+                        .param("profile.role", "OWNER"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("INSIDER"));
+        // 同一次资料请求只核验一次；下一次请求仍必须重新进入业务鉴权。
+        verify(service).getCurrentUser(TOKEN);
+        verifyNoMoreInteractions(service);
+        assertNoRequestIdentity(completed.andReturn().getRequest());
+    }
+
+    @Test
+    void shouldRecheckEachRequestAndObserveRoleChangesAndRevocation() throws Exception {
+        when(service.getCurrentUser(TOKEN)).thenReturn(profile(UserRoleEnum.INSIDER), profile(UserRoleEnum.USER))
+                .thenThrow(new BusinessException(ErrorCode.UNAUTHORIZED));
+        mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("INSIDER"));
+        mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("USER"));
+        var rejected = mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(status().isUnauthorized()).andReturn();
+        verify(service, times(3)).getCurrentUser(TOKEN);
+        verifyNoMoreInteractions(service);
+        assertNoRequestIdentity(rejected.getRequest());
+    }
+
+    @Test
+    void shouldNotBindCurrentUserFromQueriesOrAStaleAttributeOnPublicRequests() throws Exception {
+        var arguments = new AuthRequestArgumentResolver(validator);
+        var rejected = mvc.perform(get("/api/__auth-test/unverified-profile")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN)
+                        .param("profile.id", "99").param("profile.role", "OWNER")
+                        .with(request -> {
+                            // 模拟前一次分发残留；当前分发必须先清理，公开入口不能凭旧属性取得身份。
+                            arguments.bindCurrentUser(request, profile(UserRoleEnum.OWNER));
+                            return request;
+                        }))
+                .andExpect(status().isUnauthorized()).andReturn();
+        verifyNoInteractions(service);
+        assertNoRequestIdentity(rejected.getRequest());
     }
 
     @ParameterizedTest
@@ -175,8 +220,9 @@ class AuthWebMvcTest {
     @Test
     void shouldClearContextAfterControllerFailureAndBeforePublicRequest(CapturedOutput output) throws Exception {
         when(service.getCurrentUser(TOKEN)).thenReturn(profile(UserRoleEnum.USER));
-        mvc.perform(get("/api/__auth-test/failure").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
-                .andExpect(status().isInternalServerError());
+        var failed = mvc.perform(get("/api/__auth-test/failure").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(status().isInternalServerError()).andReturn();
+        assertNoRequestIdentity(failed.getRequest());
         assertThat(UserContext.isAuthenticated()).isFalse();
         UserContext.set(99L, UserRoleEnum.OWNER);
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -190,8 +236,23 @@ class AuthWebMvcTest {
         var pending = mvc.perform(get("/api/__auth-test/async").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
                 .andExpect(request().asyncStarted()).andReturn();
         assertThat(UserContext.isAuthenticated()).isFalse();
+        assertNoRequestIdentity(pending.getRequest());
         mvc.perform(asyncDispatch(pending)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("42"));
+        verify(service, times(2)).getCurrentUser(TOKEN);
+        assertNoRequestIdentity(pending.getRequest());
+    }
+
+    @Test
+    void shouldRecheckRevocationOnAsyncRedispatchRatherThanReuseItsFirstIdentity() throws Exception {
+        when(service.getCurrentUser(TOKEN)).thenReturn(profile(UserRoleEnum.USER))
+                .thenThrow(new BusinessException(ErrorCode.UNAUTHORIZED));
+        var pending = mvc.perform(get("/api/__auth-test/async").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(request().asyncStarted()).andReturn();
+        assertNoRequestIdentity(pending.getRequest());
+        mvc.perform(asyncDispatch(pending)).andExpect(status().isUnauthorized());
+        verify(service, times(2)).getCurrentUser(TOKEN);
+        assertNoRequestIdentity(pending.getRequest());
     }
 
     @Test
@@ -239,6 +300,12 @@ class AuthWebMvcTest {
         return new UserProfileVO("42", "alice", "居民", null, role, "0", 1, "0");
     }
 
+    private void assertNoRequestIdentity(jakarta.servlet.http.HttpServletRequest request) {
+        assertThatThrownBy(() -> new AuthRequestArgumentResolver(validator).requireCurrentUser(request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.UNAUTHORIZED));
+    }
+
     private static UserProfileVO contextProfile() {
         return new UserProfileVO(UserContext.getUserId().toString(), "fixture", "请求身份", null,
                 UserContext.getRole(), "0", 1, "0");
@@ -248,6 +315,13 @@ class AuthWebMvcTest {
     @RestController
     @RequestMapping("/api/__auth-test")
     public static class ProbeController {
+        /** 公开方法没有经过鉴权，专用 DTO 必须拒绝解析，不绑定客户端资料或旧请求结果。 */
+        @SkipBearerAuth
+        @GetMapping("/unverified-profile")
+        public Result<UserProfileVO> unverifiedProfile(@Valid CurrentUserDTO current) {
+            return Result.success(current.profile());
+        }
+
         /** 验证上下文已经由拦截器建立。 */
         @GetMapping("/identity")
         public Result<UserProfileVO> identity() { return Result.success(contextProfile()); }
