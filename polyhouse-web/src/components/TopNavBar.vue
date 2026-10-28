@@ -137,7 +137,7 @@ watch(
 <style scoped>
 .site-header {
   border-bottom: 1px solid var(--ph-line);
-  background: #fffcfd;
+  background: var(--ph-surface);
 }
 .header-inner {
   width: min(1200px, calc(100% - 96px));
@@ -185,7 +185,7 @@ watch(
   height: 13px;
   bottom: 0;
   left: 11px;
-  background: #fffcfd;
+  background: var(--ph-surface);
   border-radius: 5px 5px 0 0;
 }
 .brand-name {

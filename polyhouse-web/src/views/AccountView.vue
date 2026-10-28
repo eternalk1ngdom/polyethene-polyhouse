@@ -462,8 +462,8 @@ h1 {
   font-size: 21px;
 }
 .apricot {
-  background: #f9ecdf;
-  color: #9e7b50;
+  background: #f8f5fc;
+  color: #776989;
 }
 .neutral {
   background: #f7f2f4;
