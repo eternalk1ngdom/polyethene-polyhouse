@@ -32,7 +32,7 @@ import TopNavBar from './components/TopNavBar.vue'
   --ph-line: #eddee3;
   --ph-brand: #956073;
   --ph-green: var(--ph-brand);
-  --ph-surface: #fffefe;
+  --ph-surface: #ffffff;
   --ph-soft: #fdf7f9;
   --el-color-primary: #956073;
   --el-color-primary-light-3: #c58cac;
