@@ -153,7 +153,7 @@ h1 {
   content: '';
   position: absolute;
   z-index: -1;
-  background: #f5dfec;
+  background: #faedf2;
   height: 17px;
   left: 0;
   right: 7px;
@@ -181,14 +181,14 @@ h1 {
 }
 .primary-action {
   padding: 15px 21px;
-  background: #a25087;
-  color: #fff;
-  border: 1px solid #a25087;
+  background: #f7e8ee;
+  color: #613e4d;
+  border: 1px solid #eed9e2;
   border-radius: 9px;
   transition: background 0.18s;
 }
 .primary-action:hover {
-  background: #873e72;
+  background: #f0dbe4;
 }
 .secondary-action {
   color: #775662;
@@ -234,7 +234,7 @@ h1 {
   height: 300px;
   top: 25px;
   right: 35px;
-  background: #faedf5;
+  background: #fcf4f8;
   border-radius: 50%;
 }
 .demo-paper {
@@ -314,8 +314,8 @@ h1 {
   bottom: 24px;
   width: 255px;
   padding: 18px;
-  border: 1px solid #dbd1ec;
-  background: #eee8f8;
+  border: 1px solid #e8e2f1;
+  background: #f8f5fc;
   border-radius: 12px;
   transform: rotate(5deg);
   box-shadow: 0 6px 18px #55446b10;
@@ -324,29 +324,29 @@ h1 {
   width: 38px;
   height: 42px;
   background: #faf8ff;
-  border: 1px solid #e3daf1;
+  border: 1px solid #eee9f6;
   border-radius: 7px;
   display: grid;
   place-items: center;
-  color: #765d94;
+  color: #776989;
   font-size: 21px;
 }
 .size-chip strong {
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #4e405e;
+  color: #504858;
 }
 .size-chip small {
   display: block;
   margin-top: 6px;
   font-size: 9px;
-  color: #6f5e80;
+  color: #756b7e;
 }
 .chip-dots {
   margin-left: auto;
   align-self: flex-start;
-  color: #6f5e80;
+  color: #756b7e;
 }
 .art-spark {
   position: absolute;
@@ -433,13 +433,13 @@ h1 {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #8f4a63;
   font-size: 24px;
 }
 .apricot .tool-icon {
-  background: #eee8f8;
-  color: #765d94;
+  background: #f8f5fc;
+  color: #776989;
 }
 .tool-status {
   background: #f7f0f2;

@@ -31,7 +31,7 @@ const safeSource = computed(() => (isAvatarPath(props.src) ? props.src : undefin
 <style scoped>
 .user-avatar {
   background: #f5e2e9;
-  color: #a25087;
+  color: #956073;
   border: 3px solid #ffffff;
   font-weight: 650;
   font-size: calc(var(--el-avatar-size, 48px) * 0.38);

@@ -363,7 +363,7 @@ onBeforeUnmount(releaseImage)
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: #fcf2f8;
+  background: #fdf7f9;
   color: #9c7684;
   font-size: 12px;
   border: 1px dashed #e8cbd5;

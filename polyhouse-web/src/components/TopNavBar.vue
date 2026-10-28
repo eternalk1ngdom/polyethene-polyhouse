@@ -137,7 +137,7 @@ watch(
 <style scoped>
 .site-header {
   border-bottom: 1px solid var(--ph-line);
-  background: #fffafd;
+  background: #fffcfd;
 }
 .header-inner {
   width: min(1200px, calc(100% - 96px));
@@ -167,7 +167,7 @@ watch(
   position: absolute;
   top: 6px;
   border-radius: 5px;
-  background: #a25087;
+  background: #d9aaba;
   transform: rotate(45deg);
 }
 .brand-mark span {
@@ -175,7 +175,7 @@ watch(
   height: 25px;
   position: absolute;
   bottom: 1px;
-  background: #a25087;
+  background: #d9aaba;
   border-radius: 4px;
 }
 .brand-mark span::after {
@@ -185,7 +185,7 @@ watch(
   height: 13px;
   bottom: 0;
   left: 11px;
-  background: #fffafd;
+  background: #fffcfd;
   border-radius: 5px 5px 0 0;
 }
 .brand-name {
@@ -255,7 +255,7 @@ watch(
 }
 .login-trigger {
   padding: 5px 12px 5px 5px;
-  background: #fbf1f7;
+  background: #fdf7f9;
   border: 1px solid #f0dde4;
   border-radius: 28px;
 }
@@ -290,7 +290,7 @@ watch(
   justify-content: center;
   gap: 16px;
   padding: 11px 20px;
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #7b3d53;
   border-top: 1px solid #f0dbe3;
   font-size: 12px;

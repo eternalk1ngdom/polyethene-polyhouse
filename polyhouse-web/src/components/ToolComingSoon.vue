@@ -76,13 +76,13 @@ const toolIcons = { Document, Picture }
   display: grid;
   place-items: center;
   border-radius: 15px;
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #8f4a63;
   font-size: 30px;
 }
 .apricot .tool-icon {
-  background: #eee8f8;
-  color: #765d94;
+  background: #f8f5fc;
+  color: #776989;
 }
 .tool-subtitle {
   font-size: 11px;
@@ -146,13 +146,13 @@ li > span {
   gap: 20px;
   padding: 13px 18px;
   margin-top: 16px;
-  color: #fff;
+  color: #613e4d;
   background: var(--ph-green);
   border-radius: 8px;
   font-size: 13px;
 }
 .home-action:hover {
-  background: #a25087;
+  background: #f7e8ee;
 }
 @media (max-width: 640px) {
   .tool-page {

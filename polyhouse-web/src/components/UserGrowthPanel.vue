@@ -43,7 +43,7 @@ const growth = useUserGrowthStore()
         :percentage="growth.summary.progressPercent"
         :show-text="false"
         :stroke-width="compact ? 5 : 8"
-        :color="growth.summary.maxLevelReached ? '#b478a4' : '#a25087'"
+        :color="growth.summary.maxLevelReached ? '#b478a4' : '#956073'"
         :aria-label="`成长进度 ${growth.summary.progressPercent}%`"
       />
       <p class="next-level">
@@ -134,7 +134,7 @@ h2 .el-icon {
   color: #a07283;
 }
 .level-badge {
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #83485d;
   padding: 7px 11px;
   border-radius: 7px;

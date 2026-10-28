@@ -342,7 +342,7 @@ onMounted(() => {
   left: 7px;
   right: 7px;
   padding: 4px 0;
-  background: #a25087d9;
+  background: #956073d9;
   color: white;
   border-radius: 0 0 28px 28px;
   font-size: 10px;
@@ -374,7 +374,7 @@ h1 {
   display: inline-block;
   margin-left: 14px;
   vertical-align: middle;
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #80485c;
   padding: 4px 9px;
   font-size: 10px;
@@ -456,7 +456,7 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 11px;
-  background: #fbf1f7;
+  background: #fdf7f9;
   color: #93596e;
   font-size: 21px;
 }
