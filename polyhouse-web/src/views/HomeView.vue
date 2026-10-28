@@ -669,4 +669,57 @@ h1 {
     transform: none;
   }
 }
+
+/* 首页采用居中阅读层次，工具示意退到两侧，保持入口和文案可直接使用。 */
+@media (min-width: 1100px) {
+  .hero {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    min-height: 570px;
+    padding: 76px 0 66px;
+  }
+  .hero-copy {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 560px);
+    text-align: center;
+  }
+  .eyebrow, .hero-actions, .hero-note {
+    justify-content: center;
+  }
+  .hero-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+  }
+  .demo-paper {
+    position: absolute;
+    left: 0;
+    bottom: 52px;
+    width: 225px;
+    transform: rotate(-5deg);
+    box-shadow: 6px 8px 0 #f8edf1;
+  }
+  .paper-content { padding: 16px 20px 20px; }
+  .word-before { font-size: 17px; margin-top: 12px; }
+  .word-after { font-size: 19px; }
+  .paper-arrow { margin: 8px 0 5px; font-size: 18px; }
+  .text-cursor { height: 18px; }
+  .size-chip { right: 0; bottom: 72px; width: 225px; padding: 14px; }
+  .art-orbit { width: 180px; height: 180px; top: 52px; right: 25px; background: #fcf4f7; }
+  .art-grid { opacity: 0.4; }
+  .spark-one { top: 34px; right: 10px; font-size: 38px; }
+  .art-caption { left: 0; bottom: 14px; }
+}
+
+/* 窄屏插画保持在文案之后，避免压住标题和操作入口。 */
+@media (max-width: 1099px) {
+  .hero { grid-template-columns: 1fr; text-align: center; padding-top: 56px; }
+  .eyebrow, .hero-actions, .hero-note { justify-content: center; }
+  .hero-art { width: min(100%, 420px); height: 310px; justify-self: center; transform: none; }
+}
 </style>
