@@ -78,6 +78,32 @@ test('字节级保留 BOM、CRLF 和空文件', () => {
   assert.deepEqual([...result.content], [...new TextEncoder().encode('\uFEFFB\r\n')])
   assert.equal(replaceBatch([file('empty.txt', '')], rules)[0].content.length, 0)
 })
+test('按用户指定的 GB18030 解码，并导出完整 UTF-8 字符与换行', () => {
+  const input = {
+    relativePath: 'old.txt',
+    content: Uint8Array.from([0xd6, 0xd0, 0xce, 0xc4, 13, 10]).buffer,
+  }
+  const result = replaceBatch([input], [{ search: '中文', replace: '新😀' }], 'files', 'gb18030')[0]
+  assert.deepEqual([...result.content], [...new TextEncoder().encode('新😀\r\n')])
+  assert.equal(result.preview, '新😀\r\n')
+  assert.throws(() => replaceBatch([input], rules), /所选编码/)
+})
+test('旧编码错误字节、UTF-8 标记及不完整结果均拒绝整批导出', () => {
+  const malformed = { relativePath: 'bad.txt', content: Uint8Array.from([0x81]).buffer }
+  assert.throws(
+    () => replaceBatch([file('ok.txt', 'ok'), malformed], rules, 'files', 'gb18030'),
+    /第 2 个文件/,
+  )
+  assert.throws(
+    () => replaceBatch([file('bom.txt', '\uFEFFhello')], rules, 'files', 'gb18030'),
+    /UTF-8 标记/,
+  )
+  assert.throws(
+    () => replaceBatch([file('a.txt', 'A')], [{ search: 'A', replace: '\ud800' }]),
+    /无效字符/,
+  )
+  assert.throws(() => replaceBatch([file('a.txt', 'A')], rules, 'files', 'unknown'), /不支持/)
+})
 test('任意文件含二进制或错误 UTF-8 时整批失败', () => {
   for (const bytes of [[0], [0xff, 0xff]])
     assert.throws(() =>
@@ -154,6 +180,18 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
     })
     assert.equal(replies[3].ok, false)
     assert.equal(replies[3].result, undefined)
+    self.onmessage({
+      data: {
+        mode: 'files',
+        inputEncoding: 'gb18030',
+        files: [
+          { relativePath: 'old.txt', content: Uint8Array.from([0xd6, 0xd0, 0xce, 0xc4]).buffer },
+        ],
+        rules: [{ search: '中文', replace: '测试' }],
+      },
+    })
+    assert.equal(replies[4].ok, true)
+    assert.equal(new TextDecoder().decode(replies[4].result.bytes), '测试')
   } finally {
     if (oldSelf === undefined) delete globalThis.self
     else globalThis.self = oldSelf

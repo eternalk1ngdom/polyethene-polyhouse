@@ -1,6 +1,6 @@
 import { replaceText, type ReplaceRule } from './acReplacer'
 import type { VirtualFileEntry } from './types'
-import type { ReplaceMode } from './polyReplaceProtocol'
+import type { InputEncoding, ReplaceMode } from './polyReplaceProtocol'
 
 /** 处理成功的单个文件，不携带 DOM File 对象。 */
 export interface ReplacedFile {
@@ -14,6 +14,15 @@ export interface ReplacedFile {
   count: number
   /** 是否因长度上限截断预览。 */
   truncated: boolean
+}
+
+/** 孤立 UTF-16 代理项不能无损编码为 UTF-8，提前拒绝而不是替换成乱码。 */
+function hasInvalidUnicode(text: string): boolean {
+  for (const character of text) {
+    const code = character.charCodeAt(0)
+    if (character.length === 1 && code >= 0xd800 && code <= 0xdfff) return true
+  }
+  return false
 }
 
 /** 选择阶段和 Worker 共用限制，阻止读入过大的整批文件。 */
@@ -73,7 +82,10 @@ export function replaceBatch(
   files: readonly VirtualFileEntry[],
   rules: readonly ReplaceRule[],
   mode: ReplaceMode = 'files',
+  inputEncoding: InputEncoding = 'utf-8',
 ): ReplacedFile[] {
+  if (inputEncoding !== 'utf-8' && inputEncoding !== 'gb18030')
+    throw new Error('不支持的输入编码，请重新选择')
   validateBatch(
     files.map((file) => ({ relativePath: file.relativePath, size: file.content.byteLength })),
     mode,
@@ -83,13 +95,19 @@ export function replaceBatch(
   for (const [index, file] of files.entries()) {
     const bytes = new Uint8Array(file.content)
     if (bytes.includes(0)) throw new Error(`第 ${index + 1} 个文件含二进制内容，请移除后重试`)
+    // UTF-8 BOM 是确定的标记，在手动选择旧编码时拒绝误解码。
+    if (inputEncoding === 'gb18030' && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)
+      throw new Error(`第 ${index + 1} 个文件带 UTF-8 标记，请选择 UTF-8 后重试`)
     let text: string
     try {
-      text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
+      text = new TextDecoder(inputEncoding, { fatal: true, ignoreBOM: true }).decode(bytes)
     } catch {
-      throw new Error(`第 ${index + 1} 个文件不是 UTF-8 文本，请转换编码后重试`)
+      throw new Error(`第 ${index + 1} 个文件无法按所选编码读取，请检查文件及输入编码`)
     }
     const result = replaceText(text, rules)
+    // TextEncoder 会静默替换孤立代理项；拒绝这类不完整字符以避免导出内容变化。
+    if (hasInvalidUnicode(result.text))
+      throw new Error(`第 ${index + 1} 个文件的替换结果包含无效字符，请检查规则`)
     const content = new TextEncoder().encode(result.text)
     // 按真实导出字节统计，修正以前把字符数称为 MB 的不准确提示。
     total += content.byteLength

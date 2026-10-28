@@ -5,10 +5,16 @@ import { ElAlert, ElButton, ElInput } from 'element-plus'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
-import type { BatchDownload, ReplaceMode, WorkerReply } from '../core/polyReplaceProtocol'
+import type {
+  BatchDownload,
+  InputEncoding,
+  ReplaceMode,
+  WorkerReply,
+} from '../core/polyReplaceProtocol'
 
 const selectedFiles = ref<File[]>([])
 const selectedMode = ref<ReplaceMode>('files')
+const inputEncoding = ref<InputEncoding>('utf-8')
 const directorySupported = 'webkitdirectory' in document.createElement('input')
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
 const result = ref<BatchDownload | null>(null)
@@ -33,6 +39,7 @@ function invalidate(): void {
   message.value = ''
 }
 watch(rules, invalidate, { deep: true, flush: 'sync' })
+watch(inputEncoding, invalidate, { flush: 'sync' })
 onBeforeUnmount(invalidate)
 
 /** 选择阶段只保存文件引用并检查大小，不与编辑规则争抢异步读取结果。 */
@@ -84,6 +91,7 @@ async function runReplace(): Promise<void> {
   const current = revision
   const inputs = [...selectedFiles.value]
   const mode = selectedMode.value
+  const encoding = inputEncoding.value
   const ruleSnapshot = rules.value.map(({ search, replace }) => ({ search, replace }))
   busy.value = true
   try {
@@ -115,7 +123,7 @@ async function runReplace(): Promise<void> {
     }
     // 转移读取所得缓冲区，不复制 Vue 代理或 File 对象到后台线程。
     active.postMessage(
-      { files, rules: ruleSnapshot, mode },
+      { files, rules: ruleSnapshot, mode, inputEncoding: encoding },
       files.map((file) => file.content),
     )
   } catch {
@@ -149,9 +157,9 @@ function download(): void {
       <section class="panel" aria-labelledby="input-title">
         <h2 id="input-title">1. 选择文本文件</h2>
         <p>
-          文件仅在浏览器中处理，不会上传。支持 UTF-8 文本，最多 20 个文件，每个不超过 2
-          MiB，总计不超过 5 MiB。文件夹保留目录结构并打包为 ZIP，空文件夹不会包含在结果中；
-          任一文件无效则整批停止，请移除二进制文件或转换为 UTF-8 后重试。
+          文件仅在浏览器中处理，不会上传。最多 20 个文件，每个不超过 2 MiB，总计不超过 5
+          MiB。文件夹保留目录结构并打包为 ZIP，空文件夹不会包含在结果中；
+          任一文件无法处理则整批停止，请移除二进制文件或检查输入编码。
         </p>
         <label class="file-button"
           >选择文件<input
@@ -177,6 +185,15 @@ function download(): void {
             {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}
           </li>
         </ul>
+        <label for="input-encoding">文件原本的编码</label>
+        <select id="input-encoding" v-model="inputEncoding" aria-describedby="encoding-help">
+          <option value="utf-8">UTF-8（默认）</option>
+          <option value="gb18030">GBK / GB18030</option>
+        </select>
+        <p id="encoding-help">
+          请选择所有文件共同使用的编码；无法自动判断，请检查预览。导出统一为 UTF-8，GBK
+          文件不会保留原编码；HTML、XML 等文件中的编码声明不会自动修改。
+        </p>
         <h2>2. 设置替换规则</h2>
         <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
         <div v-for="(rule, index) in rules" :key="index" class="rule">
@@ -215,6 +232,7 @@ function download(): void {
         <h2 id="result-title">3. 预览与下载</h2>
         <template v-if="result">
           <p role="status">完成 {{ result.files.length }} 个文件，共替换 {{ totalCount }} 处。</p>
+          <p>结果文件编码：UTF-8。下载前请检查预览是否正确。</p>
           <label for="preview-file">选择预览文件</label>
           <select id="preview-file" v-model="previewIndex">
             <option v-for="(file, index) in result.files" :key="index" :value="index">

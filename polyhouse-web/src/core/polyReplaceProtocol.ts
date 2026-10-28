@@ -4,10 +4,15 @@ import type { VirtualFileEntry } from './types'
 /** 区分普通文件多选与需要保留相对路径的文件夹。 */
 export type ReplaceMode = 'files' | 'directory'
 
+/** 输入编码由用户指定，避免把编码猜测当作可靠判断。 */
+export type InputEncoding = 'utf-8' | 'gb18030'
+
 /** UI 到 Worker 的任务快照，文件内容通过可转移缓冲区发送。 */
 export interface ReplaceRequest {
   /** 文件夹始终打包，并保留所选根目录及其子目录。 */
   mode: ReplaceMode
+  /** 本次所有输入文件使用同一编码，导出始终为 UTF-8。 */
+  inputEncoding: InputEncoding
   /** 已验证大小的文件字节，文件读取仍由页面控制。 */
   files: VirtualFileEntry[]
   /** 用户确认的字面规则副本。 */
