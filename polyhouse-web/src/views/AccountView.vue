@@ -284,7 +284,8 @@ onMounted(() => {
 }
 .profile-cover {
   height: 134px;
-  background: #f8e6ed;
+  background: #ffffff;
+  border-bottom: 1px solid var(--ph-line);
   position: relative;
   overflow: hidden;
   padding: 24px 34px;

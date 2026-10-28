@@ -178,10 +178,10 @@ h2 .el-icon {
   padding: 18px 20px;
   border-radius: 10px;
   border: 1px solid #efe2e7;
-  background: #faf6f8;
+  background: #ffffff;
 }
 .daily-reward.claimed {
-  background: #fbf0f4;
+  background: #ffffff;
   border-color: #f3dfe6;
 }
 .reward-title {

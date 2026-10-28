@@ -103,7 +103,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #faf3f5;
+  background: #ffffff;
   border: 1px solid #f1dce3;
   border-radius: 8px;
   padding: 15px 18px;

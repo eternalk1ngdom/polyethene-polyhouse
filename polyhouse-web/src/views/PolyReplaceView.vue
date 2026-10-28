@@ -328,7 +328,8 @@ p {
 .rule {
   margin: 18px 0;
   padding: 16px;
-  background: var(--ph-soft);
+  background: #ffffff;
+  border: 1px solid var(--ph-line);
   border-radius: 10px;
 }
 label:not(.file-button) {
