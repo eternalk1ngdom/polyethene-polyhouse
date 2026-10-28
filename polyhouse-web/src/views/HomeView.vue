@@ -153,7 +153,7 @@ h1 {
   content: '';
   position: absolute;
   z-index: -1;
-  background: #f6d8e3;
+  background: #f5dfec;
   height: 17px;
   left: 0;
   right: 7px;
@@ -181,14 +181,14 @@ h1 {
 }
 .primary-action {
   padding: 15px 21px;
-  background: #a13b69;
+  background: #a25087;
   color: #fff;
-  border: 1px solid #a13b69;
+  border: 1px solid #a25087;
   border-radius: 9px;
   transition: background 0.18s;
 }
 .primary-action:hover {
-  background: #802d54;
+  background: #873e72;
 }
 .secondary-action {
   color: #775662;
@@ -234,7 +234,7 @@ h1 {
   height: 300px;
   top: 25px;
   right: 35px;
-  background: #f8e7ed;
+  background: #faedf5;
   border-radius: 50%;
 }
 .demo-paper {
@@ -285,7 +285,7 @@ h1 {
 .word-after {
   font-size: 29px;
   font-weight: 650;
-  color: #7b3951;
+  color: #80546d;
   white-space: nowrap;
 }
 .text-cursor {
@@ -314,44 +314,44 @@ h1 {
   bottom: 24px;
   width: 255px;
   padding: 18px;
-  border: 1px solid #ddcdb9;
-  background: #f7e5cf;
+  border: 1px solid #dbd1ec;
+  background: #eee8f8;
   border-radius: 12px;
   transform: rotate(5deg);
-  box-shadow: 0 6px 18px #4c3c2310;
+  box-shadow: 0 6px 18px #55446b10;
 }
 .chip-icon {
   width: 38px;
   height: 42px;
-  background: #fffaf0;
-  border: 1px solid #e7d5bd;
+  background: #faf8ff;
+  border: 1px solid #e3daf1;
   border-radius: 7px;
   display: grid;
   place-items: center;
-  color: #94744c;
+  color: #765d94;
   font-size: 21px;
 }
 .size-chip strong {
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #5d4b35;
+  color: #4e405e;
 }
 .size-chip small {
   display: block;
   margin-top: 6px;
   font-size: 9px;
-  color: #8b7455;
+  color: #6f5e80;
 }
 .chip-dots {
   margin-left: auto;
   align-self: flex-start;
-  color: #8b7455;
+  color: #6f5e80;
 }
 .art-spark {
   position: absolute;
   font-size: 62px;
-  color: #7b3951;
+  color: #80546d;
 }
 .spark-one {
   top: 2px;
@@ -433,13 +433,13 @@ h1 {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: #faecf1;
+  background: #fbf1f7;
   color: #8f4a63;
   font-size: 24px;
 }
 .apricot .tool-icon {
-  background: #f8eadb;
-  color: #956e40;
+  background: #eee8f8;
+  color: #765d94;
 }
 .tool-status {
   background: #f7f0f2;

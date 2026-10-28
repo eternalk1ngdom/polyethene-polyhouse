@@ -30,16 +30,16 @@ import TopNavBar from './components/TopNavBar.vue'
   --ph-ink: #3e2e38;
   --ph-muted: #80636d;
   --ph-line: #eddee3;
-  --ph-brand: #a13b69;
+  --ph-brand: #a25087;
   --ph-green: var(--ph-brand);
-  --ph-surface: #fdf8fa;
-  --ph-soft: #faecf1;
-  --el-color-primary: #a13b69;
-  --el-color-primary-light-3: #ba7a91;
-  --el-color-primary-light-5: #d3a7b7;
-  --el-color-primary-light-7: #ebcdd8;
-  --el-color-primary-light-9: #fbeef3;
-  --el-color-primary-dark-2: #802d54;
+  --ph-surface: #fffafd;
+  --ph-soft: #fbf1f7;
+  --el-color-primary: #a25087;
+  --el-color-primary-light-3: #c58cac;
+  --el-color-primary-light-5: #dfb5cc;
+  --el-color-primary-light-7: #efd5e3;
+  --el-color-primary-light-9: #fcf2f8;
+  --el-color-primary-dark-2: #873e72;
   --el-border-radius-base: 10px;
 }
 
@@ -61,11 +61,11 @@ import TopNavBar from './components/TopNavBar.vue'
 :global(a:focus-visible),
 :global(button:focus-visible),
 :global([tabindex]:focus-visible) {
-  outline: 3px solid #a13b69;
+  outline: 3px solid #a25087;
   outline-offset: 5px;
 }
 :global(::selection) {
-  background: #f6dce5;
+  background: #f5e0ec;
   color: #3e2e38;
 }
 

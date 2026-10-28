@@ -74,7 +74,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .card-cover {
   height: 64px;
-  background: #faecf1;
+  background: #fbf1f7;
   border-radius: 8px 8px 0 0;
   overflow: hidden;
   position: relative;
@@ -109,7 +109,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .role-badge {
   display: inline-block;
-  background: #faecf1;
+  background: #fbf1f7;
   color: #80485c;
   padding: 3px 8px;
   border-radius: 4px;
@@ -160,7 +160,7 @@ dd {
   gap: 10px;
 }
 .profile-link:hover {
-  background: #fdf8fa;
+  background: #fffafd;
 }
 .action-error {
   font-size: 12px;
