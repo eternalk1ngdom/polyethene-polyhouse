@@ -1,0 +1,2 @@
+# Preserve the reviewed upstream bytes so SHA-256 checks survive Windows Git checkouts.
+* -text

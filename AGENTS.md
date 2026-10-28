@@ -8,6 +8,7 @@
 - `SKILL.md` 只用于独立、可复用且需要按需触发的工作流；不得复制本文件形成第二份工程约束。
 
 ## 项目结构
+- `.agents/skills/`：项目级开发辅助技能；当前 UI/UX Pro Max 的固定版本、完整性检查与恢复记录见 `docs/operations/ui-ux-skill.md`，不作为第二份工程契约
 - `polyhouse/`：后端，Spring Boot 3 + JDK 21 + MyBatis，根包固定为 `com.polyethene.polyhouse`
 - `polyhouse-web/`：前端，Vue 3 + TypeScript + Vite + Element Plus
 - `Polyhouse_Ultimate_Master_Blueprint.docx`：设计文档，**只读**，不要修改
