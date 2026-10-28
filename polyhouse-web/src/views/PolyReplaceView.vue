@@ -332,6 +332,10 @@ p {
   border: 1px solid var(--ph-line);
   border-radius: 10px;
 }
+/* Element Plus 已在圆角外框显示聚焦边线，内部 input 不再叠加全局 tabindex 方框。 */
+.rule :deep(.el-input__inner:focus-visible) {
+  outline: none;
+}
 label:not(.file-button) {
   display: block;
   margin: 10px 0 6px;
