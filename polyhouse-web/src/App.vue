@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
 import TopNavBar from './components/TopNavBar.vue'
+import BrandLogo from './components/BrandLogo.vue'
 </script>
 
 <template>
@@ -11,7 +12,7 @@ import TopNavBar from './components/TopNavBar.vue'
       <RouterView />
     </main>
     <footer class="site-footer">
-      <RouterLink class="footer-brand" to="/">polyhouse<span>聚妙屋</span></RouterLink>
+      <RouterLink class="footer-brand" to="/" aria-label="聚妙屋首页"><BrandLogo /></RouterLink>
       <p>给日常一点灵感，给繁琐一个解法。</p>
       <RouterLink class="footer-link" to="/account">个人空间</RouterLink>
       <span class="version-note">Small tools. More possibilities.</span>
@@ -153,18 +154,9 @@ import TopNavBar from './components/TopNavBar.vue'
   font-size: 12px;
 }
 .footer-brand {
-  font-family: Georgia, serif;
-  font-style: italic;
-  color: var(--ph-ink);
-  font-size: 25px;
-  font-weight: 700;
-}
-.footer-brand span {
-  margin-left: 9px;
-  font-family: var(--ph-font);
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 500;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
 }
 .site-footer p {
   margin: 0;

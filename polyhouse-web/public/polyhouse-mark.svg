@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>聚妙屋 · 屋顶与 P</title>
+  <!-- 实心屋顶连成 P 的轮廓；宽留白保证缩到标签页尺寸仍能识别。 -->
+  <rect width="64" height="64" rx="19" fill="#0d0c22" />
+  <path
+    fill="#fff"
+    fill-rule="evenodd"
+    d="M18 49V27L32 15l14 12v8c0 7-5 12-12 12h-6v2H18Zm10-19v9h6c3 0 4-2 4-5v-4l-6-5-4 5Z"
+  />
+  <!-- 小火花呼应日常工具带来的灵感，不承担交互或状态信息。 -->
+  <path fill="#f4b8d1" d="m49 12 1.7 4.3L55 18l-4.3 1.7L49 24l-1.7-4.3L43 18l4.3-1.7Z" />
+</svg>

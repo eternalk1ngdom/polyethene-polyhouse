@@ -2,7 +2,8 @@
 import { RouterLink, useRoute } from 'vue-router'
 import { ref, watch } from 'vue'
 import { ElIcon, ElPopover } from 'element-plus'
-import { ArrowDown, House, User } from '@element-plus/icons-vue'
+import { ArrowDown, User } from '@element-plus/icons-vue'
+import BrandLogo from './BrandLogo.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import AuthDialog from './AuthDialog.vue'
 import DeregisterDialog from './DeregisterDialog.vue'
@@ -40,10 +41,7 @@ watch(
   <header class="site-header" @keydown.esc="accountVisible = false">
     <div class="header-inner">
       <RouterLink to="/" class="brand" aria-label="聚妙屋首页">
-        <span class="brand-mark" aria-hidden="true"
-          ><ElIcon><House /></ElIcon
-        ></span>
-        <span class="brand-name">polyhouse<span>聚妙屋</span></span>
+        <BrandLogo />
       </RouterLink>
       <nav class="primary-nav" aria-label="主导航">
         <RouterLink to="/" exact-active-class="is-active">首页</RouterLink>
@@ -155,35 +153,10 @@ watch(
 }
 .brand {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   gap: 9px;
   flex-shrink: 0;
-}
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--ph-ink);
-  color: white;
-  font-size: 21px;
-}
-.brand-name {
-  font-family: Georgia, serif;
-  font-size: 27px;
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: -0.8px;
-}
-.brand-name > span {
-  display: block;
-  font-family: var(--ph-font);
-  font-style: normal;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 2px;
-  margin-top: 1px;
 }
 .primary-nav {
   display: flex;
@@ -296,9 +269,6 @@ watch(
     flex-wrap: wrap;
     padding-top: 16px;
     padding-bottom: 10px;
-  }
-  .brand-name {
-    font-size: 25px;
   }
   .primary-nav {
     order: 3;
