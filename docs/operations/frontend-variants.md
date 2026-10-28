@@ -1,6 +1,6 @@
 # 前端方案备份、切换与恢复
 
-记录日期：2026-10-29。本轮仅本地 Git 操作；未推送 GitHub、创建正式标签或发布版本。
+记录日期：2026-10-29。初次备份仅为本地 Git 操作；同日阶段收口时用户授权同步 GitHub，范围与恢复入口见文末。未创建正式标签或发布版本。
 
 ## 保存了什么
 
@@ -68,3 +68,9 @@ git clone --branch codex/backup-ui-v1-20261028 E:/project/java/polyethene-polyho
 ## 提交与验收定位
 
 本轮方案二源码、设计说明与日志组成一次可独立验收的本地提交，具体编号以 `git log -1` 和最终汇报为准，不为记录自身编号再创建提交。[设计与接口清单](../design/frontend-v2.md)记录覆盖范围；[阶段日志](../dev-log/v1.0-dev.6.md)记录实际验证和未覆盖边界。
+
+## 阶段收口后的远端保存
+
+2026-10-29 用户授权推送。同步策略为将最终方案二 `codex/ui-v2-dribbble` 及固定备份 `codex/backup-ui-v1-20261028` 推送到 `origin` 的同名分支；不移动 `main`、不强推、不自动发布。上面的 `main`/仅本地描述保留首次备份时事实，同步范围以本节为准。
+
+仓库：[eternalk1ngdom/polyethene-polyhouse](https://github.com/eternalk1ngdom/polyethene-polyhouse)。从 GitHub 新克隆时默认仍是 main，查看新版需显式选择 `codex/ui-v2-dribbble`；恢复旧版选择备份分支。已有本地仓库先遵守上面的工作区检查，再 `git fetch origin`、切换相应本地分支。远端内容不含被忽略的离线包和运行数据，不能代替数据库/头像备份。
