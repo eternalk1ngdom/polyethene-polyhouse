@@ -331,6 +331,8 @@ wsl -d Ubuntu -- redis-cli -h 127.0.0.1 -p 6379 PING
 
 当前预期输出分别为 `active`、`enabled` 和 `PONG`。`enabled` 表示随 Ubuntu 启动，不保证 Windows 登录时必定启动 Ubuntu；开发前执行上述命令即可唤起发行版并验证服务。若出现 localhost 代理提示但随后返回 `PONG`，说明本机 Redis 检查成功，该代理提示不影响这次连接。
 
+若单次 `PING` 成功、后续 Java 连接又被拒绝，开发期间可在独立终端运行 `wsl -d Ubuntu -- sleep infinity` 并保持该终端运行，再启动后端；它仅用于保持本机 WSL 开发实例运行，结束开发时停止即可。本机曾出现该现象，保持实例运行后真实 Redis 连接与会话测试恢复通过。后端启动成功及不存在账号返回 401 都不会证明会话保存可用，登录验收需包含 Redis 读写。
+
 `pom.xml` 已包含 `spring-boot-starter-data-redis`，由 Spring Boot 管理 Lettuce 的版本和连接工厂。`RedisConfig` 将常规模板的键、值和 Hash 字段统一为 UTF-8 字符串；业务代码也可以直接注入自动配置的 `StringRedisTemplate`。存储结构化数据时应显式转换为 JSON，不使用 Java 原生对象序列化。
 
 ### Spring 连接验证
