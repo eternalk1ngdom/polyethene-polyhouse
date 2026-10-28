@@ -74,7 +74,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .card-cover {
   height: 64px;
-  background: #eaf3fc;
+  background: #faecf1;
   border-radius: 8px 8px 0 0;
   overflow: hidden;
   position: relative;
@@ -86,7 +86,7 @@ const stats = computed(() => growth.summary ?? props.profile)
   position: absolute;
   width: 100px;
   height: 100px;
-  border: 1px solid #c7dcea;
+  border: 1px solid #e6cad5;
   border-radius: 50%;
   right: -20px;
   top: -46px;
@@ -94,7 +94,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 .card-cover span {
   font-size: 7px;
   letter-spacing: 1px;
-  color: #667d91;
+  color: #8d6a77;
 }
 .card-identity {
   padding: 0 18px;
@@ -109,8 +109,8 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .role-badge {
   display: inline-block;
-  background: #eaf3fc;
-  color: #416987;
+  background: #faecf1;
+  color: #80485c;
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -160,7 +160,7 @@ dd {
   gap: 10px;
 }
 .profile-link:hover {
-  background: #f6f9fd;
+  background: #fdf8fa;
 }
 .action-error {
   font-size: 12px;

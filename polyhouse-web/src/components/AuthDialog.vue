@@ -287,13 +287,13 @@ watch(
   outline: none;
 }
 .auth-host :deep(.el-form-item__label) {
-  color: #40566d;
+  color: #694451;
   font-size: 13px;
 }
 .auth-eyebrow {
   font-size: 9px;
   letter-spacing: 1.5px;
-  color: #667d94;
+  color: #8f6b78;
   margin: 8px 0 14px;
 }
 .auth-intro {

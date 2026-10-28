@@ -119,7 +119,7 @@ watch(
 .lead {
   margin-top: 24px;
   font-size: 14px;
-  color: #40566d;
+  color: #694451;
 }
 .impact-list {
   padding: 16px 18px 16px 34px;
@@ -150,7 +150,7 @@ watch(
   display: block;
   margin-bottom: 10px;
   font-size: 12px;
-  color: #40566d;
+  color: #694451;
 }
 .cancellation-host :deep(.el-input__wrapper) {
   min-height: 42px;

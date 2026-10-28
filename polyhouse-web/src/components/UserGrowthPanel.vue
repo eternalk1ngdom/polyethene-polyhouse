@@ -43,7 +43,7 @@ const growth = useUserGrowthStore()
         :percentage="growth.summary.progressPercent"
         :show-text="false"
         :stroke-width="compact ? 5 : 8"
-        :color="growth.summary.maxLevelReached ? '#7b9561' : '#487458'"
+        :color="growth.summary.maxLevelReached ? '#b75c82' : '#a13b69'"
         :aria-label="`成长进度 ${growth.summary.progressPercent}%`"
       />
       <p class="next-level">
@@ -118,7 +118,7 @@ const growth = useUserGrowthStore()
 }
 .eyebrow {
   font-size: 8px;
-  color: #667e93;
+  color: #8e6a77;
   letter-spacing: 1.3px;
   margin: 0 0 8px;
 }
@@ -131,11 +131,11 @@ h2 {
   font-weight: 600;
 }
 h2 .el-icon {
-  color: #6c8ba6;
+  color: #a07283;
 }
 .level-badge {
-  background: #eaf3fc;
-  color: #41698a;
+  background: #faecf1;
+  color: #83485d;
   padding: 7px 11px;
   border-radius: 7px;
   font-size: 14px;
@@ -145,7 +145,7 @@ h2 .el-icon {
 .level-badge > span {
   font-size: 11px;
   font-weight: 400;
-  color: #667e93;
+  color: #8e6a77;
 }
 .progress-copy {
   display: flex;
@@ -153,7 +153,7 @@ h2 .el-icon {
   gap: 12px;
   margin-bottom: 12px;
   font-size: 13px;
-  color: #637b90;
+  color: #8b6874;
 }
 .progress-copy strong {
   color: var(--ph-green);
@@ -177,26 +177,26 @@ h2 .el-icon {
   margin-top: 24px;
   padding: 18px 20px;
   border-radius: 10px;
-  border: 1px solid #e0eaf1;
-  background: #f6f8fa;
+  border: 1px solid #efe2e7;
+  background: #faf6f8;
 }
 .daily-reward.claimed {
-  background: #eff6fc;
-  border-color: #dceaf5;
+  background: #fbf0f4;
+  border-color: #f3dfe6;
 }
 .reward-title {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  color: #476b89;
+  color: #824e61;
 }
 .reward-title strong {
   font-weight: 500;
 }
 .daily-reward p {
   font-size: 15px;
-  color: #345e82;
+  color: #7a3c52;
   margin: 13px 0 10px;
 }
 .daily-reward p > span {
@@ -204,7 +204,7 @@ h2 .el-icon {
 }
 .daily-reward small {
   font-size: 10px;
-  color: #687e91;
+  color: #8d6c78;
 }
 .growth-note {
   color: var(--ph-muted);

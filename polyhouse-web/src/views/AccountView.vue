@@ -283,11 +283,11 @@ onMounted(() => {
 }
 .profile-cover {
   height: 134px;
-  background: #e4f0fa;
+  background: #f8e6ed;
   position: relative;
   overflow: hidden;
   padding: 24px 34px;
-  color: #627c94;
+  color: #8f6775;
   font-size: 9px;
   letter-spacing: 2px;
 }
@@ -298,7 +298,7 @@ onMounted(() => {
   width: 350px;
   height: 350px;
   border-radius: 50%;
-  border: 1px solid #c8dcea;
+  border: 1px solid #e7cbd5;
   right: 60px;
   top: -220px;
 }
@@ -311,7 +311,7 @@ onMounted(() => {
   right: 180px;
   top: 26px;
   font-size: 75px;
-  color: #9ab5c9;
+  color: #c49fac;
 }
 .profile-overview {
   display: flex;
@@ -342,7 +342,7 @@ onMounted(() => {
   left: 7px;
   right: 7px;
   padding: 4px 0;
-  background: #356fa8d9;
+  background: #a13b69d9;
   color: white;
   border-radius: 0 0 28px 28px;
   font-size: 10px;
@@ -361,7 +361,7 @@ onMounted(() => {
 .eyebrow {
   margin: 0 0 10px;
   font-size: 9px;
-  color: #667e93;
+  color: #8e6a77;
   letter-spacing: 1px;
 }
 h1 {
@@ -374,8 +374,8 @@ h1 {
   display: inline-block;
   margin-left: 14px;
   vertical-align: middle;
-  background: #eaf3fc;
-  color: #416987;
+  background: #faecf1;
+  color: #80485c;
   padding: 4px 9px;
   font-size: 10px;
   font-weight: 500;
@@ -456,8 +456,8 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 11px;
-  background: #eaf3fc;
-  color: #52789a;
+  background: #faecf1;
+  color: #93596e;
   font-size: 21px;
 }
 .apricot {
@@ -465,8 +465,8 @@ h1 {
   color: #9e7b50;
 }
 .neutral {
-  background: #f1f5f8;
-  color: #65798c;
+  background: #f7f2f4;
+  color: #886974;
 }
 .profile-details {
   display: grid;
@@ -501,13 +501,13 @@ h1 {
   align-items: center;
   gap: 12px;
   padding: 16px 0;
-  border-bottom: 1px solid #eaf0f5;
+  border-bottom: 1px solid #f4ebee;
 }
 .tool-shortcut:hover {
   color: var(--ph-green);
 }
 .shortcut-icon {
-  color: #7a92a7;
+  color: #a27e8b;
   font-size: 21px;
 }
 .shortcut-copy {
@@ -525,7 +525,7 @@ h1 {
   font-size: 11px;
 }
 .tool-shortcut > .el-icon {
-  color: #7a92a7;
+  color: #a27e8b;
 }
 .management-panel {
   margin-top: 24px;
@@ -576,8 +576,8 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #e6f1fa;
-  color: #587a97;
+  background: #f8e8ee;
+  color: #915e70;
   font-size: 30px;
 }
 .anonymous-panel > p:not(.eyebrow) {
