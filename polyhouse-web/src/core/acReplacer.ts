@@ -16,8 +16,14 @@ export interface ReplaceResult {
 
 /** 对原文从左到右进行单次替换；同一位置优先选择较长规则。 */
 export function replaceText(input: string, rules: readonly ReplaceRule[]): ReplaceResult {
+  if (
+    rules.length > 20 ||
+    rules.some((rule) => rule.search.length > 200 || rule.replace.length > 200)
+  )
+    throw new Error('规则最多 20 条，每项内容最多 200 个字符')
   if (!rules.length || rules.some((rule) => !rule.search)) throw new Error('请填写非空的查找内容')
-  if (new Set(rules.map((rule) => rule.search)).size !== rules.length) throw new Error('查找内容不能重复')
+  if (new Set(rules.map((rule) => rule.search)).size !== rules.length)
+    throw new Error('查找内容不能重复')
   // 按长度排序只改变同一位置的优先级，结果绝不参与再次匹配。
   const ordered = [...rules].sort((a, b) => b.search.length - a.search.length)
   const parts: string[] = []
@@ -27,17 +33,22 @@ export function replaceText(input: string, rules: readonly ReplaceRule[]): Repla
   let outputLength = 0
   while (cursor < input.length) {
     const match = ordered.find((rule) => input.startsWith(rule.search, cursor))
-    if (!match) { cursor += 1; continue }
+    if (!match) {
+      cursor += 1
+      continue
+    }
     const unchanged = input.slice(pending, cursor)
     outputLength += unchanged.length + match.replace.length
-    if (outputLength > 8 * 1024 * 1024) throw new Error('替换结果超过 8 MB 字符限制，请缩小文件或调整规则')
+    if (outputLength > 8 * 1024 * 1024)
+      throw new Error('替换结果超过字符数量限制，请缩小文件或调整规则')
     parts.push(unchanged, match.replace)
     cursor += match.search.length
     pending = cursor
     count += 1
   }
   outputLength += input.length - pending
-  if (outputLength > 8 * 1024 * 1024) throw new Error('替换结果超过 8 MB 字符限制，请缩小文件或调整规则')
+  if (outputLength > 8 * 1024 * 1024)
+    throw new Error('替换结果超过字符数量限制，请缩小文件或调整规则')
   parts.push(input.slice(pending))
   return { text: parts.join(''), count }
 }

@@ -22,7 +22,7 @@ export interface ToolRegistryItem {
   plannedFeatures: readonly string[]
 }
 
-/** 工具入口的唯一清单；目前两个入口均展示开发说明。 */
+/** 工具入口的唯一清单；使用状态必须与实际已开放能力一致。 */
 export const toolRegistry: readonly ToolRegistryItem[] = [
   {
     code: 'poly-replace',
@@ -31,7 +31,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     icon: 'Switch',
     tag: '文本替换',
     subtitle: 'PolyReplace',
-    description: '在浏览器本地替换单个 UTF-8 文本文件。',
+    description: '在浏览器本地批量替换 UTF-8 文本文件，预览并下载结果。',
     status: 'available',
     accent: 'mint',
     plannedFeatures: ['多组规则，一次替换', '文件与目录批量处理', '结果预览与文件导出'],

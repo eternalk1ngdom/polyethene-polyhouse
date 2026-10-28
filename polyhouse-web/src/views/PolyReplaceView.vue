@@ -2,85 +2,91 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElAlert, ElButton, ElInput } from 'element-plus'
-import type { ReplaceResult, ReplaceRule } from '../core/acReplacer'
+import type { ReplaceRule } from '../core/acReplacer'
+import type { VirtualFileEntry } from '../core/types'
+import { validateBatch } from '../core/polyReplaceBatch'
+import type { BatchDownload, WorkerReply } from '../core/polyReplaceProtocol'
 
-/** 单次 Worker 返回只允许成功结果或可展示的失败提示。 */
-interface WorkerReply {
-  /** 标识本次处理是否成功。 */
-  ok: boolean
-  /** 成功时提供替换结果。 */
-  result?: ReplaceResult
-  /** 失败时提供不含文件内容的提示。 */
-  message?: string
-}
-
-const fileName = ref('')
-const original = ref('')
-const hasFile = ref(false)
+const selectedFiles = ref<File[]>([])
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
-const result = ref<ReplaceResult | null>(null)
+const result = ref<BatchDownload | null>(null)
+const previewIndex = ref(0)
 const message = ref('')
 const busy = ref(false)
 let worker: Worker | undefined
 let revision = 0
-const preview = computed(() => result.value?.text.slice(0, 10000) ?? '')
+const activePreview = computed(() => result.value?.files[previewIndex.value])
+const totalCount = computed(
+  () => result.value?.files.reduce((total, file) => total + file.count, 0) ?? 0,
+)
 
-// 任意输入变化都使旧任务及旧结果失效，避免下载到先前文件的内容。
+/** 文件或规则变化时停止旧任务，保留选中文件以供重新处理。 */
 function invalidate(): void {
   revision += 1
   worker?.terminate()
   worker = undefined
   busy.value = false
   result.value = null
+  previewIndex.value = 0
   message.value = ''
 }
-watch(rules, invalidate, { deep: true })
+watch(rules, invalidate, { deep: true, flush: 'sync' })
 onBeforeUnmount(invalidate)
 
-async function selectFile(event: Event): Promise<void> {
+/** 选择阶段只保存文件引用并检查大小，不与编辑规则争抢异步读取结果。 */
+function selectFile(event: Event): void {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const files = Array.from(input.files ?? [])
   input.value = ''
-  if (!file) return
+  if (!files.length) return
   invalidate()
-  const current = revision
-  fileName.value = ''
-  original.value = ''
-  hasFile.value = false
-  if (file.size > 2 * 1024 * 1024) { message.value = '文件不能超过 2 MB'; return }
+  selectedFiles.value = []
   try {
-    const bytes = await file.arrayBuffer()
-    if (current !== revision) return
-    // NUL 字节常见于二进制文件；明确拒绝而不是把图片误当文本保存。
-    if (new Uint8Array(bytes).includes(0)) throw new Error('文件包含二进制内容，请选择 UTF-8 文本')
-    // 保留 UTF-8 BOM；非法字节直接报错，避免静默替换成乱码。
-    const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
-    if (current !== revision) return
-    original.value = text
-    fileName.value = file.name
-    hasFile.value = true
+    validateBatch(files.map((file) => ({ relativePath: file.name, size: file.size })))
+    selectedFiles.value = files
   } catch (error: unknown) {
-    if (current !== revision) return
-    message.value = error instanceof TypeError ? '文件不是有效的 UTF-8 文本，请转换编码后重试' : error instanceof Error ? error.message : '读取失败，请重试'
+    message.value = error instanceof Error ? error.message : '选择失败，请重试'
   }
 }
 
+/** 限制规则数量，控制任务工作量。 */
 function addRule(): void {
   if (rules.value.length < 20) rules.value.push({ search: '', replace: '' })
 }
+/** 删除规则同步使旧结果失效。 */
 function removeRule(index: number): void {
   if (rules.value.length > 1) rules.value.splice(index, 1)
 }
-function runReplace(): void {
+/** 在任务开始时固定输入快照，逐个读取文件以限制并发内存。 */
+async function runReplace(): Promise<void> {
   invalidate()
-  if (!hasFile.value) { message.value = '请先选择文本文件'; return }
-  if (rules.value.some((rule) => !rule.search)) { message.value = '请填写每条规则的查找内容'; return }
-  if (new Set(rules.value.map((rule) => rule.search)).size !== rules.value.length) { message.value = '查找内容不能重复'; return }
+  if (!selectedFiles.value.length) {
+    message.value = '请先选择文本文件'
+    return
+  }
+  if (rules.value.some((rule) => !rule.search)) {
+    message.value = '请填写每条规则的查找内容'
+    return
+  }
+  if (new Set(rules.value.map((rule) => rule.search)).size !== rules.value.length) {
+    message.value = '查找内容不能重复'
+    return
+  }
+  const current = revision
+  const inputs = [...selectedFiles.value]
+  const ruleSnapshot = rules.value.map(({ search, replace }) => ({ search, replace }))
+  busy.value = true
   try {
-    const current = revision
-    const active = new Worker(new URL('../workers/polyReplace.worker.ts', import.meta.url), { type: 'module' })
+    const files: VirtualFileEntry[] = []
+    for (const file of inputs) {
+      const content = await file.arrayBuffer()
+      if (current !== revision) return
+      files.push({ relativePath: file.name, content })
+    }
+    const active = new Worker(new URL('../workers/polyReplace.worker.ts', import.meta.url), {
+      type: 'module',
+    })
     worker = active
-    busy.value = true
     active.onmessage = (event: MessageEvent<WorkerReply>) => {
       if (current !== revision) return
       busy.value = false
@@ -91,26 +97,26 @@ function runReplace(): void {
     }
     active.onerror = () => {
       if (current !== revision) return
-      busy.value = false
-      active.terminate()
-      worker = undefined
+      invalidate()
       message.value = '处理失败，请重试'
     }
-    // 发送普通对象快照，避免 Vue 响应式代理不能跨线程克隆。
-    active.postMessage({ text: original.value, rules: rules.value.map(({ search, replace }) => ({ search, replace })) })
+    // 转移读取所得缓冲区，不复制 Vue 代理或 File 对象到后台线程。
+    active.postMessage(
+      { files, rules: ruleSnapshot },
+      files.map((file) => file.content),
+    )
   } catch {
-    worker?.terminate()
-    worker = undefined
-    busy.value = false
-    message.value = '无法启动本地处理，请刷新后重试'
+    if (current !== revision) return
+    invalidate()
+    message.value = '读取或启动本地处理失败，请重试'
   }
 }
+/** 下载 Worker 生成的完整文件，随后释放临时地址。 */
 function download(): void {
   if (!result.value) return
-  const url = URL.createObjectURL(new Blob([result.value.text], { type: 'text/plain;charset=utf-8' }))
+  const url = URL.createObjectURL(new Blob([result.value.bytes], { type: result.value.mime }))
   const link = document.createElement('a')
-  const dot = fileName.value.lastIndexOf('.')
-  link.download = dot > 0 ? `${fileName.value.slice(0, dot)}-妙替${fileName.value.slice(dot)}` : `${fileName.value}-妙替.txt`
+  link.download = result.value.name
   link.href = url
   link.click()
   // 给浏览器接收下载请求的时间，随后释放内存中的临时地址。
@@ -121,32 +127,82 @@ function download(): void {
 <template>
   <div class="replace-page">
     <RouterLink class="back" to="/">← 返回首页</RouterLink>
-    <header><p class="eyebrow">POLYREPLACE / 文本替换</p><h1>妙替</h1><p>让重复的文字修改，简单一点。</p></header>
+    <header>
+      <p class="eyebrow">POLYREPLACE / 文本替换</p>
+      <h1>妙替</h1>
+      <p>让重复的文字修改，简单一点。</p>
+    </header>
     <div class="layout">
       <section class="panel" aria-labelledby="input-title">
         <h2 id="input-title">1. 选择文本文件</h2>
-        <p>文件仅在浏览器中处理，不会上传。支持 UTF-8 文本，大小不超过 2 MB。</p>
-        <label class="file-button">选择文件<input type="file" accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.xml,.yml,.yaml,.log" @change="selectFile" /></label>
-        <span class="file-name">{{ fileName || '尚未选择文件' }}</span>
+        <p>
+          文件仅在浏览器中处理，不会上传。支持 UTF-8 文本，最多 20 个文件，每个不超过 2
+          MiB，总计不超过 5 MiB。多文件打包为 ZIP；任一文件无效则整批停止。
+        </p>
+        <label class="file-button"
+          >选择文件<input
+            type="file"
+            multiple
+            accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.xml,.yml,.yaml,.log"
+            @change="selectFile"
+        /></label>
+        <span class="file-name">{{
+          selectedFiles.length ? `已选 ${selectedFiles.length} 个文件` : '尚未选择文件'
+        }}</span>
+        <ul v-if="selectedFiles.length" class="file-list">
+          <li v-for="(file, index) in selectedFiles" :key="index">
+            {{ index + 1 }}. {{ file.name }}
+          </li>
+        </ul>
         <h2>2. 设置替换规则</h2>
         <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
         <div v-for="(rule, index) in rules" :key="index" class="rule">
           <label :for="`search-${index}`">查找 {{ index + 1 }}</label>
-          <ElInput :id="`search-${index}`" v-model="rule.search" placeholder="要查找的内容" maxlength="200" />
+          <ElInput
+            :id="`search-${index}`"
+            v-model="rule.search"
+            placeholder="要查找的内容"
+            maxlength="200"
+          />
           <label :for="`replace-${index}`">替换为 {{ index + 1 }}</label>
-          <ElInput :id="`replace-${index}`" v-model="rule.replace" placeholder="替换后的内容，可留空" maxlength="200" />
+          <ElInput
+            :id="`replace-${index}`"
+            v-model="rule.replace"
+            placeholder="替换后的内容，可留空"
+            maxlength="200"
+          />
           <ElButton v-if="rules.length > 1" text @click="removeRule(index)">删除规则</ElButton>
         </div>
-        <div class="actions"><ElButton :disabled="rules.length >= 20 || busy" @click="addRule">添加规则</ElButton><ElButton type="primary" :loading="busy" @click="runReplace">开始替换</ElButton></div>
-        <ElAlert v-if="message" :title="message" type="warning" :closable="false" show-icon class="notice" />
+        <div class="actions">
+          <ElButton :disabled="rules.length >= 20 || busy" @click="addRule">添加规则</ElButton
+          ><ElButton type="primary" :loading="busy" @click="runReplace">开始替换</ElButton
+          ><ElButton v-if="busy" @click="invalidate">取消处理</ElButton>
+        </div>
+        <ElAlert
+          v-if="message"
+          :title="message"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="notice"
+        />
       </section>
       <section class="panel" aria-labelledby="result-title">
         <h2 id="result-title">3. 预览与下载</h2>
         <template v-if="result">
-          <p role="status">完成，共替换 {{ result.count }} 处<span v-if="result.text.length > 10000">；预览仅显示前 10000 个字符，下载包含完整结果。</span></p>
+          <p role="status">完成 {{ result.files.length }} 个文件，共替换 {{ totalCount }} 处。</p>
+          <label for="preview-file">选择预览文件</label>
+          <select id="preview-file" v-model="previewIndex">
+            <option v-for="(file, index) in result.files" :key="index" :value="index">
+              {{ file.name }} · {{ file.count }} 处
+            </option>
+          </select>
+          <p v-if="activePreview?.truncated">预览仅显示前 10000 个字符，下载包含完整结果。</p>
           <label for="result-preview">替换结果预览</label>
-          <textarea id="result-preview" :value="preview" readonly rows="14" />
-          <ElButton type="primary" class="download" @click="download">下载结果文件</ElButton>
+          <textarea id="result-preview" :value="activePreview?.preview ?? ''" readonly rows="14" />
+          <ElButton type="primary" class="download" @click="download">{{
+            result.files.length > 1 ? '下载 ZIP 结果包' : '下载结果文件'
+          }}</ElButton>
         </template>
         <p v-else class="empty">选择文件并添加规则后，在这里查看结果。</p>
       </section>
@@ -155,27 +211,139 @@ function download(): void {
 </template>
 
 <style scoped>
-.replace-page { width: min(1200px, calc(100% - 96px)); margin: 48px auto 0; }
-.back { color: var(--ph-muted); font-size: 14px; }
-header { margin: 38px 0 30px; }
-.eyebrow { color: var(--ph-muted); font-size: 12px; letter-spacing: 1.5px; }
-h1 { font-size: 40px; margin: 10px 0; }
-h2 { font-size: 20px; margin: 0 0 12px; }
-p { color: var(--ph-muted); line-height: 1.7; font-size: 14px; }
-.layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
-.panel { min-width: 0; padding: 30px; border: 1px solid var(--ph-line); border-radius: 16px; background: white; }
-.panel h2:not(:first-child) { margin-top: 32px; }
-.file-button { display: inline-block; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--ph-line); cursor: pointer; }
-.file-button:focus-within { outline: 3px solid var(--ph-brand); outline-offset: 3px; }
-.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.file-name { display: inline-block; margin-left: 12px; color: var(--ph-muted); overflow-wrap: anywhere; font-size: 14px; }
-.rule { margin: 18px 0; padding: 16px; background: var(--ph-soft); border-radius: 10px; }
-label:not(.file-button) { display: block; margin: 10px 0 6px; font-size: 14px; }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
-.actions :deep(.el-button + .el-button) { margin-left: 0; }
-.notice { margin-top: 18px; }
-textarea { width: 100%; resize: vertical; border: 1px solid var(--ph-line); border-radius: 8px; padding: 12px; font: inherit; line-height: 1.6; }
-.download { margin-top: 16px; }
-.empty { padding: 24px 0; }
-@media (max-width: 700px) { .replace-page { width: calc(100% - 40px); margin-top: 32px; } .layout { grid-template-columns: 1fr; } .panel { padding: 20px; } }
+.replace-page {
+  width: min(1200px, calc(100% - 96px));
+  margin: 48px auto 0;
+}
+.back {
+  color: var(--ph-muted);
+  font-size: 14px;
+}
+header {
+  margin: 38px 0 30px;
+}
+.eyebrow {
+  color: var(--ph-muted);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+}
+h1 {
+  font-size: 40px;
+  margin: 10px 0;
+}
+h2 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+p {
+  color: var(--ph-muted);
+  line-height: 1.7;
+  font-size: 14px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.panel {
+  min-width: 0;
+  padding: 30px;
+  border: 1px solid var(--ph-line);
+  border-radius: 16px;
+  background: white;
+}
+.panel h2:not(:first-child) {
+  margin-top: 32px;
+}
+.file-button {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--ph-line);
+  cursor: pointer;
+}
+.file-button:focus-within {
+  outline: 3px solid var(--ph-brand);
+  outline-offset: 3px;
+}
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.file-name {
+  display: inline-block;
+  margin-left: 12px;
+  color: var(--ph-muted);
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.rule {
+  margin: 18px 0;
+  padding: 16px;
+  background: var(--ph-soft);
+  border-radius: 10px;
+}
+label:not(.file-button) {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 14px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.notice {
+  margin-top: 18px;
+}
+.file-list {
+  max-height: 140px;
+  overflow: auto;
+  padding-left: 22px;
+  overflow-wrap: anywhere;
+  color: var(--ph-muted);
+  font-size: 14px;
+}
+select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--ph-line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ph-ink);
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--ph-line);
+  border-radius: 8px;
+  padding: 12px;
+  font: inherit;
+  line-height: 1.6;
+}
+.download {
+  margin-top: 16px;
+}
+.empty {
+  padding: 24px 0;
+}
+@media (max-width: 700px) {
+  .replace-page {
+    width: calc(100% - 40px);
+    margin-top: 32px;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .panel {
+    padding: 20px;
+  }
+}
 </style>
