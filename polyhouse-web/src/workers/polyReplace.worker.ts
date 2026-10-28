@@ -5,9 +5,9 @@ import type { ReplaceRequest, WorkerReply } from '../core/polyReplaceProtocol'
 // 解码、替换和压缩都在本地线程中，避免压缩时阻塞页面；不接入账号或 HTTP。
 self.onmessage = (event: MessageEvent<ReplaceRequest>) => {
   try {
-    const files = replaceBatch(event.data.files, event.data.rules)
+    const files = replaceBatch(event.data.files, event.data.rules, event.data.mode)
     const first = files[0]!
-    const zip = files.length > 1
+    const zip = event.data.mode === 'directory' || files.length > 1
     const entries: Record<string, Uint8Array> = Object.create(null)
     for (const file of files) entries[file.name] = file.content
     const bytes = zip ? zipSync(entries) : first.content

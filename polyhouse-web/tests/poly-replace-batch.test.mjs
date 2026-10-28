@@ -33,6 +33,45 @@ test('多文件各自替换、不串改，重名序号保全', () => {
   )
   assert.equal(new Set(result.map((x) => x.name)).size, 2)
 })
+test('文件夹保留根目录和嵌套路径、文件名及原始字节格式', () => {
+  const result = replaceBatch(
+    [file('资料/子目录/一.txt', '\uFEFFA\r\n'), file('资料/二.txt', 'B')],
+    rules,
+    'directory',
+  )
+  assert.deepEqual(
+    result.map((entry) => entry.name),
+    ['资料/子目录/一.txt', '资料/二.txt'],
+  )
+  assert.deepEqual([...result[0].content], [...new TextEncoder().encode('\uFEFFB\r\n')])
+  assert.equal(result[1].preview, 'C')
+})
+test('文件夹拒绝路径穿越、跨根、跨平台重名及文件与目录冲突', () => {
+  for (const path of [
+    '根/../a',
+    '/根/a',
+    '根//a',
+    '根/a\\b',
+    '根/CON.txt',
+    '根/name.',
+    '根/__proto__/a',
+  ]) {
+    assert.throws(() => validateBatch([{ relativePath: path, size: 0 }], 'directory'))
+  }
+  for (const paths of [
+    ['根/a', '另一个/b'],
+    ['根/A.txt', '根/a.txt'],
+    ['根/é.txt', '根/e\u0301.txt'],
+    ['根/a', '根/a/b'],
+  ]) {
+    assert.throws(() =>
+      validateBatch(
+        paths.map((relativePath) => ({ relativePath, size: 0 })),
+        'directory',
+      ),
+    )
+  }
+})
 test('字节级保留 BOM、CRLF 和空文件', () => {
   const input = file('a.txt', '\uFEFFA\r\n')
   const result = replaceBatch([input], rules)[0]
@@ -98,16 +137,51 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
     self.onmessage({ data: { files: [file('a.txt', 'A'), file('../bad', 'A')], rules } })
     assert.equal(replies[1].ok, false)
     assert.equal(replies[1].result, undefined)
+    self.onmessage({ data: { mode: 'directory', files: [file('资料/子目录/a.txt', 'A')], rules } })
+    assert.equal(replies[2].result.mime, 'application/zip')
+    const directoryZip = unzipSync(new Uint8Array(replies[2].result.bytes))
+    assert.deepEqual(Object.keys(directoryZip), ['资料/子目录/a.txt'])
+    assert.equal(new TextDecoder().decode(directoryZip['资料/子目录/a.txt']), 'B')
+    self.onmessage({
+      data: {
+        mode: 'directory',
+        files: [
+          file('资料/ok.txt', 'A'),
+          { relativePath: '资料/bad', content: Uint8Array.of(255).buffer },
+        ],
+        rules,
+      },
+    })
+    assert.equal(replies[3].ok, false)
+    assert.equal(replies[3].result, undefined)
   } finally {
     if (oldSelf === undefined) delete globalThis.self
     else globalThis.self = oldSelf
   }
 })
 test('整批输出预算不能被多个合法小文件绕过', () => {
-  assert.throws(() => replaceBatch([file('a.txt', 'A'.repeat(10000)), file('b.txt', 'A'.repeat(10000)), file('c.txt', 'A'.repeat(10000))], [{search:'A',replace:'中'.repeat(200)}]), /大小限制/)
+  assert.throws(
+    () =>
+      replaceBatch(
+        [
+          file('a.txt', 'A'.repeat(10000)),
+          file('b.txt', 'A'.repeat(10000)),
+          file('c.txt', 'A'.repeat(10000)),
+        ],
+        [{ search: 'A', replace: '中'.repeat(200) }],
+      ),
+    /大小限制/,
+  )
 })
 test('算法入口也校验规则数量和长度，不依赖页面 maxlength', async () => {
   const { replaceText } = await import(coreUrl)
-  assert.throws(() => replaceText('a', Array.from({length:21},(_,i)=>({search:String(i),replace:''}))), /规则最多/)
-  assert.throws(() => replaceText('a', [{search:'a',replace:'x'.repeat(201)}]), /规则最多/)
+  assert.throws(
+    () =>
+      replaceText(
+        'a',
+        Array.from({ length: 21 }, (_, i) => ({ search: String(i), replace: '' })),
+      ),
+    /规则最多/,
+  )
+  assert.throws(() => replaceText('a', [{ search: 'a', replace: 'x'.repeat(201) }]), /规则最多/)
 })

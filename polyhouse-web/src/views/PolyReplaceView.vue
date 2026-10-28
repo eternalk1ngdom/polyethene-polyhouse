@@ -5,9 +5,11 @@ import { ElAlert, ElButton, ElInput } from 'element-plus'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
-import type { BatchDownload, WorkerReply } from '../core/polyReplaceProtocol'
+import type { BatchDownload, ReplaceMode, WorkerReply } from '../core/polyReplaceProtocol'
 
 const selectedFiles = ref<File[]>([])
+const selectedMode = ref<ReplaceMode>('files')
+const directorySupported = 'webkitdirectory' in document.createElement('input')
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
 const result = ref<BatchDownload | null>(null)
 const previewIndex = ref(0)
@@ -34,7 +36,7 @@ watch(rules, invalidate, { deep: true, flush: 'sync' })
 onBeforeUnmount(invalidate)
 
 /** 选择阶段只保存文件引用并检查大小，不与编辑规则争抢异步读取结果。 */
-function selectFile(event: Event): void {
+function selectFile(event: Event, mode: ReplaceMode): void {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   input.value = ''
@@ -42,7 +44,14 @@ function selectFile(event: Event): void {
   invalidate()
   selectedFiles.value = []
   try {
-    validateBatch(files.map((file) => ({ relativePath: file.name, size: file.size })))
+    validateBatch(
+      files.map((file) => ({
+        relativePath: mode === 'directory' ? file.webkitRelativePath : file.name,
+        size: file.size,
+      })),
+      mode,
+    )
+    selectedMode.value = mode
     selectedFiles.value = files
   } catch (error: unknown) {
     message.value = error instanceof Error ? error.message : '选择失败，请重试'
@@ -74,6 +83,7 @@ async function runReplace(): Promise<void> {
   }
   const current = revision
   const inputs = [...selectedFiles.value]
+  const mode = selectedMode.value
   const ruleSnapshot = rules.value.map(({ search, replace }) => ({ search, replace }))
   busy.value = true
   try {
@@ -81,7 +91,10 @@ async function runReplace(): Promise<void> {
     for (const file of inputs) {
       const content = await file.arrayBuffer()
       if (current !== revision) return
-      files.push({ relativePath: file.name, content })
+      files.push({
+        relativePath: mode === 'directory' ? file.webkitRelativePath : file.name,
+        content,
+      })
     }
     const active = new Worker(new URL('../workers/polyReplace.worker.ts', import.meta.url), {
       type: 'module',
@@ -102,7 +115,7 @@ async function runReplace(): Promise<void> {
     }
     // 转移读取所得缓冲区，不复制 Vue 代理或 File 对象到后台线程。
     active.postMessage(
-      { files, rules: ruleSnapshot },
+      { files, rules: ruleSnapshot, mode },
       files.map((file) => file.content),
     )
   } catch {
@@ -137,21 +150,31 @@ function download(): void {
         <h2 id="input-title">1. 选择文本文件</h2>
         <p>
           文件仅在浏览器中处理，不会上传。支持 UTF-8 文本，最多 20 个文件，每个不超过 2
-          MiB，总计不超过 5 MiB。多文件打包为 ZIP；任一文件无效则整批停止。
+          MiB，总计不超过 5 MiB。文件夹保留目录结构并打包为 ZIP，空文件夹不会包含在结果中；
+          任一文件无效则整批停止，请移除二进制文件或转换为 UTF-8 后重试。
         </p>
         <label class="file-button"
           >选择文件<input
             type="file"
             multiple
             accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.xml,.yml,.yaml,.log"
-            @change="selectFile"
+            @change="selectFile($event, 'files')"
         /></label>
+        <label v-if="directorySupported" class="file-button directory-button"
+          >选择文件夹<input
+            type="file"
+            webkitdirectory
+            multiple
+            @change="selectFile($event, 'directory')"
+        /></label>
+        <p v-else>当前浏览器不支持选择文件夹，可改为选择文件。</p>
         <span class="file-name">{{
           selectedFiles.length ? `已选 ${selectedFiles.length} 个文件` : '尚未选择文件'
         }}</span>
         <ul v-if="selectedFiles.length" class="file-list">
           <li v-for="(file, index) in selectedFiles" :key="index">
-            {{ index + 1 }}. {{ file.name }}
+            {{ index + 1 }}.
+            {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}
           </li>
         </ul>
         <h2>2. 设置替换规则</h2>
@@ -185,6 +208,7 @@ function download(): void {
           :closable="false"
           show-icon
           class="notice"
+          role="alert"
         />
       </section>
       <section class="panel" aria-labelledby="result-title">
@@ -201,7 +225,7 @@ function download(): void {
           <label for="result-preview">替换结果预览</label>
           <textarea id="result-preview" :value="activePreview?.preview ?? ''" readonly rows="14" />
           <ElButton type="primary" class="download" @click="download">{{
-            result.files.length > 1 ? '下载 ZIP 结果包' : '下载结果文件'
+            result.mime === 'application/zip' ? '下载 ZIP 结果包' : '下载结果文件'
           }}</ElButton>
         </template>
         <p v-else class="empty">选择文件并添加规则后，在这里查看结果。</p>
@@ -266,6 +290,9 @@ p {
 .file-button:focus-within {
   outline: 3px solid var(--ph-brand);
   outline-offset: 3px;
+}
+.directory-button {
+  margin-left: 8px;
 }
 .file-button input {
   position: absolute;

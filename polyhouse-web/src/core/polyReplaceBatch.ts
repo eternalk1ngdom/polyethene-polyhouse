@@ -1,5 +1,6 @@
 import { replaceText, type ReplaceRule } from './acReplacer'
 import type { VirtualFileEntry } from './types'
+import type { ReplaceMode } from './polyReplaceProtocol'
 
 /** 处理成功的单个文件，不携带 DOM File 对象。 */
 export interface ReplacedFile {
@@ -16,18 +17,50 @@ export interface ReplacedFile {
 }
 
 /** 选择阶段和 Worker 共用限制，阻止读入过大的整批文件。 */
-export function validateBatch(files: readonly { relativePath: string; size: number }[]): void {
+export function validateBatch(
+  files: readonly { relativePath: string; size: number }[],
+  mode: ReplaceMode = 'files',
+): void {
   if (!files.length || files.length > 20) throw new Error('请选择 1～20 个文件')
   let total = 0
+  let root = ''
+  const paths = new Set<string>()
   for (const file of files) {
-    // 此阶段仅支持平面多选；拒绝路径分隔符和控制字符，ZIP 不接受外部路径。
+    // 只接受浏览器提供的相对路径，阻止 ZIP 路径穿越及跨平台无法解压的名称。
+    const segments = file.relativePath.split('/')
     if (
       !file.relativePath ||
-      file.relativePath.length > 200 ||
-      /[\\/\x00-\x1f<>:"|?*]/u.test(file.relativePath) ||
-      /^\.+$/u.test(file.relativePath)
+      file.relativePath.length > 1024 ||
+      (mode === 'files' && segments.length !== 1) ||
+      (mode === 'directory' && segments.length < 2) ||
+      segments.some(
+        (part) =>
+          !part ||
+          part.length > 200 ||
+          /[\\\x00-\x1f<>:"|?*]/u.test(part) ||
+          /^\.+$/u.test(part) ||
+          /[. ]$/u.test(part) ||
+          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(part) ||
+          /^(?:__proto__|prototype|constructor)$/iu.test(part),
+      )
     )
-      throw new Error('文件名不符合要求，请重命名后重试')
+      throw new Error('文件或文件夹名称不符合要求，请重命名后重试')
+    if (mode === 'directory') {
+      const normalized = file.relativePath.normalize('NFC').toLowerCase()
+      const currentRoot = segments[0]!.normalize('NFC').toLowerCase()
+      if (root && root !== currentRoot) throw new Error('请一次选择一个文件夹')
+      root = currentRoot
+      // 大小写及 Unicode 规范化后冲突时拒绝整批，避免解压覆盖或文件夹被误当文件。
+      for (const existing of paths) {
+        if (
+          existing === normalized ||
+          existing.startsWith(`${normalized}/`) ||
+          normalized.startsWith(`${existing}/`)
+        )
+          throw new Error('文件路径存在冲突，请重命名后重试')
+      }
+      paths.add(normalized)
+    }
     if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > 2 * 1024 * 1024)
       throw new Error('每个文件不能超过 2 MiB')
     total += file.size
@@ -39,9 +72,11 @@ export function validateBatch(files: readonly { relativePath: string; size: numb
 export function replaceBatch(
   files: readonly VirtualFileEntry[],
   rules: readonly ReplaceRule[],
+  mode: ReplaceMode = 'files',
 ): ReplacedFile[] {
   validateBatch(
     files.map((file) => ({ relativePath: file.relativePath, size: file.content.byteLength })),
+    mode,
   )
   const output: ReplacedFile[] = []
   let total = 0
@@ -66,7 +101,8 @@ export function replaceBatch(
         ? `${file.relativePath.slice(0, dot)}-妙替${file.relativePath.slice(dot)}`
         : `${file.relativePath}-妙替.txt`
     output.push({
-      name: files.length > 1 ? `${index + 1}-${base}` : base,
+      name:
+        mode === 'directory' ? file.relativePath : files.length > 1 ? `${index + 1}-${base}` : base,
       content,
       preview: result.text.slice(0, 10000),
       count: result.count,

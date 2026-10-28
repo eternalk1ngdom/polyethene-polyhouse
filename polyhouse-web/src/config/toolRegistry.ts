@@ -31,7 +31,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     icon: 'Switch',
     tag: '文本替换',
     subtitle: 'PolyReplace',
-    description: '在浏览器本地批量替换 UTF-8 文本文件，预览并下载结果。',
+    description: '在浏览器本地批量替换 UTF-8 文本文件或小型文件夹，预览并下载结果。',
     status: 'available',
     accent: 'mint',
     plannedFeatures: ['多组规则，一次替换', '文件与目录批量处理', '结果预览与文件导出'],
