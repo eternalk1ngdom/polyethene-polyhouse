@@ -3,12 +3,15 @@
 复用 IDEA 个人预设检查、验收或启动本机后端，后续会话无需再次索取凭据。
 .DESCRIPTION
 默认 Verify：编译并启用 MySQL、Redis、认证事务和真实运行密钥的全部测试。
-Inspect 只返回配置状态，Run 使用同一预设启动 Spring Boot；所有进程环境在退出时恢复。
+Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
+SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Inspect', 'Verify', 'Run')]
-    [string]$Action = 'Verify'
+    [string]$Action = 'Verify',
+    # 非 WSL 或已启用 Redis 认证的环境可显式选择自行管理依赖。
+    [switch]$SkipWslRedis
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,6 +69,7 @@ if (-not $databaseConfigured -or -not $keyValid) {
 }
 
 $previousEnvironment = @{}
+$wslKeeper = $null
 Push-Location -LiteralPath $projectDirectory
 try {
     foreach ($name in $preset.Keys) {
@@ -82,6 +86,44 @@ try {
         throw '本机验收入口只允许本机 Redis。'
     }
     if ($Action -eq 'Run') {
+        if (-not $SkipWslRedis) {
+            # 本机约定为 Ubuntu 无认证 Redis。持有独立 WSL 进程直到后端退出，
+            # 避免把 systemd 的 enabled 状态误当成 Windows 侧持续可访问。
+            $redisPort = if ($preset['REDIS_PORT']) { [int]$preset['REDIS_PORT'] } else { 6379 }
+            $probeHost = if ($redisHost) { $redisHost } else { '127.0.0.1' }
+            if ($preset['REDIS_PASSWORD'] -or $preset['REDIS_USERNAME']) {
+                throw 'WSL 自动就绪检查仅适用于本机无认证 Redis；请使用 -SkipWslRedis 并自行验证连接。'
+            }
+            $wslCommand = Get-Command wsl.exe -ErrorAction Stop
+            $wslKeeper = Start-Process -FilePath $wslCommand.Source -ArgumentList @('-d', 'Ubuntu', '--exec', 'sleep', 'infinity') -WindowStyle Hidden -PassThru
+            $ready = $false
+            $deadline = [DateTime]::UtcNow.AddSeconds(20)
+            while ([DateTime]::UtcNow -lt $deadline -and -not $wslKeeper.HasExited) {
+                $client = [System.Net.Sockets.TcpClient]::new()
+                try {
+                    $connection = $client.ConnectAsync($probeHost, $redisPort)
+                    if ($connection.Wait(1000)) {
+                        $stream = $client.GetStream()
+                        $stream.ReadTimeout = 1000
+                        $stream.WriteTimeout = 1000
+                        $ping = [System.Text.Encoding]::ASCII.GetBytes("PING`r`n")
+                        $stream.Write($ping, 0, $ping.Length)
+                        # RESP 简单字符串必须完整匹配，单纯端口开放不能证明 Redis 就绪。
+                        $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::ASCII)
+                        $ready = $reader.ReadLine() -ceq '+PONG'
+                    }
+                } catch {
+                    # 启动和端口转发需要时间，限时重试；不输出底层连接异常或凭据。
+                    $ready = $false
+                } finally {
+                    $client.Dispose()
+                }
+                if ($ready) { break }
+                Start-Sleep -Milliseconds 200
+            }
+            if (-not $ready) { throw '本机 Redis 未就绪，后端尚未启动。请检查 Ubuntu 的 redis-server 和 Windows 本机端口转发。' }
+            Write-Host '本机 Redis 已就绪；后端运行期间保持 Ubuntu WSL 活跃。'
+        }
         & mvn spring-boot:run
         if ($LASTEXITCODE -ne 0) { throw '本地后端启动失败，请查看不含凭据的应用诊断。' }
     } else {
@@ -92,6 +134,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw '本机认证全量验收失败，请检查 Surefire 汇总。' }
     }
 } finally {
+    # 只释放本次启动的辅助进程，不停止 Redis 服务、不关闭整个 WSL。
+    if ($null -ne $wslKeeper -and -not $wslKeeper.HasExited) {
+        Stop-Process -Id $wslKeeper.Id -ErrorAction Continue
+    }
     foreach ($name in $previousEnvironment.Keys) {
         if ($null -eq $previousEnvironment[$name]) {
             # PowerShell 到 .NET 的 null/string 转换可能留下空环境变量；原本不存在的键要真正移除。
