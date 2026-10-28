@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 导航、页脚与 index.html 的标签图标指向同一 SVG，避免复制路径绘制造成品牌漂移。
-const markUrl = '/polyhouse-mark.svg'
+// 更新修订号让浏览器重新加载新图形，标签页沿用相同地址，不生成第二份图案。
+const markUrl = '/polyhouse-mark.svg?v=2'
 </script>
 
 <template>
