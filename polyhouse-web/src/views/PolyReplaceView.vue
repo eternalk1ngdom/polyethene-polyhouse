@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElAlert, ElButton, ElInput } from 'element-plus'
 import type { ReplaceRule } from '../core/acReplacer'
@@ -13,6 +13,8 @@ import type {
 } from '../core/polyReplaceProtocol'
 
 const selectedFiles = ref<File[]>([])
+const filePicker = ref<HTMLInputElement>()
+const fileList = ref<HTMLUListElement>()
 const selectedMode = ref<ReplaceMode>('files')
 const inputEncoding = ref<InputEncoding>('utf-8')
 const directorySupported = 'webkitdirectory' in document.createElement('input')
@@ -63,6 +65,21 @@ function selectFile(event: Event, mode: ReplaceMode): void {
   } catch (error: unknown) {
     message.value = error instanceof Error ? error.message : '选择失败，请重试'
   }
+}
+
+/** 移除仅影响本次选择；先终止旧任务并清空结果，避免下载包仍含用户已排除的文件。 */
+async function removeFile(index: number): Promise<void> {
+  if (index < 0 || index >= selectedFiles.value.length) return
+  const wasBusy = busy.value
+  invalidate()
+  selectedFiles.value.splice(index, 1)
+  if (wasBusy) message.value = '已取消处理并移除文件，请重新开始替换。'
+  // 删除按钮会随清单移除，主动把键盘焦点交给相邻项，删空后回到文件选择入口。
+  await nextTick()
+  const buttons = fileList.value?.querySelectorAll<HTMLButtonElement>('.remove-file')
+  const nextButton = buttons?.[Math.min(index, selectedFiles.value.length - 1)]
+  if (nextButton) nextButton.focus()
+  else filePicker.value?.focus()
 }
 
 /** 限制规则数量，控制任务工作量。 */
@@ -161,11 +178,16 @@ function download(): void {
           MiB。文件夹保留目录结构并打包为 ZIP，空文件夹不会包含在结果中；
           任一文件无法处理则整批停止，请移除二进制文件或检查输入编码。
         </p>
+        <p>
+          Python 等源码按全文替换，注释、字符串和代码中匹配的内容都会修改，不支持仅替换注释。
+          文件夹不会自动跳过 .git、.venv 等目录，请先准备需要处理的小型文本目录。
+        </p>
         <label class="file-button"
           >选择文件<input
+            ref="filePicker"
             type="file"
             multiple
-            accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.xml,.yml,.yaml,.log"
+            accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
             @change="selectFile($event, 'files')"
         /></label>
         <label v-if="directorySupported" class="file-button directory-button"
@@ -179,10 +201,19 @@ function download(): void {
         <span class="file-name">{{
           selectedFiles.length ? `已选 ${selectedFiles.length} 个文件` : '尚未选择文件'
         }}</span>
-        <ul v-if="selectedFiles.length" class="file-list">
+        <ul v-if="selectedFiles.length" ref="fileList" class="file-list">
           <li v-for="(file, index) in selectedFiles" :key="index">
-            {{ index + 1 }}.
-            {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}
+            <span class="selected-path"
+              >{{ index + 1 }}.
+              {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}</span
+            >
+            <ElButton
+              text
+              class="remove-file"
+              :aria-label="`移除 ${selectedMode === 'directory' ? file.webkitRelativePath : file.name}`"
+              @click="removeFile(index)"
+              >移除</ElButton
+            >
           </li>
         </ul>
         <label for="input-encoding">文件原本的编码</label>
@@ -192,7 +223,7 @@ function download(): void {
         </select>
         <p id="encoding-help">
           请选择所有文件共同使用的编码；无法自动判断，请检查预览。导出统一为 UTF-8，GBK
-          文件不会保留原编码；HTML、XML 等文件中的编码声明不会自动修改。
+          文件不会保留原编码；Python、HTML、XML 等文件中的编码声明不会自动修改。
         </p>
         <h2>2. 设置替换规则</h2>
         <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
@@ -356,10 +387,25 @@ label:not(.file-button) {
 .file-list {
   max-height: 140px;
   overflow: auto;
-  padding-left: 22px;
+  padding: 0;
+  list-style: none;
   overflow-wrap: anywhere;
   color: var(--ph-muted);
   font-size: 14px;
+}
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.selected-path {
+  min-width: 0;
+  flex: 1;
+}
+.remove-file {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
 }
 select {
   width: 100%;

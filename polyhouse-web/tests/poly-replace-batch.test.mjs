@@ -46,6 +46,18 @@ test('文件夹保留根目录和嵌套路径、文件名及原始字节格式',
   assert.deepEqual([...result[0].content], [...new TextEncoder().encode('\uFEFFB\r\n')])
   assert.equal(result[1].preview, 'C')
 })
+
+test('Python 源码全文替换，保留目录、扩展名、空初始化文件和换行', () => {
+  const result = replaceBatch(
+    [file('项目/main.py', '# 小明的说明\r\nname = "小明"\r\n'), file('项目/pkg/__init__.py', '')],
+    [{ search: '小明', replace: '小蓝' }],
+    'directory',
+  )
+  assert.deepEqual(result.map((entry) => entry.name), ['项目/main.py', '项目/pkg/__init__.py'])
+  assert.equal(new TextDecoder().decode(result[0].content), '# 小蓝的说明\r\nname = "小蓝"\r\n')
+  assert.equal(result[0].count, 2)
+  assert.equal(result[1].content.byteLength, 0)
+})
 test('文件夹拒绝路径穿越、跨根、跨平台重名及文件与目录冲突', () => {
   for (const path of [
     '根/../a',
