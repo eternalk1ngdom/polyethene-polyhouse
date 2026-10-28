@@ -21,7 +21,7 @@ import { ArrowRight } from '@element-plus/icons-vue'
   margin: 100px auto;
 }
 .error-code {
-  color: var(--ph-green);
+  color: var(--ph-brand);
   font-size: 13px;
   letter-spacing: 1px;
 }
@@ -38,7 +38,7 @@ a {
   align-items: center;
   gap: 24px;
   color: white;
-  background: var(--ph-green);
+  background: var(--ph-brand);
   border-radius: 8px;
   padding: 14px 20px;
   margin-top: 24px;

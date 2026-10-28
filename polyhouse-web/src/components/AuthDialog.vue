@@ -55,7 +55,7 @@ const form = reactive<AuthFormValues>({
   nickname: '',
   confirmation: '',
 })
-const title = computed(() => (mode.value === 'login' ? '欢迎回到聚妙屋' : '给自己留个小空间'))
+const title = computed(() => (mode.value === 'login' ? '欢迎回到聚妙屋' : '开启你的个人空间'))
 
 function fieldRule(validate: (value: string) => string | null): FormItemRule {
   return {
@@ -159,8 +159,8 @@ watch(
         <p class="auth-intro">
           {{
             mode === 'login'
-              ? '回到你的小屋，继续日常的每一点成长。'
-              : '一个账号，收藏顺手工具，积攒每天的成长。'
+              ? '登录你的账号，继续探索日常里的新可能。'
+              : '一个账号，查看个人资料，记录每天的成长。'
           }}
         </p>
         <div class="auth-tabs" role="group" aria-label="选择登录或注册">
@@ -287,13 +287,13 @@ watch(
   outline: none;
 }
 .auth-host :deep(.el-form-item__label) {
-  color: #694451;
+  color: var(--ph-ink);
   font-size: 13px;
 }
 .auth-eyebrow {
   font-size: 9px;
   letter-spacing: 1.5px;
-  color: #8f6b78;
+  color: var(--ph-muted);
   margin: 8px 0 14px;
 }
 .auth-intro {
@@ -318,8 +318,8 @@ watch(
   cursor: pointer;
 }
 .auth-tabs button.active {
-  border-color: var(--ph-green);
-  color: var(--ph-green);
+  border-color: var(--ph-brand);
+  color: var(--ph-brand);
   font-weight: 600;
 }
 .auth-tabs button:disabled {

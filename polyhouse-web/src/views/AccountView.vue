@@ -61,8 +61,9 @@ onMounted(() => {
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
         <div class="profile-cover">
-          <span>YOUR LITTLE CORNER / 个人空间</span
-          ><span class="cover-star" aria-hidden="true">✳</span>
+          <span>MY SPACE / 我的个人空间</span
+          ><span class="cover-word" aria-hidden="true">Hello, you.</span
+          ><span class="cover-stamp" aria-hidden="true">MAKE ROOM<br />FOR YOURSELF</span>
         </div>
         <div class="profile-overview">
           <button
@@ -80,7 +81,7 @@ onMounted(() => {
             <span class="avatar-edit-label">更换头像</span>
           </button>
           <div class="identity-copy">
-            <p class="eyebrow">很高兴，在小屋见到你</p>
+            <p class="eyebrow">欢迎回来，今天也有新的可能</p>
             <h1 id="profile-name">
               {{ userDisplayName(userStore.user)
               }}<span class="role-badge">{{ userRoleLabel(userStore.user.role) }}</span>
@@ -111,7 +112,11 @@ onMounted(() => {
         </dl>
       </section>
 
-      <UserGrowthPanel />
+      <nav class="profile-nav" aria-label="个人空间分区">
+        <a href="#my-growth">我的成长</a><a href="#profile-details-title">账号资料</a
+        ><a href="#my-tools-title">常用工具</a><a href="#account-management-title">账号管理</a>
+      </nav>
+      <UserGrowthPanel id="my-growth" />
       <ElAlert
         v-if="avatarNotice"
         class="avatar-notice"
@@ -264,129 +269,125 @@ onMounted(() => {
 
 <style scoped>
 .account-page {
-  width: min(1120px, calc(100% - 96px));
-  margin: 32px auto 0;
+  width: min(1160px, calc(100% - 96px));
+  margin: 24px auto 0;
 }
 .back-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
   color: var(--ph-muted);
-  padding: 8px 0;
-  margin-bottom: 22px;
+  font-size: 13px;
+  min-height: 40px;
+  margin-bottom: 20px;
 }
 .profile-hero {
   border: 1px solid var(--ph-line);
-  border-radius: 18px;
-  background: #ffffff;
+  border-radius: 20px;
   overflow: hidden;
+  background: white;
 }
 .profile-cover {
-  height: 134px;
-  background: #ffffff;
-  border-bottom: 1px solid var(--ph-line);
+  height: 180px;
+  background: var(--ph-lilac);
   position: relative;
   overflow: hidden;
-  padding: 24px 34px;
-  color: #8f6775;
-  font-size: 9px;
+  padding: 25px 34px;
+  color: var(--ph-ink);
+  font-size: 10px;
   letter-spacing: 2px;
 }
-.profile-cover::before,
-.profile-cover::after {
-  content: '';
+.cover-word {
   position: absolute;
-  width: 350px;
-  height: 350px;
+  right: 13%;
+  bottom: -20px;
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(75px, 10vw, 140px);
+  letter-spacing: -6px;
+  color: #443259;
+  transform: rotate(-6deg);
+}
+.cover-stamp {
+  position: absolute;
+  right: 30px;
+  top: 27px;
+  padding: 13px;
+  border: 1px solid #89729e;
+  font-size: 8px;
+  line-height: 1.6;
+  transform: rotate(8deg);
   border-radius: 50%;
-  border: 1px solid #e7cbd5;
-  right: 60px;
-  top: -220px;
-}
-.profile-cover::after {
-  right: -90px;
-  top: -120px;
-}
-.cover-star {
-  position: absolute;
-  right: 180px;
-  top: 26px;
-  font-size: 75px;
-  color: #c49fac;
 }
 .profile-overview {
   display: flex;
   gap: 24px;
   align-items: center;
   padding: 0 34px;
-  margin-top: -32px;
+  margin-top: -36px;
   position: relative;
 }
-.profile-overview :deep(.user-avatar) {
+.avatar-edit {
+  position: relative;
   align-self: flex-start;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.profile-overview :deep(.user-avatar) {
   border-width: 5px;
   font-size: 34px;
 }
-.avatar-edit {
-  align-self: flex-start;
-  flex-shrink: 0;
-  position: relative;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 50%;
-}
-.avatar-edit > .avatar-edit-label {
+.avatar-edit-label {
   position: absolute;
-  bottom: 4px;
+  bottom: 2px;
   left: 7px;
   right: 7px;
-  padding: 4px 0;
-  background: #956073d9;
+  padding: 5px 0;
+  background: #0d0c22db;
   color: white;
-  border-radius: 0 0 28px 28px;
   font-size: 10px;
+  border-radius: 0 0 28px 28px;
 }
 .avatar-edit:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-.avatar-notice {
-  margin-top: 18px;
 }
 .identity-copy {
   min-width: 0;
   padding-top: 48px;
 }
 .eyebrow {
-  margin: 0 0 10px;
-  font-size: 9px;
-  color: #8e6a77;
+  font-size: 10px;
   letter-spacing: 1px;
+  color: var(--ph-muted);
+  margin: 0 0 8px;
 }
 h1 {
-  font-size: 29px;
-  margin: 0;
-  overflow-wrap: anywhere;
+  font-size: 30px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin: 0;
 }
 .role-badge {
   display: inline-block;
   margin-left: 14px;
-  vertical-align: middle;
-  background: #fdf7f9;
-  color: #80485c;
-  padding: 4px 9px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  border-radius: 5px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  color: var(--ph-ink);
+  background: var(--ph-cream);
+  vertical-align: middle;
 }
 .profile-account {
-  font-size: 12px;
+  margin: 6px 0 0;
+  font-size: 13px;
   color: var(--ph-muted);
-  margin: 7px 0 0;
   overflow-wrap: anywhere;
 }
 .refresh-button {
@@ -401,31 +402,46 @@ h1 {
 .profile-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 26px 34px 30px 150px;
   gap: 28px;
+  padding: 28px 34px 30px 150px;
   margin: 0;
 }
 .profile-stats > div {
   min-width: 0;
-  border-top: 1px solid var(--ph-line);
-  padding-top: 18px;
   display: flex;
   flex-direction: column-reverse;
-  gap: 7px;
+  gap: 8px;
 }
 .profile-stats dt {
   color: var(--ph-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .profile-stats dd {
   margin: 0;
-  font-size: 25px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 650;
   overflow-wrap: anywhere;
+}
+.profile-nav {
+  display: flex;
+  gap: 24px;
+  margin-top: 24px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--ph-line);
+  overflow-x: auto;
+}
+.profile-nav a {
+  display: block;
+  padding: 17px 4px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.profile-nav a:hover {
+  color: var(--ph-accent-strong);
 }
 .account-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
   margin-top: 24px;
 }
@@ -434,7 +450,7 @@ h1 {
   min-width: 0;
   padding: 30px;
   border: 1px solid var(--ph-line);
-  border-radius: 15px;
+  border-radius: 18px;
   background: white;
 }
 .panel-title {
@@ -444,31 +460,29 @@ h1 {
   margin-bottom: 26px;
 }
 .panel-title .eyebrow {
-  font-size: 8px;
-  margin-bottom: 6px;
+  font-size: 9px;
+  margin-bottom: 5px;
 }
 .panel-title h2 {
+  font-size: 20px;
   margin: 0;
-  font-size: 19px;
   font-weight: 600;
 }
 .panel-icon {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
-  background: #fdf7f9;
-  color: #93596e;
+  border-radius: 12px;
   font-size: 21px;
+  background: var(--ph-pink-soft);
+  color: var(--ph-ink);
 }
-.apricot {
-  background: #f8f5fc;
-  color: #776989;
+.panel-icon.apricot {
+  background: var(--ph-lilac);
 }
-.neutral {
-  background: #f7f2f4;
-  color: #886974;
+.panel-icon.neutral {
+  background: var(--ph-soft);
 }
 .profile-details {
   display: grid;
@@ -479,7 +493,7 @@ h1 {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
   gap: 12px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .profile-details dt {
@@ -494,7 +508,7 @@ h1 {
 }
 .panel-note {
   color: var(--ph-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   margin: 24px 0 0;
 }
@@ -503,13 +517,12 @@ h1 {
   align-items: center;
   gap: 12px;
   padding: 16px 0;
-  border-bottom: 1px solid #f4ebee;
+  border-bottom: 1px solid var(--ph-line);
 }
 .tool-shortcut:hover {
-  color: var(--ph-green);
+  color: var(--ph-accent-strong);
 }
 .shortcut-icon {
-  color: #a27e8b;
   font-size: 21px;
 }
 .shortcut-copy {
@@ -524,10 +537,7 @@ h1 {
   display: block;
   margin-top: 5px;
   color: var(--ph-muted);
-  font-size: 11px;
-}
-.tool-shortcut > .el-icon {
-  color: #a27e8b;
+  font-size: 12px;
 }
 .management-panel {
   margin-top: 24px;
@@ -540,15 +550,15 @@ h1 {
   padding: 20px 0 4px;
 }
 .management-row h3 {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 550;
   margin: 0 0 8px;
-  font-weight: 500;
 }
 .management-row p {
-  margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ph-muted);
   line-height: 1.8;
+  margin: 0;
 }
 .management-row .el-button {
   flex-shrink: 0;
@@ -559,104 +569,99 @@ h1 {
   border-top: 1px solid var(--ph-line);
 }
 .cancellation-row h3 {
-  color: #9d5b47;
+  color: #b42335;
 }
 .action-error {
   margin-bottom: 12px;
 }
+.avatar-notice {
+  margin-top: 18px;
+}
 .anonymous-panel {
   text-align: center;
-  padding: 68px 24px;
-  border: 1px solid var(--ph-line);
-  border-radius: 18px;
-  background: #ffffff;
+  padding: 70px 24px;
+  border-radius: 22px;
+  background: var(--ph-cream);
 }
 .anonymous-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 24px;
+  width: 70px;
+  height: 70px;
   display: grid;
   place-items: center;
+  background: var(--ph-lilac);
+  color: var(--ph-ink);
+  font-size: 32px;
   border-radius: 50%;
-  background: #f8e8ee;
-  color: #915e70;
-  font-size: 30px;
+  margin: 0 auto 24px;
 }
 .anonymous-panel > p:not(.eyebrow) {
-  font-size: 13px;
   color: var(--ph-muted);
   line-height: 1.9;
+  font-size: 14px;
   margin: 18px 0 28px;
 }
 .anonymous-home {
   display: inline-flex;
-  align-items: center;
   gap: 8px;
-  font-size: 12px;
+  align-items: center;
   margin-left: 24px;
-  color: var(--ph-green);
+  font-size: 13px;
 }
 @media (max-width: 760px) {
+  .account-page {
+    width: calc(100% - 40px);
+    margin-top: 14px;
+  }
   .account-grid {
     grid-template-columns: 1fr;
   }
-  .profile-overview {
-    gap: 18px;
-    flex-wrap: wrap;
-  }
-  .identity-copy {
-    padding-top: 48px;
-    flex: 1;
-  }
-  .refresh-button {
-    margin: 0 0 0 110px;
-  }
-  .profile-stats {
-    padding-left: 34px;
-  }
-}
-@media (max-width: 640px) {
-  .account-page {
-    width: calc(100% - 40px);
-    margin-top: 22px;
-  }
   .profile-cover {
+    height: 145px;
     padding: 20px;
-    height: 115px;
-    font-size: 8px;
   }
-  .cover-star {
-    right: 40px;
+  .cover-stamp {
+    right: 14px;
+    font-size: 7px;
+  }
+  .cover-word {
+    right: 12%;
+    font-size: 90px;
+    bottom: -8px;
   }
   .profile-overview {
+    /* 固定头像列和资料列，刷新按钮独占下一行，避免中间宽度把昵称挤成竖排。 */
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
     padding: 0 20px;
     gap: 14px;
   }
-  .profile-overview :deep(.user-avatar) {
-    width: 70px !important;
-    height: 70px !important;
-    font-size: 27px;
-  }
   .identity-copy {
-    padding-top: 40px;
-    flex-basis: calc(100% - 84px);
+    padding-top: 45px;
   }
   h1 {
-    font-size: 22px;
+    font-size: 23px;
   }
   .role-badge {
-    margin: 7px 0 0;
     display: table;
+    margin: 7px 0 0;
   }
   .refresh-button {
-    margin: 0 0 0 84px;
+    grid-column: 2;
+    justify-self: start;
+    margin: 0;
   }
   .profile-stats {
-    gap: 16px;
     padding: 24px 20px;
+    gap: 16px;
   }
   .profile-stats dd {
-    font-size: 20px;
+    font-size: 22px;
+  }
+  .profile-nav {
+    gap: 18px;
+  }
+  .profile-nav a {
+    font-size: 13px;
   }
   .info-panel,
   .management-panel {
@@ -668,9 +673,6 @@ h1 {
   }
   .management-row .el-button {
     width: 100%;
-  }
-  .anonymous-panel {
-    padding: 45px 20px;
   }
   .anonymous-home {
     display: flex;

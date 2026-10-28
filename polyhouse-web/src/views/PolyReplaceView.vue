@@ -167,7 +167,7 @@ function download(): void {
     <RouterLink class="back" to="/">← 返回首页</RouterLink>
     <header>
       <p class="eyebrow">POLYREPLACE / 文本替换</p>
-      <h1>妙替</h1>
+      <h1>妙替<span class="workspace-label">本地文本工作台</span></h1>
       <p>让重复的文字修改，简单一点。</p>
     </header>
     <div class="layout">
@@ -285,15 +285,18 @@ function download(): void {
 
 <style scoped>
 .replace-page {
-  width: min(1200px, calc(100% - 96px));
-  margin: 48px auto 0;
+  width: min(1320px, calc(100% - 96px));
+  margin: 28px auto 0;
 }
 .back {
   color: var(--ph-muted);
   font-size: 14px;
 }
 header {
-  margin: 38px 0 30px;
+  margin: 24px 0 30px;
+  padding: 30px 34px;
+  background: var(--ph-cream);
+  border-radius: 20px;
 }
 .eyebrow {
   color: var(--ph-muted);
@@ -301,8 +304,19 @@ header {
   letter-spacing: 1.5px;
 }
 h1 {
-  font-size: 40px;
+  font-size: 42px;
   margin: 10px 0;
+}
+.workspace-label {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ph-muted);
+  margin-left: 18px;
+  padding: 7px 12px;
+  border: 1px solid var(--ph-line);
+  border-radius: 99px;
 }
 h2 {
   font-size: 20px;
@@ -332,7 +346,7 @@ p {
 .file-button {
   display: inline-block;
   padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: 99px;
   border: 1px solid var(--ph-line);
   cursor: pointer;
 }
@@ -359,7 +373,7 @@ p {
 .rule {
   margin: 18px 0;
   padding: 16px;
-  background: #ffffff;
+  background: var(--ph-soft);
   border: 1px solid var(--ph-line);
   border-radius: 10px;
 }
@@ -421,14 +435,19 @@ textarea {
   border: 1px solid var(--ph-line);
   border-radius: 8px;
   padding: 12px;
-  font: inherit;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 13px;
   line-height: 1.6;
 }
 .download {
   margin-top: 16px;
 }
 .empty {
-  padding: 24px 0;
+  padding: 70px 24px;
+  text-align: center;
+  border: 1px dashed var(--ph-line);
+  border-radius: 12px;
+  background: var(--ph-soft);
 }
 @media (max-width: 700px) {
   .replace-page {
@@ -440,6 +459,9 @@ textarea {
   }
   .panel {
     padding: 20px;
+  }
+  header {
+    padding: 24px 20px;
   }
 }
 </style>

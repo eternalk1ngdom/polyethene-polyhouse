@@ -350,13 +350,13 @@ onBeforeUnmount(releaseImage)
   position: relative;
   touch-action: none;
   cursor: grab;
-  background: #f7eef1;
+  background: var(--ph-soft);
 }
 .crop-stage:active {
   cursor: grabbing;
 }
 .crop-stage:focus-visible {
-  outline: 3px solid var(--ph-green);
+  outline: 3px solid var(--ph-brand);
   outline-offset: 4px;
 }
 .crop-stage canvas {
@@ -378,10 +378,10 @@ onBeforeUnmount(releaseImage)
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: #fdf7f9;
-  color: #9c7684;
+  background: var(--ph-soft);
+  color: var(--ph-muted);
   font-size: 12px;
-  border: 1px dashed #e8cbd5;
+  border: 1px dashed var(--ph-line);
 }
 .empty-preview .el-icon {
   font-size: 36px;

@@ -17,7 +17,9 @@ export interface ToolRegistryItem {
   /** 显式区分说明页和可用工具，避免误导用户上传文件。 */
   status: 'planned' | 'available'
   /** 语义化配色由组件解释，不在元数据中保存 CSS。 */
-  accent: 'mint' | 'apricot'
+  accent: 'lilac' | 'peach'
+  /** 分类与封面共用语义类别，不根据中文文案猜测筛选。 */
+  category: 'text' | 'image'
   /** 近期计划用于说明当前交付边界。 */
   plannedFeatures: readonly string[]
 }
@@ -33,7 +35,8 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     subtitle: 'PolyReplace',
     description: '在浏览器本地批量替换 UTF-8 文本文件或小型文件夹，预览并下载结果。',
     status: 'available',
-    accent: 'mint',
+    accent: 'lilac',
+    category: 'text',
     plannedFeatures: ['多组规则，一次替换', '文件与目录批量处理', '结果预览与文件导出'],
   },
   {
@@ -45,7 +48,8 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     subtitle: 'TargetKB',
     description: '为照片找到刚刚好的大小，让那些挑剔的文件限制简单一点。',
     status: 'planned',
-    accent: 'apricot',
+    accent: 'peach',
+    category: 'image',
     plannedFeatures: ['按目标体积压缩', '小图片无损增重', '尺寸、DPI 与常用规格'],
   },
 ]
