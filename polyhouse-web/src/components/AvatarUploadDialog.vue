@@ -335,7 +335,7 @@ onBeforeUnmount(releaseImage)
   position: relative;
   touch-action: none;
   cursor: grab;
-  background: #eef1e9;
+  background: #edf3f8;
 }
 .crop-stage:active {
   cursor: grabbing;
@@ -354,7 +354,7 @@ onBeforeUnmount(releaseImage)
   inset: 1px;
   border-radius: 50%;
   border: 1px solid #ffffffb3;
-  box-shadow: 0 0 0 60px #1b302e59;
+  box-shadow: 0 0 0 60px #23364d59;
   pointer-events: none;
 }
 .empty-preview {
@@ -363,10 +363,10 @@ onBeforeUnmount(releaseImage)
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: #edf2e7;
-  color: #7c8e70;
+  background: #edf5fc;
+  color: #718aa1;
   font-size: 12px;
-  border: 1px dashed #c6d4b9;
+  border: 1px dashed #c7dcec;
 }
 .empty-preview .el-icon {
   font-size: 36px;

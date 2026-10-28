@@ -22,21 +22,24 @@ import TopNavBar from './components/TopNavBar.vue'
 /* 全站基础由外壳统一设置，后续工具页继承相同的颜色、间距和键盘焦点。 */
 :global(:root) {
   font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  color: #242b29;
-  background: #fafbf8;
+  color: #23364d;
+  background: var(--ph-surface);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --ph-ink: #242b29;
-  --ph-muted: #69716d;
-  --ph-line: #e2e6df;
-  --ph-green: #325e4d;
-  --el-color-primary: #325e4d;
-  --el-color-primary-light-3: #698e7e;
-  --el-color-primary-light-5: #92ad9f;
-  --el-color-primary-light-7: #c2d2c8;
-  --el-color-primary-light-9: #edf3ee;
-  --el-color-primary-dark-2: #274b3d;
+  --ph-ink: #23364d;
+  --ph-muted: #5f7084;
+  --ph-line: #dce6ef;
+  --ph-brand: #356fa8;
+  --ph-green: var(--ph-brand);
+  --ph-surface: #f6f9fd;
+  --ph-soft: #eaf3fc;
+  --el-color-primary: #356fa8;
+  --el-color-primary-light-3: #729cc2;
+  --el-color-primary-light-5: #a1bfd9;
+  --el-color-primary-light-7: #c9deef;
+  --el-color-primary-light-9: #edf5fc;
+  --el-color-primary-dark-2: #285982;
   --el-border-radius-base: 10px;
 }
 
@@ -58,12 +61,12 @@ import TopNavBar from './components/TopNavBar.vue'
 :global(a:focus-visible),
 :global(button:focus-visible),
 :global([tabindex]:focus-visible) {
-  outline: 3px solid #54826c;
+  outline: 3px solid #356fa8;
   outline-offset: 5px;
 }
 :global(::selection) {
-  background: #d6e9ae;
-  color: #243b2c;
+  background: #d9ebf9;
+  color: #23364d;
 }
 
 .app-shell {

@@ -76,8 +76,8 @@ const toolIcons = { Document, Picture }
   display: grid;
   place-items: center;
   border-radius: 15px;
-  background: #e9efdf;
-  color: #4d6c42;
+  background: #eaf3fc;
+  color: #416f98;
   font-size: 30px;
 }
 .apricot .tool-icon {
@@ -103,12 +103,12 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f3f5ed;
-  border: 1px solid #e2e8d8;
+  background: #f2f7fb;
+  border: 1px solid #d9e8f4;
   border-radius: 8px;
   padding: 15px 18px;
   font-size: 13px;
-  color: #526446;
+  color: #536c83;
 }
 .feature-list {
   margin-top: 32px;
@@ -133,7 +133,7 @@ li {
 }
 li > span {
   margin-right: 10px;
-  color: #748665;
+  color: #72899d;
 }
 .availability-note {
   font-size: 12px;
@@ -152,7 +152,7 @@ li > span {
   font-size: 13px;
 }
 .home-action:hover {
-  background: #436c57;
+  background: #356fa8;
 }
 @media (max-width: 640px) {
   .tool-page {

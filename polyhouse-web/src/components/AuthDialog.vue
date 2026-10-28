@@ -268,7 +268,7 @@ watch(
   overflow-y: auto;
   border-radius: 18px;
   padding: 28px;
-  background: #fffefb;
+  background: #ffffff;
 }
 .auth-host :deep(.el-dialog__title) {
   font-size: 23px;
@@ -287,13 +287,13 @@ watch(
   outline: none;
 }
 .auth-host :deep(.el-form-item__label) {
-  color: #46554b;
+  color: #40566d;
   font-size: 13px;
 }
 .auth-eyebrow {
   font-size: 9px;
   letter-spacing: 1.5px;
-  color: #718268;
+  color: #667d94;
   margin: 8px 0 14px;
 }
 .auth-intro {

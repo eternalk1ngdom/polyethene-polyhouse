@@ -278,16 +278,16 @@ onMounted(() => {
 .profile-hero {
   border: 1px solid var(--ph-line);
   border-radius: 18px;
-  background: #fffefb;
+  background: #ffffff;
   overflow: hidden;
 }
 .profile-cover {
   height: 134px;
-  background: #e7eddb;
+  background: #e4f0fa;
   position: relative;
   overflow: hidden;
   padding: 24px 34px;
-  color: #6c7d5a;
+  color: #627c94;
   font-size: 9px;
   letter-spacing: 2px;
 }
@@ -298,7 +298,7 @@ onMounted(() => {
   width: 350px;
   height: 350px;
   border-radius: 50%;
-  border: 1px solid #cad6b9;
+  border: 1px solid #c8dcea;
   right: 60px;
   top: -220px;
 }
@@ -311,7 +311,7 @@ onMounted(() => {
   right: 180px;
   top: 26px;
   font-size: 75px;
-  color: #9daf83;
+  color: #9ab5c9;
 }
 .profile-overview {
   display: flex;
@@ -342,7 +342,7 @@ onMounted(() => {
   left: 7px;
   right: 7px;
   padding: 4px 0;
-  background: #325e4dd9;
+  background: #356fa8d9;
   color: white;
   border-radius: 0 0 28px 28px;
   font-size: 10px;
@@ -361,7 +361,7 @@ onMounted(() => {
 .eyebrow {
   margin: 0 0 10px;
   font-size: 9px;
-  color: #728268;
+  color: #667e93;
   letter-spacing: 1px;
 }
 h1 {
@@ -374,8 +374,8 @@ h1 {
   display: inline-block;
   margin-left: 14px;
   vertical-align: middle;
-  background: #edf2e8;
-  color: #4e6940;
+  background: #eaf3fc;
+  color: #416987;
   padding: 4px 9px;
   font-size: 10px;
   font-weight: 500;
@@ -456,8 +456,8 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 11px;
-  background: #eaf0e1;
-  color: #63814d;
+  background: #eaf3fc;
+  color: #52789a;
   font-size: 21px;
 }
 .apricot {
@@ -465,8 +465,8 @@ h1 {
   color: #9e7b50;
 }
 .neutral {
-  background: #f0f2ed;
-  color: #6c7a63;
+  background: #f1f5f8;
+  color: #65798c;
 }
 .profile-details {
   display: grid;
@@ -501,13 +501,13 @@ h1 {
   align-items: center;
   gap: 12px;
   padding: 16px 0;
-  border-bottom: 1px solid #edf0e9;
+  border-bottom: 1px solid #eaf0f5;
 }
 .tool-shortcut:hover {
   color: var(--ph-green);
 }
 .shortcut-icon {
-  color: #849575;
+  color: #7a92a7;
   font-size: 21px;
 }
 .shortcut-copy {
@@ -525,7 +525,7 @@ h1 {
   font-size: 11px;
 }
 .tool-shortcut > .el-icon {
-  color: #849575;
+  color: #7a92a7;
 }
 .management-panel {
   margin-top: 24px;
@@ -567,7 +567,7 @@ h1 {
   padding: 68px 24px;
   border: 1px solid var(--ph-line);
   border-radius: 18px;
-  background: #fffefb;
+  background: #ffffff;
 }
 .anonymous-icon {
   width: 64px;
@@ -576,8 +576,8 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #e8eedf;
-  color: #698054;
+  background: #e6f1fa;
+  color: #587a97;
   font-size: 30px;
 }
 .anonymous-panel > p:not(.eyebrow) {

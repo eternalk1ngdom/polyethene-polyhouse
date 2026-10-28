@@ -105,7 +105,7 @@ const growth = useUserGrowthStore()
   margin-top: 24px;
   padding: 30px;
   border: 1px solid var(--ph-line);
-  background: #fffefb;
+  background: #ffffff;
   border-radius: 15px;
   color: var(--ph-ink);
 }
@@ -118,7 +118,7 @@ const growth = useUserGrowthStore()
 }
 .eyebrow {
   font-size: 8px;
-  color: #728268;
+  color: #667e93;
   letter-spacing: 1.3px;
   margin: 0 0 8px;
 }
@@ -131,11 +131,11 @@ h2 {
   font-weight: 600;
 }
 h2 .el-icon {
-  color: #7c9466;
+  color: #6c8ba6;
 }
 .level-badge {
-  background: #eaf0df;
-  color: #4f6e3d;
+  background: #eaf3fc;
+  color: #41698a;
   padding: 7px 11px;
   border-radius: 7px;
   font-size: 14px;
@@ -145,7 +145,7 @@ h2 .el-icon {
 .level-badge > span {
   font-size: 11px;
   font-weight: 400;
-  color: #728268;
+  color: #667e93;
 }
 .progress-copy {
   display: flex;
@@ -153,7 +153,7 @@ h2 .el-icon {
   gap: 12px;
   margin-bottom: 12px;
   font-size: 13px;
-  color: #65765c;
+  color: #637b90;
 }
 .progress-copy strong {
   color: var(--ph-green);
@@ -177,26 +177,26 @@ h2 .el-icon {
   margin-top: 24px;
   padding: 18px 20px;
   border-radius: 10px;
-  border: 1px solid #e6e6d5;
-  background: #f6f5ec;
+  border: 1px solid #e0eaf1;
+  background: #f6f8fa;
 }
 .daily-reward.claimed {
-  background: #f0f5e9;
-  border-color: #e0e8d5;
+  background: #eff6fc;
+  border-color: #dceaf5;
 }
 .reward-title {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  color: #506a42;
+  color: #476b89;
 }
 .reward-title strong {
   font-weight: 500;
 }
 .daily-reward p {
   font-size: 15px;
-  color: #3e5f37;
+  color: #345e82;
   margin: 13px 0 10px;
 }
 .daily-reward p > span {
@@ -204,7 +204,7 @@ h2 .el-icon {
 }
 .daily-reward small {
   font-size: 10px;
-  color: #738267;
+  color: #687e91;
 }
 .growth-note {
   color: var(--ph-muted);

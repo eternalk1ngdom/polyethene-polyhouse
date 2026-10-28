@@ -98,7 +98,7 @@ watch(
   overflow-y: auto;
   padding: 28px;
   border-radius: 18px;
-  background: #fffefb;
+  background: #ffffff;
 }
 .cancellation-host :deep(.el-dialog__title) {
   font-size: 21px;
@@ -119,7 +119,7 @@ watch(
 .lead {
   margin-top: 24px;
   font-size: 14px;
-  color: #46554b;
+  color: #40566d;
 }
 .impact-list {
   padding: 16px 18px 16px 34px;
@@ -150,7 +150,7 @@ watch(
   display: block;
   margin-bottom: 10px;
   font-size: 12px;
-  color: #46554b;
+  color: #40566d;
 }
 .cancellation-host :deep(.el-input__wrapper) {
   min-height: 42px;

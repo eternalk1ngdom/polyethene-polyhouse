@@ -137,7 +137,7 @@ watch(
 <style scoped>
 .site-header {
   border-bottom: 1px solid var(--ph-line);
-  background: #fafbf8;
+  background: #f6f9fd;
 }
 .header-inner {
   width: min(1200px, calc(100% - 96px));
@@ -167,7 +167,7 @@ watch(
   position: absolute;
   top: 6px;
   border-radius: 5px;
-  background: #325e4d;
+  background: #356fa8;
   transform: rotate(45deg);
 }
 .brand-mark span {
@@ -175,7 +175,7 @@ watch(
   height: 25px;
   position: absolute;
   bottom: 1px;
-  background: #325e4d;
+  background: #356fa8;
   border-radius: 4px;
 }
 .brand-mark span::after {
@@ -185,7 +185,7 @@ watch(
   height: 13px;
   bottom: 0;
   left: 11px;
-  background: #fafbf8;
+  background: #f6f9fd;
   border-radius: 5px 5px 0 0;
 }
 .brand-name {
@@ -209,7 +209,7 @@ watch(
 .primary-nav a {
   padding: 33px 0;
   font-size: 14px;
-  color: #69716d;
+  color: #5f7084;
   position: relative;
   white-space: nowrap;
 }
@@ -230,7 +230,7 @@ watch(
 .nav-description {
   margin-left: 7px;
   font-size: 11px;
-  color: #7a827d;
+  color: #627487;
 }
 .account-trigger {
   display: flex;
@@ -255,22 +255,22 @@ watch(
 }
 .login-trigger {
   padding: 5px 12px 5px 5px;
-  background: #edf2e8;
-  border: 1px solid #e0e7d8;
+  background: #eaf3fc;
+  border: 1px solid #dbe8f2;
   border-radius: 28px;
 }
 .login-trigger:hover:not(:disabled) {
-  background: #e3ebdc;
+  background: #e0eef9;
 }
 .session-notice {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  border-top: 1px solid #e5e8da;
-  background: #f2f5eb;
+  border-top: 1px solid #dce8f1;
+  background: #f0f6fb;
   padding: 11px 24px;
-  color: #59664c;
+  color: #526c83;
   font-size: 12px;
   line-height: 1.8;
 }
@@ -290,9 +290,9 @@ watch(
   justify-content: center;
   gap: 16px;
   padding: 11px 20px;
-  background: #edf3e8;
-  color: #42623c;
-  border-top: 1px solid #dce6d4;
+  background: #eaf3fc;
+  color: #355e83;
+  border-top: 1px solid #d9e7f2;
   font-size: 12px;
   line-height: 1.8;
 }
@@ -301,7 +301,7 @@ watch(
   font-size: 11px;
   border: 0;
   background: none;
-  color: #42623c;
+  color: #355e83;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -311,8 +311,8 @@ watch(
   height: 34px;
   display: grid;
   place-items: center;
-  background: #e7ece4;
-  border: 1px solid #dbe2d7;
+  background: #e5f0f8;
+  border: 1px solid #d8e5ef;
   border-radius: 50%;
   font-size: 18px;
 }

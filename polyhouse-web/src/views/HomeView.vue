@@ -127,14 +127,14 @@ const toolIcons = { Document, Picture }
   align-items: center;
   gap: 9px;
   margin: 0 0 26px;
-  color: #4f6257;
+  color: #526c83;
   font-size: 13px;
   letter-spacing: 1px;
 }
 .eyebrow > span {
   width: 7px;
   height: 7px;
-  background: #79906b;
+  background: #7295b1;
   border-radius: 50%;
 }
 h1 {
@@ -153,7 +153,7 @@ h1 {
   content: '';
   position: absolute;
   z-index: -1;
-  background: #dceba9;
+  background: #d4eafa;
   height: 17px;
   left: 0;
   right: 7px;
@@ -181,17 +181,17 @@ h1 {
 }
 .primary-action {
   padding: 15px 21px;
-  background: #2c4e40;
+  background: #356fa8;
   color: #fff;
-  border: 1px solid #2c4e40;
+  border: 1px solid #356fa8;
   border-radius: 9px;
   transition: background 0.18s;
 }
 .primary-action:hover {
-  background: #3e6753;
+  background: #285982;
 }
 .secondary-action {
-  color: #4f5b53;
+  color: #52677b;
   gap: 9px;
   padding: 12px 0;
 }
@@ -205,12 +205,12 @@ h1 {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #69716d;
+  color: #5f7084;
   margin: 28px 0 0;
 }
 .tiny-cross {
   font-size: 20px;
-  color: #7a8a6b;
+  color: #768fa3;
 }
 .hero-art {
   height: 390px;
@@ -223,7 +223,7 @@ h1 {
   position: absolute;
   z-index: -2;
   inset: 20px 0 32px;
-  background-image: radial-gradient(#c9d0bf 1px, transparent 1px);
+  background-image: radial-gradient(#c8dbe9 1px, transparent 1px);
   background-size: 19px 19px;
   mask-image: radial-gradient(ellipse, black 35%, transparent 72%);
 }
@@ -234,33 +234,33 @@ h1 {
   height: 300px;
   top: 25px;
   right: 35px;
-  background: #e8edda;
+  background: #e5f1fa;
   border-radius: 50%;
 }
 .demo-paper {
   width: 350px;
-  background: #fffef9;
-  border: 1px solid #cdd4c5;
+  background: #ffffff;
+  border: 1px solid #ccdee9;
   border-radius: 14px;
   transform: rotate(-6deg) translate(-8px, -8px);
-  box-shadow: 8px 12px 0 #e0e6d5;
+  box-shadow: 8px 12px 0 #dbeaf5;
 }
 .paper-top {
   display: flex;
   align-items: center;
   gap: 5px;
   padding: 17px 18px;
-  border-bottom: 1px solid #e4e6dd;
+  border-bottom: 1px solid #e1ebf2;
 }
 .paper-dot {
   width: 6px;
   height: 6px;
-  border: 1px solid #bec5b8;
+  border: 1px solid #bfd0dd;
   border-radius: 50%;
 }
 .paper-label {
   font-size: 10px;
-  color: #76806e;
+  color: #687f92;
   margin-left: auto;
 }
 .paper-content {
@@ -268,11 +268,11 @@ h1 {
 }
 .demo-label {
   font-size: 11px;
-  color: #76806e;
+  color: #687f92;
 }
 .word-before {
   font-size: 25px;
-  color: #93998c;
+  color: #91a3b1;
   text-decoration: line-through;
   text-decoration-thickness: 1px;
   margin-top: 18px;
@@ -280,29 +280,29 @@ h1 {
 .paper-arrow {
   margin: 12px 0 8px;
   font-size: 23px;
-  color: #748a5d;
+  color: #6e8da7;
 }
 .word-after {
   font-size: 29px;
   font-weight: 650;
-  color: #335640;
+  color: #315e83;
   white-space: nowrap;
 }
 .text-cursor {
   display: inline-block;
   width: 2px;
   height: 25px;
-  background: #6e865b;
+  background: #6485a0;
   margin-left: 6px;
   vertical-align: -2px;
 }
 .paper-bottom {
   padding: 12px 18px;
-  border-top: 1px solid #e4e6dd;
+  border-top: 1px solid #e1ebf2;
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: #76806e;
+  color: #687f92;
   font-size: 9px;
 }
 .size-chip {
@@ -351,7 +351,7 @@ h1 {
 .art-spark {
   position: absolute;
   font-size: 62px;
-  color: #395542;
+  color: #315e83;
 }
 .spark-one {
   top: 2px;
@@ -364,7 +364,7 @@ h1 {
   left: 22px;
   font-size: 8px;
   letter-spacing: 2px;
-  color: #6d7864;
+  color: #6c8295;
 }
 .tools-section {
   padding-top: 24px;
@@ -381,7 +381,7 @@ h1 {
   font-size: 9px;
   letter-spacing: 2px;
   font-weight: 600;
-  color: #697765;
+  color: #637b90;
   margin: 0 0 12px;
 }
 .section-heading h2 {
@@ -418,9 +418,9 @@ h1 {
     box-shadow 0.2s;
 }
 .tool-card:hover {
-  border-color: #a0b29d;
+  border-color: #abc9df;
   transform: translateY(-3px);
-  box-shadow: 0 10px 24px #243b2c08;
+  box-shadow: 0 10px 24px #23364d08;
 }
 .card-top {
   display: flex;
@@ -433,8 +433,8 @@ h1 {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: #e9efdf;
-  color: #4d6c42;
+  background: #eaf3fc;
+  color: #416f98;
   font-size: 24px;
 }
 .apricot .tool-icon {
@@ -442,8 +442,8 @@ h1 {
   color: #956e40;
 }
 .tool-status {
-  background: #f4f5f0;
-  color: #71786a;
+  background: #eff4f8;
+  color: #607488;
   font-size: 10px;
   border-radius: 5px;
   padding: 5px 9px;
@@ -461,7 +461,7 @@ h1 {
 }
 .tool-title > span {
   font-size: 12px;
-  color: #697765;
+  color: #637b90;
 }
 .tool-description {
   color: var(--ph-muted);
@@ -471,7 +471,7 @@ h1 {
   max-width: 360px;
 }
 .card-bottom {
-  border-top: 1px solid #edf0e9;
+  border-top: 1px solid #eaf0f5;
   padding-top: 20px;
   display: flex;
   align-items: center;
@@ -480,13 +480,13 @@ h1 {
 }
 .tool-category {
   font-size: 10px;
-  color: #697765;
+  color: #637b90;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .tool-number {
-  color: #7a8473;
+  color: #71889b;
   font-size: 10px;
 }
 .tool-open {
@@ -507,7 +507,7 @@ h1 {
 }
 .about-symbol {
   font-size: 54px;
-  color: #708368;
+  color: #718a9f;
 }
 .about-section .section-kicker {
   font-size: 8px;
@@ -525,7 +525,7 @@ h1 {
   margin-bottom: 0;
 }
 .about-note {
-  color: #697765;
+  color: #637b90;
   font-size: 11px;
   line-height: 1.9;
   margin-left: auto;
