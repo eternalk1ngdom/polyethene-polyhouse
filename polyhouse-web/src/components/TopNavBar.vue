@@ -229,7 +229,7 @@ watch(
 }
 .nav-description {
   margin-left: 7px;
-  font-size: 11px;
+  font-size: 12px;
   color: #836670;
 }
 .account-trigger {

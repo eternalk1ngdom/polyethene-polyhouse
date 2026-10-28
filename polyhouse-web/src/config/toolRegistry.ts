@@ -7,7 +7,7 @@ export interface ToolRegistryItem {
   /** 统一维护入口，保证首页和导航指向同一地址。 */
   route: string
   /** 图标名由展示层映射到 Element Plus 图标，配置不引入组件。 */
-  icon: 'Document' | 'Picture'
+  icon: 'Switch' | 'Crop'
   /** 简短分类帮助用户快速区分用途。 */
   tag: string
   /** 英文副标题作为辅助标识。 */
@@ -28,7 +28,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     code: 'poly-replace',
     title: '妙替',
     route: '/replace',
-    icon: 'Document',
+    icon: 'Switch',
     tag: '文本替换',
     subtitle: 'PolyReplace',
     description: '从一段文字到一整个文件夹，让重复的替换工作更轻松。',
@@ -40,7 +40,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     code: 'target-kb',
     title: '妙压',
     route: '/targetkb',
-    icon: 'Picture',
+    icon: 'Crop',
     tag: '图片处理',
     subtitle: 'TargetKB',
     description: '为照片找到刚刚好的大小，让那些挑剔的文件限制简单一点。',

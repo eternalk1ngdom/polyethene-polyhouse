@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { ArrowLeft, ArrowRight, Clock, Document, Picture } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Clock, Crop, Switch } from '@element-plus/icons-vue'
 import type { ToolRegistryItem } from '../config/toolRegistry'
 
 /** 由路由页面提供已注册的工具，说明组件不自行推断路由或接收文件。 */
@@ -11,7 +11,7 @@ interface Props {
 }
 
 defineProps<Props>()
-const toolIcons = { Document, Picture }
+const toolIcons = { Switch, Crop }
 </script>
 
 <template>

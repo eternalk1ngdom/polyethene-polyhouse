@@ -5,9 +5,10 @@ import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import {
   ArrowLeft,
   ArrowRight,
+  Crop,
   Document,
   Lock,
-  Picture,
+  Switch,
   Refresh,
   SwitchButton,
   User,
@@ -28,7 +29,7 @@ const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
-const toolIcons = { Document, Picture }
+const toolIcons = { Switch, Crop }
 
 function openAvatar(): void {
   avatarVisible.value = true
