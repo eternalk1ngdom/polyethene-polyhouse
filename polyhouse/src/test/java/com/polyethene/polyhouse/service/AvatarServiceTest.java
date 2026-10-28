@@ -89,11 +89,21 @@ class AvatarServiceTest {
 
     @Test
     void doesNotConsumeQuotaOnFileFailureAndResetsYesterdayQuota() throws Exception {
-        user.setExtJson(Map.of("avatarUpload", Map.of("date", "2020-01-01", "count", 5)));
+        user.setExtJson(Map.of("theme", "green", "avatarUpload", Map.of("date", "2020-01-01", "count", 5)));
         when(mapper.selectOne(any())).thenReturn(user);
-        when(storage.save(any())).thenThrow(new BusinessException(com.polyethene.polyhouse.common.constant.ErrorCode.SERVICE_UNAVAILABLE));
+        when(storage.save(any())).thenThrow(new BusinessException(com.polyethene.polyhouse.common.constant.ErrorCode.SERVICE_UNAVAILABLE))
+                .thenReturn(next);
+        when(mapper.updateById(any(User.class))).thenReturn(1);
         assertThatThrownBy(() -> service.upload(image(256, 256), "fixture")).isInstanceOf(BusinessException.class);
         verify(mapper, never()).updateById(any(User.class));
+        verify(storage, never()).deleteEventually(any());
+        // 失败后在同一身份重试，只有成功这次计数；昨天的额度不能阻止今天保存。
+        assertThat(service.upload(image(256, 256), "fixture").remainingToday()).isEqualTo(4);
+        var update = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(mapper).updateById(update.capture());
+        assertThat(update.getValue().getExtJson()).containsEntry("theme", "green")
+                .containsEntry("avatarUpload", Map.of("date", LocalDate.now(ZoneId.of("Asia/Shanghai")).toString(), "count", 1));
+        verify(storage).deleteEventually("previous-image");
     }
 
     @Test

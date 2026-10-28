@@ -39,11 +39,15 @@ let selection = 0
 let drag: { id: number; x: number; y: number; cropX: number; cropY: number } | undefined
 
 function releaseImage(): void {
+  // 作废整个编辑过程，包括尚未结束的编码和上传；旧回调不能再修改新弹窗。
   selection += 1
   image.value?.close()
   image.value = undefined
   drag = undefined
   fileName.value = ''
+  loading.value = false
+  saving.value = false
+  error.value = ''
 }
 
 function draw(): void {
@@ -62,7 +66,7 @@ function draw(): void {
 }
 
 async function choose(event: Event): Promise<void> {
-  if (!(event.target instanceof HTMLInputElement) || saving.value) return
+  if (!props.modelValue || !(event.target instanceof HTMLInputElement) || saving.value) return
   const file = event.target.files?.[0]
   event.target.value = ''
   if (!file) return
@@ -171,10 +175,15 @@ function close(): void {
 }
 
 async function save(): Promise<void> {
-  if (!image.value || !canvas.value || saving.value || loading.value) return
+  if (!props.modelValue || !image.value || !canvas.value || saving.value || loading.value) return
   saving.value = true
   const submittedToken = userStore.token
+  const submittedSelection = selection
+  // 同一账号关闭再打开也属于新编辑，不能仅凭 Token 判断回调仍然有效。
+  const isCurrent = (): boolean =>
+    props.modelValue && selection === submittedSelection && userStore.token === submittedToken
   error.value = ''
+  let uploadStarted = false
   try {
     const element = canvas.value
     const blob = await new Promise<Blob>((resolve, reject) =>
@@ -184,8 +193,10 @@ async function save(): Promise<void> {
         0.9,
       ),
     )
-    if (userStore.token !== submittedToken) return
+    if (!isCurrent()) return
+    uploadStarted = true
     const result = await userStore.uploadAvatar(blob)
+    if (!isCurrent()) return
     if (!result) {
       emit('update:modelValue', false)
       return
@@ -193,26 +204,29 @@ async function save(): Promise<void> {
     emit('saved', result.remainingToday)
     emit('update:modelValue', false)
   } catch (caught: unknown) {
+    if (!isCurrent()) return
+    if (!uploadStarted) {
+      error.value = '头像编码失败，请重新选择图片后重试。'
+      return
+    }
+    // 超时或服务端异常可能发生在提交之后，先核对资料，避免盲目重试消耗每日次数。
     error.value =
-      caught instanceof ApiError
+      caught instanceof ApiError && caught.status >= 400 && caught.status < 500
         ? caught.status === 429
           ? '今天已成功修改 5 次头像，请明天再试。'
           : caught.message
-        : '头像暂时无法保存，请重试。'
+        : '暂时无法确认头像是否已保存，请先刷新资料核对，再决定是否重试。'
   } finally {
-    saving.value = false
+    if (isCurrent()) saving.value = false
   }
 }
 
 watch(
   () => props.modelValue,
   (visible) => {
-    if (!visible) {
-      releaseImage()
-      loading.value = false
-      error.value = ''
-    }
+    if (!visible) releaseImage()
   },
+  { flush: 'sync' },
 )
 watch(
   () => userStore.token,
@@ -220,6 +234,7 @@ watch(
     releaseImage()
     emit('update:modelValue', false)
   },
+  { flush: 'sync' },
 )
 onBeforeUnmount(releaseImage)
 </script>
