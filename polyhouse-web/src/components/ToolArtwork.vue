@@ -48,7 +48,11 @@ defineProps<Props>()
 </template>
 <style scoped>
 .artwork {
+  container: tool-artwork / inline-size;
+  width: 100%;
   aspect-ratio: 1.65;
+  /* 最窄双列也要容纳标语、两行正文与底部入口，不再继续压缩文字区。 */
+  min-height: 240px;
   position: relative;
   overflow: hidden;
   padding: 28px;
@@ -68,13 +72,15 @@ defineProps<Props>()
 }
 .text-composition {
   position: absolute;
-  inset: 19% 12% 19%;
-  display: flex;
+  inset: 19% 8% 19%;
+  /* 为交换标记保留独立列；不能让绝对定位的装饰覆盖旋转纸张中的正文。 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  justify-content: center;
 }
 .text-sheet {
-  width: 50%;
+  min-width: 0;
   height: 100%;
   padding: 20px;
   background: white;
@@ -83,28 +89,32 @@ defineProps<Props>()
   position: relative;
 }
 .before {
-  transform: rotate(-8deg) translateX(5%);
+  transform: rotate(-8deg);
   background: #f5f0ff;
 }
 .after {
-  transform: rotate(6deg) translateX(-2%);
+  transform: rotate(6deg);
   background: var(--ph-ink);
   color: white;
 }
 .text-sheet > span {
+  display: block;
   font-size: 8px;
+  line-height: 1.4;
   letter-spacing: 1px;
   opacity: 0.7;
 }
 .text-sheet strong {
-  font-size: clamp(18px, 2.2vw, 30px);
+  /* 桌面双列与手机单列的卡片宽度不同，字号跟随卡片而非整页视口。 */
+  font-size: clamp(14px, 4.4cqi, 30px);
   font-weight: 600;
   line-height: 1.5;
   display: block;
   margin-top: 14px;
   letter-spacing: -1px;
 }
-.text-sheet i {
+/* ElIcon 也输出 i 标签；仅给纸张的直接装饰子元素画线，避免误伤箭头。 */
+.before > i {
   display: block;
   width: 76%;
   height: 3px;
@@ -112,21 +122,26 @@ defineProps<Props>()
   background: #cfc5e2;
   border-radius: 2px;
 }
-.text-sheet i:last-child {
+.before > i:last-child {
   width: 50%;
 }
 .text-sheet p {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   font-family: Georgia, serif;
   font-style: italic;
   font-size: 13px;
   margin-top: 15px;
   color: #f8b9d2;
 }
+.text-sheet p > .el-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
 .swap {
-  position: absolute;
+  position: relative;
   z-index: 3;
   width: 42px;
   height: 42px;
@@ -227,6 +242,31 @@ defineProps<Props>()
   font-style: italic;
   font-weight: 400;
 }
+/* 卡片在平板双列时也可能很窄，不能只按手机视口启用紧凑排版。 */
+@container tool-artwork (max-width: 400px) {
+  .text > .text-composition {
+    /* 窄卡片需同时避开顶部标语和底部工具入口，不能只缩小正文。 */
+    inset-block: 31% 25%;
+    inset-inline: 6%;
+    grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .text-sheet {
+    padding: 10px;
+  }
+  .text-sheet strong {
+    margin-top: 6px;
+  }
+  .text-sheet p,
+  .before > i {
+    display: none;
+  }
+  .swap {
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
+  }
+}
 @media (max-width: 760px) {
   .artwork {
     padding: 20px;
@@ -234,7 +274,7 @@ defineProps<Props>()
   }
   /* 窄屏给标题与操作按钮留出底部空间，装饰文字不能相互遮挡。 */
   .text-composition {
-    inset: 19% 12% 31%;
+    inset-block: 19% 31%;
   }
   .image-composition {
     inset: 20% 16% 32%;
@@ -247,15 +287,6 @@ defineProps<Props>()
   .art-caption > span {
     font-size: 9px;
   }
-  .text-sheet {
-    padding: 15px;
-  }
-  .text-sheet strong {
-    font-size: clamp(17px, 5vw, 27px);
-    margin-top: 6px;
-  }
-  .text-sheet p,
-  .text-sheet i,
   .image-meta {
     display: none;
   }
