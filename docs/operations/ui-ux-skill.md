@@ -76,3 +76,11 @@ Rename-Item -LiteralPath '.agents/skills/ui-ux-pro-max/SKILL.md.disabled' -NewNa
 本次实际通过：73 个文件的完整性检查；临时额外文件被检查器拒绝，移除该探针后恢复通过；图标查询 1 条、Vue 查询 1 条、交互查询 3 条有效结果；设计系统查询返回有效数据且 `persistence=null`；上游 `validate_data.py` 校验 12 个领域文件、22 个技术栈文件及推理表。上述查询均不传私有数据，不使用 `--persist`。前后端规定构建、PowerShell 语法与文档链接检查通过；未重跑历史业务测试或含 OWNER 夹具的真实数据库测试，未改当前网站设计。
 
 另逐项验证暂存区内的 73 个技能文件与 SHA-256 清单一致，确认 Git 换行处理没有改变已审核字节。自有脚本/文档的差异空白检查通过；上游原有 46 处尾随空白按固定来源原样保留，未为了格式化改写第三方代码或数据。新增行数主要来自离线目录与来源元数据，不是网站业务代码变化。
+
+## GitHub 语言统计修正（2026-10-29）
+
+用户发现 Python 占比偏高；本地核对 15 个 Git 跟踪的 Python 文件、约 282 KiB，均来自本技能的检索脚本和上游测试。根目录 `.gitattributes` 现为 `.agents/skills/ui-ux-pro-max/**` 设置 `linguist-vendored`，将该第三方目录排除在语言统计之外；不删除技能、不修改上游文件或散列清单，也不改变网站运行行为。
+
+规则仅作用于此固定技能目录，保留其内部 `* -text` 的原字节换行策略；不把整个 `.agents` 或项目自有代码标作第三方。撤回时移除根目录这条属性及说明即可，技能安装/停用无需变化。属性含义见 [Linguist 官方说明](https://github.com/github-linguist/linguist/blob/main/docs/overrides.md)。
+
+本轮后端 `mvn -q compile -DskipTests`、前端 `npm run build` 均通过，技能 73 个文件完整性通过；Git 属性检查确认规则生效且自有 Java/TS 文件未被排除。未重复业务测试；仅本地提交配置与日志，不推送或合并远端。GitHub 统计需等变更进入远端默认分支后重新计算，不能把本地属性检查当作远端占比已更新，见 [GitHub 文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-repository-languages)。
