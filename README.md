@@ -345,7 +345,18 @@ wsl -d Ubuntu -- redis-cli -h 127.0.0.1 -p 6379 PING
 
 推荐通过 `Invoke-LocalAuth.ps1 -Action Run` 启动：入口会创建隐藏的 Ubuntu WSL 辅助进程，在 Windows 侧按实际本机地址/端口等待 Redis `PONG`（最多约 20 秒），成功后才启动后端；退出时只释放自己创建的 Windows 辅助进程，不关闭整个 WSL 或停止 Redis。此检查适用于当前无认证 Redis；其他环境可显式传入 `-SkipWslRedis`，自行管理并验证依赖。入口不修改系统自启动或 WSL 网络配置，也不是运行期间的故障监控。
 
-直接在 IDEA 启动不会经过上述脚本；开发期间可另开终端运行 `wsl -d Ubuntu -- sleep infinity` 并保持运行。单次 PING、后端启动成功及不存在账号返回 401 都不会证明持续可用，登录验收需包含 Redis 读写。当前已确认本机连接曾短暂拒绝，尚不能断言每次故障均由 WSL 空闲退出引起。
+直接在 IDEA 启动默认不会经过上述脚本。需要保留绿色 Run/Debug 按钮时，可将 `polyhouse/scripts/Ensure-LocalRedis.ps1` 绑定为 `PolyhouseApplication` 的启动前任务：检查 Redis 协议 `PONG`，需要时唤起 Ubuntu 并执行固定的 `systemctl start redis-server`，随后从 Windows 检查实际连接；失败返回非零退出码，不继续启动 Java。仅适用于本机 Ubuntu/systemd、`127.0.0.1:6379` 无认证约定；不要套用到远端或生产环境，也不会安装软件、更改 Redis 配置或清理会话。
+
+在 IDEA 中只需配置一次（工具名称可用 `Polyhouse Redis Ready`）：
+
+1. `Settings → Tools → External Tools → +`：Program 填 `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`。
+2. Arguments 填 `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "E:\project\java\polyethene-polyhouse\polyhouse\scripts\Ensure-LocalRedis.ps1"`；Working directory 填 `E:\project\java\polyethene-polyhouse\polyhouse`。示例为当前本机位置，移动项目后需同步修改；Bypass 仅作用于该进程，不修改系统执行策略。
+3. `Run → Edit Configurations → PolyhouseApplication → Before launch → + → Run External Tool`，选择该工具并应用；新界面若未显示 Before launch，可在 Modify options 中启用。保留原有构建任务和数据库/JWT 私有变量；此脚本不读取或修改凭据。失败时不要选择忽略失败继续运行。
+4. 以后 Run/Debug 先执行 Redis 检查，看到 `Local Redis is ready (PONG)` 后才启动 Java。绑定属于 IDEA 个人设置，本仓库不自动改写正在运行的 IDE 配置；一次性脚本验证不等于已经完成这一绑定。
+
+保活辅助进程隐藏运行，用命名互斥量限制同一 Windows 会话只有一个；重复/并发运行检查不会累积长期进程。IDEA 停止 Java 后它仍保留，方便再次启动；注销 Windows 或手动终止 Ubuntu 后退出，下次检查重新建立。若当天不再使用 Ubuntu，可执行 `wsl --terminate Ubuntu`；这会停止该发行版内的所有进程（不限 Redis），有其他任务时不要执行，不使用会影响 Docker 等发行版的 `wsl --shutdown`。脚本不是运行期故障监控；手动停止 WSL/Redis 或连接故障后仍需重新执行检查，不保证消除所有 Redis 故障。
+
+不绑定时仍可另开终端运行 `wsl -d Ubuntu -- sleep infinity` 并保持运行。单次 PING、后端启动成功及不存在账号返回 401 都不会证明持续可用，登录验收需包含 Redis 读写。2026-10-29 这次故障已只读核对 Ubuntu 为 Stopped、Windows 6379 无监听；不能据此断言每次历史故障原因相同。
 
 `pom.xml` 已包含 `spring-boot-starter-data-redis`，由 Spring Boot 管理 Lettuce 的版本和连接工厂。`RedisConfig` 将常规模板的键、值和 Hash 字段统一为 UTF-8 字符串；业务代码也可以直接注入自动配置的 `StringRedisTemplate`。存储结构化数据时应显式转换为 JSON，不使用 Java 原生对象序列化。
 
