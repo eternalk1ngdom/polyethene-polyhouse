@@ -42,6 +42,7 @@ for (const endpoint of [base, backend]) {
     phase = 'open-owner-menu'
     await page.getByRole('button', { name: '打开账号菜单' }).click()
     await page.getByRole('link', { name: '屋主工作台' }).click()
+    await page.getByRole('link', { name: '创建账号 →' }).click()
     phase = 'open-workspace'
     await page.getByRole('heading', { name: '创建账号', exact: true }).waitFor()
     phase = 'create-user'

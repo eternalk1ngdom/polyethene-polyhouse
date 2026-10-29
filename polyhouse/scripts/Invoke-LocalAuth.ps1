@@ -3,6 +3,7 @@
 复用 IDEA 个人预设检查、验收或启动本机后端，后续会话无需再次索取凭据。
 .DESCRIPTION
 默认 Verify：编译并启用 MySQL、Redis、认证事务和真实运行密钥的全部测试。
+Verify -AccountManagementOnly：只在随机隔离库执行 P3 管理验收。
 Verify -AccountProvisioningOnly：只在随机隔离库执行开户验收，包含本测试专属屋主。
 Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
@@ -17,12 +18,14 @@ param(
     # P1 使用随机隔离库，仅执行账号安全验收，不运行含 OWNER 夹具的历史全量测试。
     [switch]$AccountSecurityOnly,
     # P2 只运行隔离库开户验收，不在开发库创建测试屋主。
-    [switch]$AccountProvisioningOnly
+    [switch]$AccountProvisioningOnly,
+    # P3 仅在隔离库验收管理功能，保护正式屋主。
+    [switch]$AccountManagementOnly
 )
 
 $ErrorActionPreference = 'Stop'
-if ($AccountSecurityOnly -and $AccountProvisioningOnly) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
 if (-not (Test-Path -LiteralPath $workspacePath -PathType Leaf)) {
@@ -137,7 +140,9 @@ try {
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($AccountSecurityOnly) {
+        if ($AccountManagementOnly) {
+            & mvn -q '-Dtest=AccountManagementIntegrationTest' '-Dpolyhouse.management.integration=true' test
+        } elseif ($AccountSecurityOnly) {
             & mvn -q '-Dtest=AccountSecurityIntegrationTest' '-Dpolyhouse.security.integration=true' test
         } elseif ($AccountProvisioningOnly) {
             & mvn -q '-Dtest=AccountProvisioningIntegrationTest' '-Dpolyhouse.provisioning.integration=true' test
@@ -146,6 +151,7 @@ try {
                 '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
         }
         if ($LASTEXITCODE -ne 0) {
+            if ($AccountManagementOnly) { throw '账号管理隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountProvisioningOnly) { throw '账号开户隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountSecurityOnly) { throw '账号安全隔离验收失败，请检查 Surefire 汇总。' }
             throw '本机认证全量验收失败，请检查 Surefire 汇总。'

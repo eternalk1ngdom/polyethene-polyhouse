@@ -30,7 +30,7 @@ onMounted(() => {
 
 <template>
   <div class="provisioning-page">
-    <RouterLink class="back-link" to="/account">← 返回个人中心</RouterLink>
+    <RouterLink class="back-link" to="/manage">← 返回账号管理</RouterLink>
     <header class="page-heading">
       <p>OWNER WORKSPACE</p>
       <h1>给朋友，留一个位置。</h1>

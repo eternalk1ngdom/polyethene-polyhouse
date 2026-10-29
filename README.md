@@ -58,7 +58,7 @@ mvn spring-boot:run
 
 新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
 
-当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。
+当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。P3 账号列表、封禁/解封及屋主代重置已交付，需再执行 007；页面 `/manage`、权限/一次交付/隔离验收与回退见[账号管理说明](docs/operations/account-management.md)。
 
 ## 公共层响应约定
 

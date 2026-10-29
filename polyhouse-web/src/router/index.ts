@@ -19,6 +19,12 @@ const router = createRouter({
       meta: { title: '个人中心' },
     },
     {
+      path: '/manage',
+      name: 'account-management',
+      component: () => import('../views/AccountManagementView.vue'),
+      meta: { title: '账号管理' },
+    },
+    {
       path: '/manage/accounts',
       name: 'account-provisioning',
       component: () => import('../views/AccountProvisioningView.vue'),
