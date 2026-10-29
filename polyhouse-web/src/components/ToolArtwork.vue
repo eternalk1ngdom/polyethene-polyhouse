@@ -37,10 +37,12 @@ defineProps<Props>()
           </div>
           <div class="image-meta"><span>your-image.jpg</span><span>IMAGE STUDIO</span></div>
         </div>
-        <div class="crop-token">
-          <ElIcon><Crop /></ElIcon>
+        <div class="image-aside">
+          <div class="crop-token">
+            <ElIcon><Crop /></ElIcon>
+          </div>
+          <div class="size-note">Just the<br /><strong>right size.</strong></div>
         </div>
-        <div class="size-note">Just the<br /><strong>right size.</strong></div>
       </div>
       <span class="art-caption">TargetKB<span>每一张，都刚刚好。</span></span></template
     >
@@ -168,19 +170,27 @@ defineProps<Props>()
 }
 .image-composition {
   position: absolute;
-  inset: 18% 16% 20%;
+  inset: 22% 8% 28% 11%;
+  /* 图片与说明各占一列，旋转后的边界也留出间隔，避免说明遮住图片页脚。 */
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr);
+  gap: clamp(18px, 4.5cqi, 30px);
+  align-items: center;
 }
 .image-sheet {
-  width: 67%;
+  min-width: 0;
   height: 100%;
   background: white;
-  padding: 12px;
+  padding: clamp(8px, 1.8cqi, 12px);
   border-radius: 9px;
-  transform: rotate(-8deg);
+  transform: rotate(-6deg);
   box-shadow: 0 12px 26px #2422380c;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 9px;
 }
 .landscape {
-  height: 82%;
+  min-height: 0;
   background: #e9c3b7;
   border-radius: 4px;
   overflow: hidden;
@@ -190,7 +200,7 @@ defineProps<Props>()
 }
 .landscape > .el-icon {
   color: #78595b;
-  font-size: clamp(40px, 6vw, 72px);
+  font-size: clamp(32px, 8cqi, 60px);
   z-index: 1;
 }
 .hill {
@@ -205,37 +215,40 @@ defineProps<Props>()
 .image-meta {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 7px;
-  margin-top: 9px;
+  gap: 4px;
+  font-size: clamp(7px, 1.2cqi, 8px);
+  line-height: 1.4;
+  white-space: nowrap;
 }
 .image-meta > span:last-child {
   color: var(--ph-muted);
 }
+.image-aside {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: clamp(12px, 2.8cqi, 20px);
+}
 .crop-token {
-  position: absolute;
-  right: 0;
-  top: -6%;
-  height: 58px;
-  width: 58px;
+  height: clamp(32px, 8cqi, 52px);
+  width: clamp(32px, 8cqi, 52px);
   display: grid;
   place-items: center;
-  color: white;
-  background: var(--ph-ink);
-  border-radius: 15px;
-  font-size: 30px;
-  transform: rotate(10deg);
+  color: var(--ph-accent-strong);
+  background: var(--ph-pink-soft);
+  border: 1px solid var(--ph-lilac);
+  border-radius: 13px;
+  font-size: clamp(20px, 4.5cqi, 28px);
+  transform: rotate(6deg);
 }
 .size-note {
-  position: absolute;
-  right: -3%;
-  bottom: 6%;
-  padding: 15px 22px;
-  background: #fff1d2;
+  width: 100%;
+  padding: clamp(10px, 2.5cqi, 18px);
+  background: var(--ph-cream);
   font-family: Georgia, serif;
-  font-size: clamp(20px, 2.8vw, 35px);
-  transform: rotate(6deg);
-  line-height: 1.1;
+  font-size: clamp(15px, 3.4cqi, 27px);
+  transform: rotate(3deg);
+  line-height: 1.15;
   border-radius: 6px;
 }
 .size-note strong {
@@ -266,6 +279,14 @@ defineProps<Props>()
     height: 32px;
     font-size: 20px;
   }
+  .image > .image-composition {
+    /* 桌面断点刚切为双列时卡片仍窄，旋转图片需额外避开标语和页脚。 */
+    inset-block: 26% 32%;
+  }
+  /* 仅隐藏窄图片页脚的次要标注，文件名保留，文字插画及公共卡片尺寸不变。 */
+  .image-meta > span:last-child {
+    display: none;
+  }
 }
 @media (max-width: 760px) {
   .artwork {
@@ -276,9 +297,6 @@ defineProps<Props>()
   .text-composition {
     inset-block: 19% 31%;
   }
-  .image-composition {
-    inset: 20% 16% 32%;
-  }
   .art-caption {
     bottom: 18px;
     left: 20px;
@@ -287,21 +305,9 @@ defineProps<Props>()
   .art-caption > span {
     font-size: 9px;
   }
-  .image-meta {
-    display: none;
-  }
   .art-label {
     font-size: 7px;
     letter-spacing: 1px;
-  }
-  .crop-token {
-    width: 44px;
-    height: 44px;
-    font-size: 25px;
-  }
-  .size-note {
-    padding: 12px 15px;
-    font-size: 25px;
   }
 }
 </style>
