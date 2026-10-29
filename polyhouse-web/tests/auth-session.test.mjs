@@ -37,7 +37,7 @@ const { userDisplayName, userRoleLabel, avatarInitial, formatAccountNumber } = a
   await moduleUrl('../src/utils/userPresentation.ts')
 )
 const { AuthCommandError, login, register, getCurrentUser } = await import(authUrl)
-const { ApiError, apiClient, apiRequest, setUnauthorizedHandler } = await import(apiUrl)
+const { ApiError, apiClient, apiRequest, setUnauthorizedHandler, setPasswordChangeRequiredHandler } = await import(apiUrl)
 const { usernameError, passwordError, nicknameError } = await import(
   await moduleUrl('../src/utils/authValidation.ts')
 )
@@ -49,6 +49,7 @@ const profile = {
   nickname: '测试',
   avatar: null,
   role: 'USER',
+  passwordChangeRequired: false,
   experience: '9223372036854775807',
   level: 1,
   coins: '9223372036854775807',
@@ -86,6 +87,93 @@ beforeEach(() => {
   }
   apiClient.defaults.adapter = async (config) => success(config)
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
+  setPasswordChangeRequiredHandler((token) => useUserStore().requirePasswordChange(token))
+})
+
+test('ADMIN 和首次改密状态来自真实响应，缺少布尔状态的响应拒绝', async () => {
+  const store = useUserStore()
+  apiClient.defaults.adapter = async (config) => success(config, loginResult('initial-credential', { ...profile, role: 'ADMIN', passwordChangeRequired: true }))
+  await store.login({ username: 'fixture', password: 'fixture-old' })
+  assert.equal(store.requiresPasswordChange, true)
+  assert.equal(userRoleLabel(store.user.role), '管理员')
+  const missing = { ...profile }
+  delete missing.passwordChangeRequired
+  apiClient.defaults.adapter = async (config) => success(config, missing)
+  await assert.rejects(getCurrentUser('fixture'), ApiError)
+})
+
+test('改密仅提交本人凭据，成功清理缓存和当前身份并提示重新登录', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  let attempts = 0
+  apiClient.defaults.adapter = async (config) => {
+    attempts += 1
+    assert.equal(config.url, '/auth/password/change')
+    assert.equal(config.headers.Authorization, 'Bearer fixture-credential')
+    assert.deepEqual(JSON.parse(config.data), { currentPassword: 'fixture-old', newPassword: 'fixture-new' })
+    return success(config)
+  }
+  assert.equal(await store.changePassword({ currentPassword: 'fixture-old', newPassword: 'fixture-new' }), true)
+  assert.equal(attempts, 1)
+  assert.equal(store.token, '')
+  assert.equal(store.user, null)
+  assert.equal(storage.has('polyhouse_token'), false)
+  assert.match(store.sessionMessage, /新密码重新登录/)
+})
+
+test('明确的首次改密拒绝保留会话，不允许头像或注销；普通 403 不假装失效', async () => {
+  const store = useUserStore()
+  store.setSession('fixture-credential', profile)
+  apiClient.defaults.adapter = async (config) => {
+    const failure = statusFailure(config, 403)
+    failure.response.data.code = 40301
+    throw failure
+  }
+  await assert.rejects(apiRequest({ url: '/protected' }, (value) => value, store.token), (error) => error.code === 40301)
+  assert.equal(store.isLoggedIn, true)
+  assert.equal(store.requiresPasswordChange, true)
+  assert.equal(useAccountUiStore().canDeregister, false)
+  await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), (error) => error.code === 40301)
+  store.setSession('new-credential', profile)
+  store.requirePasswordChange('fixture-credential')
+  assert.equal(store.requiresPasswordChange, false)
+})
+
+test('改密的旧成功和旧失败都不能清除新登录，网络故障只发送一次且保留身份', async () => {
+  const store = useUserStore()
+  for (const rejected of [false, true]) {
+    store.setSession('old-credential', profile)
+    let finish
+    apiClient.defaults.adapter = (config) => new Promise((resolve, reject) => {
+      finish = () => rejected ? reject(statusFailure(config, 401)) : resolve(success(config))
+    })
+    const pending = store.changePassword({ currentPassword: 'fixture-old', newPassword: 'fixture-new' })
+    store.setSession('new-credential', { ...profile, id: '99' })
+    finish()
+    assert.equal(await pending, false)
+    assert.equal(store.token, 'new-credential')
+  }
+  let attempts = 0
+  apiClient.defaults.adapter = async () => { attempts += 1; throw new Error('private-network-error') }
+  await assert.rejects(store.changePassword({ currentPassword: 'fixture-old', newPassword: 'fixture-new' }), ApiError)
+  assert.equal(attempts, 1)
+  assert.equal(store.isLoggedIn, true)
+  assert.doesNotMatch(JSON.stringify([...storage]), /fixture-old|fixture-new/)
+})
+
+test('改密返回前其他标签页换号，不等待 storage 事件也不清除新会话', async () => {
+  const store = useUserStore()
+  store.setSession('old-credential', profile)
+  let finish
+  apiClient.defaults.adapter = (config) => config.url === '/auth/password/change'
+    ? new Promise((resolve) => { finish = () => resolve(success(config)) })
+    : Promise.resolve(success(config, { ...profile, id: '99' }))
+  const pending = store.changePassword({ currentPassword: 'fixture-old', newPassword: 'fixture-new' })
+  storage.set('polyhouse_token', 'other-tab-credential')
+  finish()
+  assert.equal(await pending, false)
+  assert.equal(store.token, 'other-tab-credential')
+  assert.equal(store.user.id, '99')
 })
 
 test('上传只发送小图和当前 Bearer，成功头像不会被在途旧资料覆盖', async () => {
@@ -487,7 +575,7 @@ test('拒绝丢失精度的资料与畸形响应，不清除仍待确认的 Toke
   const store = useUserStore()
   for (const invalid of [
     { ...profile, experience: 9223372036854775807 },
-    { ...profile, role: 'ADMIN' },
+    { ...profile, role: 'UNKNOWN_ROLE' },
     { ...profile, coins: '-1' },
     null,
   ]) {
@@ -570,7 +658,7 @@ test('前端校验对齐账号白名单、昵称长度及 BCrypt 多字节边界
   assert.ok(nicknameError('   '))
 })
 
-test('个人资料展示保留大整数和 emoji，并将三种角色与等级分开展示', () => {
+test('个人资料展示保留大整数和 emoji，并将角色与成长等级分开展示', () => {
   assert.equal(userDisplayName({ ...profile, nickname: '   ' }), 'fixture')
   assert.equal(userDisplayName(profile), '测试')
   assert.equal(avatarInitial('😀小屋'), '😀')

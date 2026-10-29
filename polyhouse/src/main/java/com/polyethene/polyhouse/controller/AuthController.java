@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.controller;
 
 import com.polyethene.polyhouse.common.result.Result;
 import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
+import com.polyethene.polyhouse.common.annotation.AllowInitialPassword;
 import com.polyethene.polyhouse.model.dto.ClientRequestDTO;
 import com.polyethene.polyhouse.model.dto.CurrentUserDTO;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
@@ -48,6 +49,7 @@ public class AuthController {
 
     /** 返回本次拦截器已核验的本人资料，省去同一请求第二次完整认证，不跨请求缓存身份。 */
     @GetMapping("/me")
+    @AllowInitialPassword
     public Result<UserProfileVO> me(@Valid CurrentUserDTO current) {
         return Result.success(current.profile());
     }

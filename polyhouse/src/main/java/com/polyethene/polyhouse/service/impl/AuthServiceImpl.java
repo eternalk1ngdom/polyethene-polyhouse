@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.exception.BusinessException;
+import com.polyethene.polyhouse.common.security.SessionSecurity;
 import com.polyethene.polyhouse.config.JwtProperties;
 import com.polyethene.polyhouse.mapper.UserMapper;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
@@ -132,13 +133,12 @@ public class AuthServiceImpl implements AuthService {
 
         SecretKey key = signingKey();
         Instant now = clock.instant();
-        String token = JwtUtils.createToken(user.getId(), user.getRole(), request.clientType(), key, now, jwt.tokenTtl());
-        JwtUtils.TokenClaims claims = JwtUtils.parseAndValidate(token, key, now);
         try {
             // 只更新审计列；同时复核状态与原密码哈希，避免覆盖管理员刚修改的角色或放行已换密码的账号。
             int updated = mapper.update(null, new LambdaUpdateWrapper<User>()
                     .eq(User::getId, user.getId()).eq(User::getStatus, ACTIVE_STATUS)
                     .eq(User::getPasswordHash, user.getPasswordHash())
+                    .eq(User::getCredentialVersion, user.getCredentialVersion())
                     .set(User::getLastLoginIp, clientIp)
                     .set(User::getLastLoginTime, LocalDateTime.ofInstant(now, AUDIT_ZONE)));
             if (updated != 1) {
@@ -150,6 +150,10 @@ public class AuthServiceImpl implements AuthService {
         // 更新的行锁保持到事务结束，注销必须等待本次会话发布，或先删除账号使本次更新失败。
         // Redis 不参与数据库事务；提交失败即使留下 jti，身份检查仍会复核数据库状态。
         User rewarded = growth.rewardDailyLogin(user.getId());
+        SessionSecurity.requireCurrent(rewarded, user.getCredentialVersion());
+        String token = JwtUtils.createToken(rewarded.getId(), rewarded.getRole(), request.clientType(), key, now,
+                jwt.tokenTtl(), rewarded.getCredentialVersion());
+        JwtUtils.TokenClaims claims = JwtUtils.parseAndValidate(token, key, now);
         sessions.saveSession(claims, Duration.between(clock.instant(), claims.expiresAt()));
         return new LoginVO(token, "Bearer", claims.expiresAt(), UserProfileVO.from(rewarded));
     }
@@ -162,7 +166,7 @@ public class AuthServiceImpl implements AuthService {
             throw unauthorized();
         }
         // 已通过签名和白名单校验的活跃访问也算每日登录；成长服务锁定读复核最新角色和账号状态。
-        User current = growth.rewardDailyLogin(claims.userId());
+        User current = growth.rewardDailyLogin(claims.userId(), claims.credentialVersion());
         // 等待用户行锁期间可能发生屋主初始化并撤销旧会话，不能让预先通过检查的旧 Token 取得新角色。
         if (!sessions.isCurrentSession(claims)) {
             throw unauthorized();
@@ -177,7 +181,7 @@ public class AuthServiceImpl implements AuthService {
         if (!sessions.isCurrentSession(claims)) {
             throw unauthorized();
         }
-        UserGrowthVO current = growth.getStatus(claims.userId());
+        UserGrowthVO current = growth.getStatus(claims.userId(), claims.credentialVersion());
         if (!sessions.isCurrentSession(claims)) {
             throw unauthorized();
         }
@@ -202,6 +206,8 @@ public class AuthServiceImpl implements AuthService {
             if (user == null || !isActive(user) || !sessions.isCurrentSession(claims)) {
                 throw unauthorized();
             }
+            SessionSecurity.requireCurrent(user, claims.credentialVersion());
+            SessionSecurity.requireFullAccess(user);
             // 在用户行锁内核对最新角色；旧 USER Token 或绕过前端都不能注销已经提升的屋主。
             if (user.getRole() == UserRoleEnum.OWNER) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "屋主账号不能通过普通注销入口停用，请先完成专门的移交或恢复流程");
@@ -229,7 +235,7 @@ public class AuthServiceImpl implements AuthService {
         try {
             return jwt.signingKey();
         } catch (IllegalArgumentException exception) {
-            // 密钥仍是本地待办；缺配置时拒绝签发，不自动产生替代密钥，也不泄露配置值。
+            // 配置无效时拒绝签发，不自动产生替代密钥，也不泄露私有预设内容。
             throw unavailable();
         }
     }
@@ -247,7 +253,8 @@ public class AuthServiceImpl implements AuthService {
 
     private static boolean isActive(User user) {
         return Objects.equals(user.getStatus(), ACTIVE_STATUS) && Objects.equals(user.getDeleted(), 0)
-                && user.getRole() != null;
+                && user.getRole() != null && user.getCredentialVersion() != null && user.getCredentialVersion() >= 0
+                && user.getPasswordChangeRequired() != null;
     }
 
     private static BusinessException accountConflict() {

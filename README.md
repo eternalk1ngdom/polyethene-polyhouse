@@ -46,8 +46,10 @@ mvn spring-boot:run
 ```powershell
 # 只输出是否配置、密钥格式和 Git 忽略状态，不输出实际值。
 .\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Inspect
-# 编译并执行全部本机 MySQL、Redis、认证事务及真实运行密钥验收。
+# 历史全量入口含 OWNER 夹具；已有正式屋主的开发库禁止直接执行。
 .\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify
+# P1 账号安全验收：随机独立测试库，不在开发库创建 OWNER。
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify -AccountSecurityOnly
 # 使用同一预设启动后端，自动保持 Ubuntu WSL 并等待本机 Redis 就绪。
 .\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Run
 ```
@@ -55,6 +57,8 @@ mvn spring-boot:run
 入口只读取允许的环境变量名，导入当前进程后调用 Maven，并在成功或失败退出时恢复原环境；不修改系统环境，不执行 XML 内容。实例验收限制为本机 `polyhouse_db` 和本机 Redis，避免误继承外部连接。IDEA 自身启动应用时直接使用同一份个人配置。
 
 新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
+
+当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；公共注册关闭与屋主开户属于下一步 P2。
 
 ## 公共层响应约定
 
@@ -129,7 +133,7 @@ npm run lint:check
 
 `RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
 
-`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins`，不返回密码哈希、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。注册、登录、当前用户 HTTP 接口均复用这些安全模型。
+`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins/passwordChangeRequired`，不返回密码哈希、凭据版本、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。注册、登录、当前用户 HTTP 接口均复用这些安全模型。
 
 初始化基线位于 [polyhouse/sql/001_init.sql](polyhouse/sql/001_init.sql)，按只读策划书归档四张表的结构，不自动执行。现有数据库无需重新初始化；该文件仅供空环境人工建表，不能当作迁移脚本反复执行。账号唯一索引与软删除并存，因此删除后账号仍占用，后续注册不得默认允许复用。
 
@@ -142,11 +146,13 @@ source E:/project/java/polyethene-polyhouse/polyhouse/sql/003_daily_growth_rewar
 
 迁移为 `sys_user` 追加 `experience bigint NOT NULL DEFAULT 0`、`level int NOT NULL DEFAULT 1`、`coins bigint NOT NULL DEFAULT 0`，包括非负经验/余额和至少 1 级的数据库约束，旧账号也自动取得初值。每列存在时跳过，重复执行不会清零余额；不会修正其他环境中已存在但定义不一致的同名列，升级时仍需核对结构。MySQL DDL 隐式提交，不能假定失败时可整批事务回滚；迁移支持中断后重跑。
 
-三项由**独立成长服务**管理：`UserGrowthService.rewardDailyLogin(userId)` 是受信任业务唯一的每日结算入口，`UserGrowthRules` 集中管理奖励和等级曲线，`UserGrowthConfig` 提供服务端时钟，`UserGrowthMapper` 记录流水。Controller 不接受奖励数值，不新增直接加经验/加币的公开接口。注册/登录 DTO 的额外成长字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料覆盖余额。等级与 `USER/INSIDER/OWNER` 权限独立，不进入 JWT；前端已接入真实数值及成长状态展示。
+三项由**独立成长服务**管理：`UserGrowthService.rewardDailyLogin` 是每日结算入口，认证重载同时核对凭据版本；`UserGrowthRules` 集中管理奖励和等级曲线，`UserGrowthConfig` 提供服务端时钟，`UserGrowthMapper` 记录流水。Controller 不接受奖励数值，不新增直接加经验/加币的公开接口。注册/登录 DTO 的额外成长字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料覆盖余额。等级与 `USER/ADMIN/INSIDER/OWNER` 权限独立，不进入 JWT；前端已接入真实数值及成长状态展示。
 
 ### 每日登录奖励与升级
 
 每日首次成功登录，或使用有效 Token 访问已认证 API/恢复 `/api/auth/me`，自动获得 **10 经验 + 1 枚硬币**；退出和软注销本身不发奖。按服务端 `Asia/Shanghai` 自然日计算，同账号的 PC/H5/PLUGIN、重复登录、刷新和并发请求共享每日一次机会。注册本身不发奖；错误密码、无效/过期/已撤销 Token、禁用或软注销账号不发奖。没有登录的日期不补发，中断不清零、不降级，365 个有奖励的自然日达到六级。认证检查发生在角色拦截前，所以当天已核验身份但业务权限不足的访问也可计作一次有效登录。
+
+临时凭据尚未完成首次改密时不结算奖励，也不开放成长查询/头像/注销等完整身份业务；改密后重新登录才按同一每日规则结算。普通既有账号默认不受首次改密限制。
 
 | 等级 | 累计经验门槛 | 仅靠每日登录达到的累计天数 |
 | --- | --- | --- |
@@ -195,7 +201,7 @@ mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true'
 
 `JwtUtils` 保持静态且不持有业务状态：`keyFromBase64` 校验外部密钥，`createToken` 签发访问令牌，`parseAndValidate` 验签后返回内部 `TokenClaims`。密钥、当前时间和有效期由调用方传入，工具不读取环境、不注入 Bean、不访问 MySQL/Redis，也不自动裁剪 `Bearer` 前缀。
 
-仅允许 HS256，固定签发方 `polyhouse`、接收方 `polyhouse-api` 和用途 `ACCESS`。载荷仅包含用户 ID、语义角色、终端类型、随机 `jti` 及签发/过期时间等必要声明；不携带密码、密码哈希、手机号或任意用户资料。JWT 载荷可以解码读取，签名提供防篡改校验，不提供内容保密。
+仅允许 HS256，固定签发方 `polyhouse`、接收方 `polyhouse-api` 和用途 `ACCESS`。载荷仅包含用户 ID、语义角色、终端类型、随机 `jti`、凭据版本及签发/过期时间等必要声明；不携带密码、密码哈希、手机号或任意用户资料。JWT 载荷可以解码读取，签名提供防篡改校验，不提供内容保密。
 
 终端类型为 `PC/H5/PLUGIN`，签发时未指定则默认 PC。用户 ID 以字符串 subject 保存；随机 `jti` 保证同一用户同一秒内重复签发的令牌仍可区分。验证会拒绝错误签名、非 HS256 算法、错误归属/用途、缺失或无效身份、压缩载荷、未识别的关键头、未来签发及过期令牌；到达 `exp` 的同一时刻即失效。无效令牌统一抛出不携带原 Token 或异常链的安全异常，由 HTTP 认证入口转成 401。
 

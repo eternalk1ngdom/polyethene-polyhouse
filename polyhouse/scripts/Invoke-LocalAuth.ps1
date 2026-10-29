@@ -3,6 +3,7 @@
 复用 IDEA 个人预设检查、验收或启动本机后端，后续会话无需再次索取凭据。
 .DESCRIPTION
 默认 Verify：编译并启用 MySQL、Redis、认证事务和真实运行密钥的全部测试。
+Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
@@ -11,10 +12,13 @@ param(
     [ValidateSet('Inspect', 'Verify', 'Run')]
     [string]$Action = 'Verify',
     # 非 WSL 或已启用 Redis 认证的环境可显式选择自行管理依赖。
-    [switch]$SkipWslRedis
+    [switch]$SkipWslRedis,
+    # P1 使用随机隔离库，仅执行账号安全验收，不运行含 OWNER 夹具的历史全量测试。
+    [switch]$AccountSecurityOnly
 )
 
 $ErrorActionPreference = 'Stop'
+if ($AccountSecurityOnly -and $Action -ne 'Verify') { throw 'AccountSecurityOnly 仅用于 Verify 验收。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
 if (-not (Test-Path -LiteralPath $workspacePath -PathType Leaf)) {
@@ -129,9 +133,16 @@ try {
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        & mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true' `
-            '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
-        if ($LASTEXITCODE -ne 0) { throw '本机认证全量验收失败，请检查 Surefire 汇总。' }
+        if ($AccountSecurityOnly) {
+            & mvn -q '-Dtest=AccountSecurityIntegrationTest' '-Dpolyhouse.security.integration=true' test
+        } else {
+            & mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true' `
+                '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
+        }
+        if ($LASTEXITCODE -ne 0) {
+            if ($AccountSecurityOnly) { throw '账号安全隔离验收失败，请检查 Surefire 汇总。' }
+            throw '本机认证全量验收失败，请检查 Surefire 汇总。'
+        }
     }
 } finally {
     # 只释放本次启动的辅助进程，不停止 Redis 服务、不关闭整个 WSL。

@@ -47,6 +47,29 @@ class UserGrowthStatusTest {
                 Clock.fixed(Instant.parse("2026-10-27T15:59:59Z"), ZoneOffset.UTC));
     }
 
+    @Test
+    void shouldRejectStaleVersionBeforeRewardLedgerOrProtectedRead() {
+        User user = active(10);
+        user.setCredentialVersion(1L);
+        when(users.selectOne(any())).thenReturn(user);
+        assertThatThrownBy(() -> service.rewardDailyLogin(42, 0)).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.UNAUTHORIZED));
+        assertThatThrownBy(() -> service.getStatus(42, 0)).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.UNAUTHORIZED));
+        verifyNoInteractions(rewards);
+    }
+
+    @Test
+    void shouldReturnNecessaryProfileWithoutRewardsForInitialCredentialsAndRefuseGrowthRead() {
+        User user = active(0);
+        user.setPasswordChangeRequired(true);
+        when(users.selectOne(any())).thenReturn(user);
+        assertThat(service.rewardDailyLogin(42, 0)).isSameAs(user);
+        assertThatThrownBy(() -> service.getStatus(42, 0)).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PASSWORD_CHANGE_REQUIRED));
+        verifyNoInteractions(rewards);
+    }
+
     @ParameterizedTest
     @CsvSource(value = {"0,1,30,30,0", "10,1,30,20,33", "29,1,30,1,96", "30,2,200,170,0",
             "199,2,200,1,99", "200,3,580,380,0", "579,3,580,1,99", "580,4,1370,790,0",

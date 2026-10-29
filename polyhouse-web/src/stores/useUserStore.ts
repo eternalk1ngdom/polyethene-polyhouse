@@ -8,8 +8,10 @@ import {
   getCurrentUser,
   login as loginAccount,
   uploadAvatar as uploadAvatarImage,
+  changePassword as changePasswordRequest,
   type AvatarChange,
   type LoginRequest,
+  type PasswordChangeRequest,
   type UserProfile,
 } from '../api/auth'
 
@@ -34,6 +36,9 @@ export const useUserStore = defineStore('user', () => {
   )
   const storageMessage = computed(() =>
     storageAvailable.value ? '' : '浏览器暂不允许保存登录状态，刷新后可能需要重新登录',
+  )
+  const requiresPasswordChange = computed(
+    () => isLoggedIn.value && user.value?.passwordChangeRequired === true,
   )
   // 每次建立/清理会话都推进版本，连同 Token 比较一起拦住旧请求和同 Token 的 ABA 变化。
   let revision = 0
@@ -99,6 +104,40 @@ export const useUserStore = defineStore('user', () => {
     if (token.value !== submittedToken) return
     clearSession()
     sessionMessage.value = '登录状态已失效，请重新登录'
+  }
+
+  /** 受保护请求收到明确的 40301 后进入改密流程，旧请求不能标记后来登录的身份。 */
+  function requirePasswordChange(submittedToken: string): void {
+    if (!isLoggedIn.value || token.value !== submittedToken || !user.value) return
+    profileRevision += 1
+    pendingRestore = undefined
+    user.value = { ...user.value, passwordChangeRequired: true }
+    cacheProfile()
+  }
+
+  /** 改密成功只清理发起请求的会话；换号、跨标签换号及旧失败均不能污染新身份。 */
+  async function changePassword(request: PasswordChangeRequest): Promise<boolean> {
+    if (!isLoggedIn.value) throw new ApiError('请先登录再修改密码', 401)
+    const submittedToken = token.value
+    const submittedRevision = revision
+    try {
+      await changePasswordRequest(request, submittedToken)
+    } catch (error: unknown) {
+      if (revision !== submittedRevision || token.value !== submittedToken) return false
+      if (storageAvailable.value && readStoredToken() !== submittedToken) {
+        await syncStoredSession()
+        return false
+      }
+      throw error
+    }
+    if (revision !== submittedRevision || token.value !== submittedToken) return false
+    if (storageAvailable.value && readStoredToken() !== submittedToken) {
+      await syncStoredSession()
+      return false
+    }
+    clearSession()
+    sessionMessage.value = '密码已修改，请使用新密码重新登录'
+    return true
   }
 
   /** 主动登录会替换本地待确认身份；旧恢复或旧登录结果不能覆盖后续操作。 */
@@ -182,6 +221,7 @@ export const useUserStore = defineStore('user', () => {
   /** 旧上传不能污染后来登录的账号；成功时推进版本，使在途旧 /me 不能覆盖新头像。 */
   async function uploadAvatar(file: Blob): Promise<AvatarChange | null> {
     if (!isLoggedIn.value || !user.value) throw new ApiError('请先登录再修改头像', 401)
+    if (requiresPasswordChange.value) throw new ApiError('请先修改初始密码', 403, 40301)
     const submittedToken = token.value
     const submittedRevision = revision
     const submittedId = user.value.id
@@ -247,6 +287,9 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     sessionMessage,
     storageMessage,
+    requiresPasswordChange,
+    requirePasswordChange,
+    changePassword,
     setSession,
     clearSession,
     expireSession,

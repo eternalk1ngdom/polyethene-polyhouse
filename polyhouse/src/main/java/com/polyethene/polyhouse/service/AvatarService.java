@@ -49,12 +49,15 @@ public class AvatarService {
     /** 用户编号只能从有效会话取得；行锁内再次核对会话，使注销和并发替换串行完成。 */
     public AvatarVO upload(AvatarUploadDTO request, String token) {
         UserProfileVO profile = auth.getCurrentUser(token);
+        if (profile.passwordChangeRequired()) throw new BusinessException(ErrorCode.PASSWORD_CHANGE_REQUIRED);
         byte[] jpeg = reencode(request == null ? null : request.file());
         return transaction.execute(status -> {
             User user = mapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getId, Long.parseLong(profile.id()))
                     .last("FOR UPDATE"));
             if (user == null || !Integer.valueOf(1).equals(user.getStatus())) throw new BusinessException(ErrorCode.UNAUTHORIZED);
-            auth.getCurrentUser(token);
+            if (auth.getCurrentUser(token).passwordChangeRequired()) {
+                throw new BusinessException(ErrorCode.PASSWORD_CHANGE_REQUIRED);
+            }
             String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
             Map<String, Object> extra = user.getExtJson() == null ? new HashMap<>() : new HashMap<>(user.getExtJson());
             int count = usedToday(extra.get(QUOTA_KEY), today);

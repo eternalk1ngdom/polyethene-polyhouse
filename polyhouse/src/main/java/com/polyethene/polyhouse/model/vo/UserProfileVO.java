@@ -12,13 +12,20 @@ import java.util.Objects;
  * @param username 当前用户自己的登录账号，不包含联系方式
  * @param nickname 供右上角个人卡片展示的昵称
  * @param avatar 头像地址，允许现有数据库中的空值
- * @param role 以 USER/INSIDER/OWNER 语义字符串输出的身份
+ * @param role 以 USER/ADMIN/INSIDER/OWNER 语义字符串输出的身份
  * @param experience 累计经验以十进制字符串输出，避免 JavaScript 大整数精度损失
  * @param level 成长等级从 1 到 6，不授予任何角色权限
  * @param coins 整数硬币余额以十进制字符串输出，每日奖励已启用，消费用途待定
+ * @param passwordChangeRequired 临时凭据仅可读取必要资料、改密和退出，后端独立强制执行
  */
 public record UserProfileVO(String id, String username, String nickname, String avatar, UserRoleEnum role,
-                            String experience, int level, String coins) {
+                            String experience, int level, String coins, boolean passwordChangeRequired) {
+
+    /** 保留旧内部资料投影构造方式；真实账号始终通过 from 显式读取数据库的改密状态。 */
+    public UserProfileVO(String id, String username, String nickname, String avatar, UserRoleEnum role,
+                         String experience, int level, String coins) {
+        this(id, username, nickname, avatar, role, experience, level, coins, false);
+    }
 
     /**
      * 显式挑选资料字段，排除密码哈希、状态、登录 IP、逻辑删除与任意 JSON 扩展。
@@ -43,6 +50,7 @@ public record UserProfileVO(String id, String username, String nickname, String 
                 Objects.requireNonNull(user.getUsername(), "persisted username must not be null"),
                 user.getNickname(), user.getAvatar(),
                 Objects.requireNonNull(user.getRole(), "persisted user role must not be null"),
-                experience.toString(), level, coins.toString());
+                experience.toString(), level, coins.toString(),
+                Objects.requireNonNull(user.getPasswordChangeRequired(), "persisted password state must not be null"));
     }
 }

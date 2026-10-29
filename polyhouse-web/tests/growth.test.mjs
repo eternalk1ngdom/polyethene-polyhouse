@@ -43,6 +43,7 @@ const profile = {
   nickname: '成长验收',
   avatar: null,
   role: 'USER',
+  passwordChangeRequired: false,
   experience: '10',
   level: 1,
   coins: '1',
@@ -338,6 +339,25 @@ test('页面隐藏时跨日不主动发出活跃请求，再次可见后可刷�
   globalThis.document.visibilityState = 'visible'
   await store.refresh()
   assert.equal(calls, 2)
+})
+
+test('首次改密账号不发送成长请求，明确恢复该状态时立即隐藏旧快照', async () => {
+  const user = useUserStore()
+  user.setSession('initial-credential', { ...profile, passwordChangeRequired: true })
+  let calls = 0
+  apiClient.defaults.adapter = async (config) => { calls += 1; return response(config) }
+  const store = growthStore()
+  await store.refresh()
+  assert.equal(calls, 0)
+  assert.equal(store.summary, null)
+  user.setSession('normal-credential', profile)
+  await nextTick()
+  await store.refresh()
+  assert.equal(calls, 1)
+  user.requirePasswordChange('normal-credential')
+  assert.equal(store.summary, null)
+  await nextTick()
+  assert.equal(store.status, 'idle')
 })
 
 test('退出后清理成长快照与跨日定时任务', async (context) => {

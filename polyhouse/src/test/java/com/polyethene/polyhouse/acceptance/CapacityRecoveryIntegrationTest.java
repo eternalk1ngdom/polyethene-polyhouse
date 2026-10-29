@@ -234,7 +234,7 @@ class CapacityRecoveryIntegrationTest {
                     sql.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                     created = true;
                     connection.setCatalog(name);
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql")) {
+                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql")) {
                         String source = Files.readString(Path.of("sql", migration));
                         if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
                         source = source.replace("USE `polyhouse_db`;", "");

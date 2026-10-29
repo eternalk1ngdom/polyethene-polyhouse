@@ -70,7 +70,7 @@ onMounted(() => {
             class="avatar-edit"
             type="button"
             aria-label="更换头像"
-            :disabled="!!accountUi.pending"
+            :disabled="!!accountUi.pending || userStore.requiresPasswordChange"
             @click="openAvatar"
           >
             <UserAvatar
@@ -116,7 +116,7 @@ onMounted(() => {
         <a href="#my-growth">我的成长</a><a href="#profile-details-title">账号资料</a
         ><a href="#my-tools-title">常用工具</a><a href="#account-management-title">账号管理</a>
       </nav>
-      <UserGrowthPanel id="my-growth" />
+      <UserGrowthPanel v-if="!userStore.requiresPasswordChange" id="my-growth" />
       <ElAlert
         v-if="avatarNotice"
         class="avatar-notice"
@@ -207,6 +207,15 @@ onMounted(() => {
           show-icon
           class="action-error"
         />
+        <div class="management-row">
+          <div>
+            <h3>修改密码</h3>
+            <p>验证当前密码后设置新密码，成功后所有终端都需要重新登录。</p>
+          </div>
+          <ElButton :disabled="!!accountUi.pending" @click="accountUi.passwordVisible = true"
+            >修改密码</ElButton
+          >
+        </div>
         <div class="management-row">
           <div>
             <h3>退出当前登录</h3>

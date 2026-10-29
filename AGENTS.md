@@ -23,7 +23,7 @@
 1. **不改配置**：`pom.xml` 的依赖版本、`vite.config.ts` 的 proxy/alias/插件一律不动，只能追加。需要升级先问我。
 2. **不省略代码**：输出完整文件，禁止 `// 其余代码不变`、`// ...`、`// TODO` 之类占位。没改的文件明确说"未改动"。
 3. **三层隔离**：Controller 入参只用 `model.dto.*` 且带 Jakarta Validation 注解（`@NotNull/@NotBlank/@Size/@Positive` 等，方法参数加 `@Valid`）；出参只用 `model.vo.*` 并做脱敏；统一返回 `Result<T>`；**禁止直接接收或返回 Entity**。
-4. **权限**：角色只用 `UserRoleEnum`，已批准目标为 USER=10 / ADMIN=30 / INSIDER=50 / OWNER=99（ADMIN 待账号管理阶段实现），禁止用数字字面量比较。管理操作必须明确校验操作者角色、动作及目标当前角色/状态，禁止仅按权重达到 ADMIN 授权；INSIDER 不自动取得管理权限，ADMIN 不自动取得高开销资格。高开销服务端算力或 AI/第三方收费接口的方法**必须**加 `@RequireRole(UserRoleEnum.INSIDER)`；基础认证、本人资料与受控账号管理按相应身份/明确角色授权，不因读写 MySQL/Redis 就套用 INSIDER 门槛。创建、解封、密码重置及资源审核等具体边界按已批准计划实施，唯一 OWNER 仍保留数据库保障与防误停用规则。
+4. **权限**：角色只用 `UserRoleEnum`，USER=10 / ADMIN=30 / INSIDER=50 / OWNER=99，禁止用数字字面量比较。管理操作必须明确校验操作者角色、动作及目标当前角色/状态，禁止仅按权重达到 ADMIN 授权；INSIDER 不自动取得管理权限，ADMIN 不自动取得高开销资格。高开销服务端算力或 AI/第三方收费接口的方法**必须**加 `@RequireRole(UserRoleEnum.INSIDER)`；基础认证、本人资料与受控账号管理按相应身份/明确角色授权，不因读写 MySQL/Redis 就套用 INSIDER 门槛。创建、解封、密码重置及资源审核等具体边界按已批准计划实施，唯一 OWNER 仍保留数据库保障与防误停用规则。
 5. **工具类纯净**：`utils/` 只放无状态静态纯函数，禁止注入 Bean、禁止调用 Mapper/Redis/HTTP。
 6. **前端类型**：只用 `<script setup lang="ts">`；props、emits、接口响应必须声明 `interface`；禁止 `any`，禁止 `@ts-ignore`（必要时用 `unknown` + 类型收窄并写明原因）。
 7. **算法内核红线**：`polyhouse-web/src/core/` 和 `src/workers/` 是纯 TS 算法内核，禁止引用 `window/document/navigator`，禁止引入 Element Plus 或任何 UI 组件，禁止算法内部依赖 Vue 响应式。算法与 UI 只通过参数和返回值通信。

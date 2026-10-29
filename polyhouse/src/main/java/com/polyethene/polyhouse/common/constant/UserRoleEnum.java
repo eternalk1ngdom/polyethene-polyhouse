@@ -6,12 +6,15 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Objects;
 
 /**
- * 定义数据库、鉴权逻辑与前端 JSON 共同使用的三阶身份，权重用于避免魔法数字比较。
+ * 定义数据库、鉴权逻辑与前端 JSON 共同使用的角色；管理职责与高开销资格分别授权。
  */
 public enum UserRoleEnum {
 
     /** 普通注册用户，只能使用无服务端成本的基础能力。 */
     USER("USER", 10, "普通居民"),
+
+    /** 协助管理普通用户，不因管理身份自动获得高开销功能资格。 */
+    ADMIN("ADMIN", 30, "管理员"),
 
     /** 特邀熟人用户，可以访问受控的高开销能力。 */
     INSIDER("INSIDER", 50, "特邀熟人"),
@@ -61,13 +64,14 @@ public enum UserRoleEnum {
     }
 
     /**
-     * 判断当前角色是否达到目标角色要求，保证 OWNER 和后续高权重角色自然向下兼容。
+     * 基础/高开销资格按既有等级判断，ADMIN 要求使用精确角色集合，防止 INSIDER 越权管理。
      *
      * @param required 目标角色
-     * @return 当前角色权重不低于目标角色时返回 true
+     * @return 满足目标角色的具体资格时返回 true；目标账号范围还须由业务策略检查
      */
     public boolean hasPermission(UserRoleEnum required) {
         Objects.requireNonNull(required, "required role must not be null");
+        if (required == ADMIN) return this == ADMIN || this == OWNER;
         return level >= required.level;
     }
 }

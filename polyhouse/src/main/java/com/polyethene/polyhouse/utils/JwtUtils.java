@@ -1,5 +1,7 @@
 package com.polyethene.polyhouse.utils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.polyethene.polyhouse.common.constant.RedisConstants;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import io.jsonwebtoken.Claims;
@@ -13,6 +15,7 @@ import io.jsonwebtoken.SigningKeyResolverAdapter;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.security.Key;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +41,8 @@ public final class JwtUtils {
     private static final String INVALID_TOKEN_MESSAGE = "invalid access token";
     private static final String INVALID_KEY_MESSAGE = "JWT secret must be standard Base64 of exactly 32 random bytes";
     private static final Set<String> CLIENT_TYPES = Set.of("PC", "H5", "PLUGIN");
+    // 不可变 Reader 可并发复用；仅为缺少版本的历史令牌辨别原始 JSON 的显式 null。
+    private static final ObjectReader LEGACY_CLAIMS_READER = new ObjectMapper().reader();
 
     private JwtUtils() {
     }
@@ -85,9 +90,15 @@ public final class JwtUtils {
      */
     public static String createToken(long userId, UserRoleEnum role, String clientType,
                                      SecretKey signingKey, Instant now, Duration ttl) {
+        return createToken(userId, role, clientType, signingKey, now, ttl, 0);
+    }
+
+    /** 签发携带数据库当前凭据版本的 Token；旧六参数入口只适用于初始版本的可信调用方。 */
+    public static String createToken(long userId, UserRoleEnum role, String clientType,
+                                     SecretKey signingKey, Instant now, Duration ttl, long credentialVersion) {
         SecretKey key = checkedKey(signingKey);
         String client = clientType == null ? RedisConstants.DEFAULT_CLIENT_TYPE : clientType;
-        if (userId <= 0 || role == null || !CLIENT_TYPES.contains(client)
+        if (userId <= 0 || credentialVersion < 0 || role == null || !CLIENT_TYPES.contains(client)
                 || now == null || ttl == null || ttl.isNegative() || ttl.isZero() || ttl.getNano() != 0) {
             throw new IllegalArgumentException("invalid token issuance parameters");
         }
@@ -111,6 +122,7 @@ public final class JwtUtils {
                 .claim("tokenType", TOKEN_TYPE)
                 .claim("role", role.getCode())
                 .claim("clientType", client)
+                .claim("credentialVersion", credentialVersion)
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -183,8 +195,24 @@ public final class JwtUtils {
                 // 显式拒绝 now == exp，不能依赖旧库只比较 now > exp 的边界行为。
                 throw invalidToken();
             }
-            return new TokenClaims(userId, role, client, tokenId, issued.toInstant(), expires.toInstant());
-        } catch (JwtException | IllegalArgumentException | IllegalStateException | ClassCastException exception) {
+            // 旧 Token 缺少声明时视为版本 0；显式 null、负数、字符串或浮点值均拒绝，不宽松转换。
+            Object version = claims.get("credentialVersion");
+            if (version == null) {
+                // JJWT 会移除显式 null 声明。只在已验签的旧格式分支重读有限长、禁压缩的载荷，
+                // 确认声明确实缺失；常规新 Token 不增加一次 JSON 解析。
+                String payload = token.substring(token.indexOf('.') + 1, token.lastIndexOf('.'));
+                if (LEGACY_CLAIMS_READER.readTree(Base64.getUrlDecoder().decode(payload))
+                        .has("credentialVersion")) {
+                    throw invalidToken();
+                }
+            }
+            if (claims.containsKey("credentialVersion")
+                    && (!(version instanceof Integer || version instanceof Long) || ((Number) version).longValue() < 0)) {
+                throw invalidToken();
+            }
+            return new TokenClaims(userId, role, client, tokenId, issued.toInstant(), expires.toInstant(),
+                    version == null ? 0 : ((Number) version).longValue());
+        } catch (JwtException | IllegalArgumentException | IllegalStateException | ClassCastException | IOException exception) {
             // 旧库将部分错误 NumericDate 抛为 IllegalStateException；统一替换，不能泄露声明值或异常链。
             throw invalidToken();
         }
@@ -248,8 +276,14 @@ public final class JwtUtils {
      * @param tokenId 用于区分同一用户多次签发的随机会话标识
      * @param issuedAt 秒精度的签发时间
      * @param expiresAt 过期时间，后续 Redis TTL 应由此减去当前时间得到
+     * @param credentialVersion 验签后的非负凭据版本，缺少该声明的历史 Token 为 0
      */
     public record TokenClaims(long userId, UserRoleEnum role, String clientType, String tokenId,
-                              Instant issuedAt, Instant expiresAt) {
+                              Instant issuedAt, Instant expiresAt, long credentialVersion) {
+        /** 兼容初始版本的内部会话构造，不能用此入口为已改密账号恢复旧身份。 */
+        public TokenClaims(long userId, UserRoleEnum role, String clientType, String tokenId,
+                           Instant issuedAt, Instant expiresAt) {
+            this(userId, role, clientType, tokenId, issuedAt, expiresAt, 0);
+        }
     }
 }

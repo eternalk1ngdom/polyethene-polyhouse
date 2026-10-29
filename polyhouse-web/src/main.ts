@@ -4,7 +4,7 @@ import 'element-plus/dist/index.css'
 
 import App from './App.vue'
 import router from './router'
-import { setUnauthorizedHandler } from './api'
+import { setUnauthorizedHandler, setPasswordChangeRequiredHandler } from './api'
 import { useUserStore } from './stores/useUserStore'
 import { useUserGrowthStore } from './stores/useUserGrowthStore'
 
@@ -17,6 +17,7 @@ app.use(router)
 const userStore = useUserStore(pinia)
 const growthStore = useUserGrowthStore(pinia)
 setUnauthorizedHandler(userStore.expireSession)
+setPasswordChangeRequiredHandler(userStore.requirePasswordChange)
 
 app.mount('#app')
 

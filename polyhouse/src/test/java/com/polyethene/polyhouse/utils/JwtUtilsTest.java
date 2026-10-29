@@ -55,7 +55,7 @@ class JwtUtilsTest {
         assertThat(verified.getHeader().getAlgorithm()).isEqualTo("HS256");
         assertThat(verified.getBody().getSubject()).isEqualTo(Long.toString(Long.MAX_VALUE));
         assertThat(verified.getBody().keySet()).containsExactlyInAnyOrder(
-                "iss", "aud", "sub", "jti", "iat", "exp", "tokenType", "role", "clientType");
+                "iss", "aud", "sub", "jti", "iat", "exp", "tokenType", "role", "clientType", "credentialVersion");
     }
 
     @ParameterizedTest
@@ -189,11 +189,40 @@ class JwtUtilsTest {
         assertThatIllegalArgumentException().isThrownBy(() -> JwtUtils.parseAndValidate("invalid", KEY, null));
     }
 
+    @Test
+    void shouldReadLegacyVersionZeroAndRoundTripPersistedVersionsWithoutTruncation() {
+        assertThat(JwtUtils.parseAndValidate(signed(validClaims()), KEY, NOW).credentialVersion()).isZero();
+        for (long version : new long[]{0, 1, Long.MAX_VALUE}) {
+            String token = JwtUtils.createToken(42L, UserRoleEnum.ADMIN, "PC", KEY, NOW, TTL, version);
+            assertThat(JwtUtils.parseAndValidate(token, KEY, NOW).credentialVersion()).isEqualTo(version);
+        }
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                JwtUtils.createToken(42L, UserRoleEnum.USER, "PC", KEY, NOW, TTL, -1));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "0.5", "0.0", "\"0\"", "true", "null", "[]", "{}", "9223372036854775808"})
+    void shouldRejectMalformedSignedCredentialVersions(String version) {
+        // 直接编码 JSON 避免构造器预先纠正输入，验证的是生产解析器处理已签名恶意字段的边界。
+        String payload;
+        try {
+            Map<String, Object> raw = validClaims();
+            raw.put("iat", NOW.getEpochSecond());
+            raw.put("exp", NOW.plus(TTL).getEpochSecond());
+            payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(raw);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new AssertionError(exception);
+        }
+        payload = payload.substring(0, payload.length() - 1) + ",\"credentialVersion\":" + version + "}";
+        assertInvalid(Jwts.builder().setHeaderParam(Header.TYPE, Header.JWT_TYPE).setPayload(payload)
+                .signWith(KEY, SignatureAlgorithm.HS256).compact(), KEY, NOW);
+    }
+
     private static Stream<Arguments> invalidClaimValues() {
         return Stream.of(
                 Arguments.of("sub", (Object) null), Arguments.of("sub", "0"), Arguments.of("sub", "-1"),
                 Arguments.of("sub", "01"), Arguments.of("sub", "9223372036854775808"), Arguments.of("sub", 42),
-                Arguments.of("role", (Object) null), Arguments.of("role", "ADMIN"), Arguments.of("role", 10),
+                Arguments.of("role", (Object) null), Arguments.of("role", "UNKNOWN_ROLE"), Arguments.of("role", 10),
                 Arguments.of("role", List.of("USER")), Arguments.of("clientType", (Object) null),
                 Arguments.of("clientType", "MOBILE"), Arguments.of("clientType", "pc"),
                 Arguments.of("jti", (Object) null), Arguments.of("jti", "not-a-uuid"), Arguments.of("jti", "1-1-1-1-1"),

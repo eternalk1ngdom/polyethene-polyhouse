@@ -16,6 +16,7 @@ interface UnauthorizedHandler {
 /** 复用连接配置和有限等待时间；实例独立于页面，不从用户缓存推断身份。 */
 export const apiClient = axios.create({ baseURL: '/api', timeout: 12000 })
 let unauthorizedHandler: UnauthorizedHandler | undefined
+let passwordChangeRequiredHandler: UnauthorizedHandler | undefined
 
 /** 只传播安全状态和固定提示，不附带可能含密码或 Token 的 Axios 请求、响应或 cause。 */
 export class ApiError extends Error {
@@ -41,12 +42,18 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
   unauthorizedHandler = handler
 }
 
+/** 临时凭据被业务拒绝时仍保留改密所需会话；回调只能影响发出请求时的同一身份。 */
+export function setPasswordChangeRequiredHandler(handler: UnauthorizedHandler): void {
+  passwordChangeRequiredHandler = handler
+}
+
 /** JSON 对象的最小类型收窄，数组和 null 都不是合法响应外壳。 */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function safeError(status: number, code: number | null = null): ApiError {
+  if (code === 40301) return new ApiError('请先修改初始密码', 403, code)
   if (status === 401 || code === 40100) return new ApiError('登录状态已失效，请重新登录', 401, code)
   if (status === 403 || code === 40300)
     return new ApiError('当前账号没有执行此操作的权限', 403, code)
@@ -94,6 +101,7 @@ export async function apiRequest<T>(
             )
           : new ApiError('服务返回的数据不完整，请稍后重试', 502)
     if (safe.sessionExpired && submittedToken) unauthorizedHandler?.(submittedToken)
+    if (safe.code === 40301 && submittedToken) passwordChangeRequiredHandler?.(submittedToken)
     throw safe
   }
 }

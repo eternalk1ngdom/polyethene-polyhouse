@@ -32,7 +32,7 @@ try {
     # 不继承偶然打开的实例测试开关；同时明确要求执行普通测试，避免环境中的 skip 标志造成假成功。
     & mvn -q '-DskipTests=false' '-Dmaven.test.skip=false' '-Dpolyhouse.mysql.integration=false' `
         '-Dpolyhouse.redis.integration=false' '-Dpolyhouse.auth.integration=false' '-Dpolyhouse.jwt.runtime=false' `
-        '-Dpolyhouse.capacity.integration=false' test
+        '-Dpolyhouse.capacity.integration=false' '-Dpolyhouse.security.integration=false' test
     if ($LASTEXITCODE -ne 0) { throw '后端普通测试失败，后续阶段未执行。' }
 } finally {
     Pop-Location

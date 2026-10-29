@@ -11,7 +11,9 @@ export interface UserProfile {
   /** 服务端管理的头像路径；展示组件仅加载本项目受控图片。 */
   avatar: string | null
   /** 展示角色，实际权限始终由后端决定。 */
-  role: 'USER' | 'INSIDER' | 'OWNER'
+  role: 'USER' | 'ADMIN' | 'INSIDER' | 'OWNER'
+  /** 临时凭据的限制由服务端给出，前端据此引导改密，不能自行解除。 */
+  passwordChangeRequired: boolean
   /** 后端结算的累计经验，不由浏览器自行增加。 */
   experience: string
   /** 等级独立于角色权限。 */
@@ -32,6 +34,14 @@ export interface LoginRequest {
 export interface RegisterRequest extends LoginRequest {
   /** 昵称与登录账号分离。 */
   nickname: string
+}
+
+/** 只修改当前会话本人密码，不接受账号编号、角色或凭据版本。 */
+export interface PasswordChangeRequest {
+  /** 重新确认当前凭据，原样发送，不保存。 */
+  currentPassword: string
+  /** 新密码仅存在于当前表单与请求内存。 */
+  newPassword: string
 }
 
 /** 登录契约只向会话管理交付经过校验的 Token 与安全用户资料。 */
@@ -84,7 +94,8 @@ export function decodeUserProfile(value: unknown): UserProfile {
     !(typeof value.nickname === 'string' || value.nickname === null) ||
     !(typeof value.avatar === 'string' || value.avatar === null) ||
     typeof value.role !== 'string' ||
-    !['USER', 'INSIDER', 'OWNER'].includes(value.role) ||
+    !['USER', 'ADMIN', 'INSIDER', 'OWNER'].includes(value.role) ||
+    typeof value.passwordChangeRequired !== 'boolean' ||
     !decimal(value.experience) ||
     !decimal(value.coins) ||
     typeof value.level !== 'number' ||
@@ -99,6 +110,7 @@ export function decodeUserProfile(value: unknown): UserProfile {
     nickname: value.nickname,
     avatar: value.avatar,
     role: value.role as UserProfile['role'],
+    passwordChangeRequired: value.passwordChangeRequired,
     experience: value.experience,
     level: value.level,
     coins: value.coins,
@@ -158,6 +170,17 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
 /** 恢复会话必须请求后端，缓存中的用户资料和角色不能替代认证。 */
 export function getCurrentUser(token: string): Promise<UserProfile> {
   return apiRequest({ method: 'GET', url: '/auth/me' }, decodeUserProfile, token)
+}
+
+/** 改密不是可自动重试的查询；成功返回空结果，调用方需清理本次会话并重新登录。 */
+export function changePassword(request: PasswordChangeRequest, token: string): Promise<void> {
+  return apiRequest(
+    { method: 'POST', url: '/auth/password/change', data: request },
+    (value) => {
+      if (value !== null) throw new ApiError('改密结果不完整，请重新登录核对', 502)
+    },
+    token,
+  )
 }
 
 /** 上传只修改头像，避免返回整份旧资料覆盖并发成长状态。 */

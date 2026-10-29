@@ -7,6 +7,7 @@ import BrandLogo from './BrandLogo.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import AuthDialog from './AuthDialog.vue'
 import DeregisterDialog from './DeregisterDialog.vue'
+import PasswordChangeDialog from './PasswordChangeDialog.vue'
 import UserAvatar from './UserAvatar.vue'
 import UserPopoverCard from './UserPopoverCard.vue'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -136,6 +137,7 @@ watch(
     </div>
     <AuthDialog v-model="accountUi.authVisible" />
     <DeregisterDialog />
+    <PasswordChangeDialog v-model="accountUi.passwordVisible" />
   </header>
 </template>
 

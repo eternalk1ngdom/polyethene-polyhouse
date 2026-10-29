@@ -93,6 +93,7 @@ class AuthServiceImplTest {
         properties.setExpirationDays(7);
         properties.setSecret(Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded()));
         lenient().when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
+        lenient().when(growth.rewardDailyLogin(42L, 0L)).thenReturn(activeUser());
         service = new AuthServiceImpl(mapper, sessions, properties, validatorFactory.getValidator(), growth,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -229,10 +230,10 @@ class AuthServiceImplTest {
         when(sessions.isCurrentSession(any())).thenReturn(true);
         User current = activeUser();
         current.setRole(UserRoleEnum.USER);
-        when(growth.rewardDailyLogin(42L)).thenReturn(current);
+        when(growth.rewardDailyLogin(42L, 0L)).thenReturn(current);
         assertThat(service.getCurrentUser(token).role()).isEqualTo(UserRoleEnum.USER);
         doThrow(new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录"))
-                .when(growth).rewardDailyLogin(42L);
+                .when(growth).rewardDailyLogin(42L, 0L);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
         when(sessions.isCurrentSession(any())).thenReturn(false);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
@@ -312,7 +313,7 @@ class AuthServiceImplTest {
     void shouldRecheckSessionAfterReadingTheCurrentRole() {
         User promoted = activeUser();
         promoted.setRole(UserRoleEnum.OWNER);
-        when(growth.rewardDailyLogin(42L)).thenReturn(promoted);
+        when(growth.rewardDailyLogin(42L, 0L)).thenReturn(promoted);
         when(sessions.isCurrentSession(any())).thenReturn(true, false);
         assertBusiness(() -> service.getCurrentUser(currentToken()), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
     }
