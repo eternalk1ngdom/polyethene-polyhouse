@@ -74,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
         this.growth = growth;
     }
 
-    /** 注册只创建 USER，数据库插入与安全资料读取在同一事务内完成，冲突时回滚。 */
+    /** 仅供内部历史夹具/兼容调用；公共注册已关闭，网页开户必须经过独立屋主授权服务。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public UserProfileVO register(RegisterDTO request) {

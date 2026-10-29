@@ -13,7 +13,8 @@ import com.polyethene.polyhouse.model.vo.UserGrowthVO;
 public interface AuthService {
 
     /**
-     * 注册普通用户，通过业务判重和数据库唯一索引共同保护账号唯一性。
+     * 保留内部历史夹具/兼容调用的普通用户创建能力，不再映射到公共 HTTP 注册。
+     * 网页开户必须调用独立 AccountProvisioningService，不能借此绕过屋主授权与首次改密。
      *
      * @param request 注册必需信息，不允许客户端设置角色或状态
      * @return 已持久化的安全资料，不自动建立登录会话

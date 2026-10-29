@@ -58,6 +58,13 @@ const stats = computed(() => growth.summary ?? props.profile)
         ><ElIcon><User /></ElIcon>个人中心</span
       ><ElIcon><ArrowRight /></ElIcon
     ></RouterLink>
+    <RouterLink
+      v-if="profile.role === 'OWNER' && !profile.passwordChangeRequired"
+      class="profile-link"
+      to="/manage/accounts"
+      @click="emit('navigate')"
+      ><span>屋主工作台</span><ElIcon><ArrowRight /></ElIcon
+    ></RouterLink>
     <p v-if="error" class="action-error" role="alert">{{ error }}</p>
     <ElButton class="logout-button" text :loading="busy" @click="emit('logout')"
       ><ElIcon><SwitchButton /></ElIcon>退出登录</ElButton

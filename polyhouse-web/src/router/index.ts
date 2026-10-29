@@ -18,6 +18,12 @@ const router = createRouter({
       component: () => import('../views/AccountView.vue'),
       meta: { title: '个人中心' },
     },
+    {
+      path: '/manage/accounts',
+      name: 'account-provisioning',
+      component: () => import('../views/AccountProvisioningView.vue'),
+      meta: { title: '屋主工作台' },
+    },
     ...toolRegistry.map((tool) => {
       // 遗漏页面映射时及早报错，避免发布一个能点击却空白的工具入口。
       if (!(tool.code in toolViews)) throw new Error(`工具缺少页面映射：${tool.code}`)

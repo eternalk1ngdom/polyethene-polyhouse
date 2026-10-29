@@ -1,6 +1,8 @@
 package com.polyethene.polyhouse.controller;
 
 import com.polyethene.polyhouse.common.result.Result;
+import com.polyethene.polyhouse.common.constant.ErrorCode;
+import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
 import com.polyethene.polyhouse.common.annotation.AllowInitialPassword;
 import com.polyethene.polyhouse.model.dto.ClientRequestDTO;
@@ -33,11 +35,11 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /** 注册只返回脱敏资料，不自动登录或允许客户端指定角色。 */
+    /** 保留旧路径的明确关闭响应，旧页面或直接 HTTP 均不能绕过屋主受控开户。 */
     @SkipBearerAuth
     @PostMapping("/register")
     public Result<UserProfileVO> register(@Valid @RequestBody RegisterDTO request) {
-        return Result.success(authService.register(request));
+        throw new BusinessException(ErrorCode.FORBIDDEN, "公共注册已关闭，请联系屋主获取账号");
     }
 
     /** 连接地址由专用解析器从 Servlet 获取，不采信请求体或转发头中的审计地址。 */

@@ -54,6 +54,7 @@ class AuthHttpIntegrationTest {
 
     @Autowired
     private TestRestTemplate http;
+    @Autowired private com.polyethene.polyhouse.service.AuthService auth;
     @Autowired
     private ObjectMapper json;
     @Autowired
@@ -100,7 +101,7 @@ class AuthHttpIntegrationTest {
         Fixture fixture = register();
         ResponseEntity<String> duplicate = http.postForEntity("/api/auth/register",
                 Map.of("username", fixture.username(), "password", fixture.password(), "nickname", "重复注册"), String.class);
-        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         for (int attempt = 0; attempt < 10; attempt++) {
             ResponseEntity<String> wrong = http.postForEntity("/api/auth/login", Map.of("username", fixture.username(),
                     "password", "wrong-" + UUID.randomUUID()), String.class);
@@ -269,17 +270,14 @@ class AuthHttpIntegrationTest {
     private Fixture register() throws Exception {
         String username = "http_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         String password = UUID.randomUUID().toString();
-        ResponseEntity<String> response = http.postForEntity("/api/auth/register",
-                Map.of("username", username, "password", password, "nickname", "真实 HTTP 验收", "role", "OWNER",
-                        "experience", "99999", "level", 99, "coins", "99999"), String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        JsonNode data = json.readTree(response.getBody()).path("data");
-        Fixture fixture = new Fixture(Long.parseLong(data.path("id").asText()), username, password);
+        // 公共注册已关闭；只在测试内部准备旧账号夹具，HTTP 测试继续覆盖登录/状态与撤销契约。
+        UserProfileVO profile = auth.register(new com.polyethene.polyhouse.model.dto.RegisterDTO(username, password, "真实 HTTP 验收"));
+        Fixture fixture = new Fixture(Long.parseLong(profile.id()), username, password);
         ownedFixtures.add(fixture);
-        assertThat(data.path("role").asText()).isEqualTo("USER");
-        assertThat(data.path("experience").asText()).isEqualTo("0");
-        assertThat(data.path("level").asInt()).isEqualTo(1);
-        assertThat(data.path("coins").asText()).isEqualTo("0");
+        assertThat(profile.role()).isEqualTo(UserRoleEnum.USER);
+        assertThat(profile.experience()).isEqualTo("0");
+        assertThat(profile.level()).isEqualTo(1);
+        assertThat(profile.coins()).isEqualTo("0");
         return fixture;
     }
 

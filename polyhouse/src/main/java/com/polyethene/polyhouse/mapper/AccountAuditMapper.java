@@ -11,4 +11,9 @@ public interface AccountAuditMapper {
     @Insert("INSERT INTO sys_account_audit(actor_id, target_id, action, credential_version) "
             + "VALUES(#{userId}, #{userId}, 'PASSWORD_CHANGE', #{version})")
     int recordPasswordChange(@Param("userId") long userId, @Param("version") long version);
+
+    /** 与新账号/发号/幂等记录同事务；保留创建者和目标，不记录临时密码或屋主再验证凭据。 */
+    @Insert("INSERT INTO sys_account_audit(actor_id, target_id, action, credential_version) "
+            + "VALUES(#{actorId}, #{targetId}, 'ACCOUNT_CREATE', 0)")
+    int recordCreation(@Param("actorId") long actorId, @Param("targetId") long targetId);
 }

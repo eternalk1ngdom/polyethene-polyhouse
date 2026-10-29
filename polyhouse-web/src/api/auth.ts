@@ -30,12 +30,6 @@ export interface LoginRequest {
   password: string
 }
 
-/** 注册资料不包含角色、成长或账号状态等服务端管理字段。 */
-export interface RegisterRequest extends LoginRequest {
-  /** 昵称与登录账号分离。 */
-  nickname: string
-}
-
 /** 只修改当前会话本人密码，不接受账号编号、角色或凭据版本。 */
 export interface PasswordChangeRequest {
   /** 重新确认当前凭据，原样发送，不保存。 */
@@ -135,21 +129,6 @@ function decodeLogin(value: unknown): LoginResponse {
     tokenType: 'Bearer',
     expiresAt: value.expiresAt,
     user: decodeUserProfile(value.user),
-  }
-}
-
-/** 注册成功不等于登录，不自动建立会话或重复提交密码。 */
-export async function register(request: RegisterRequest): Promise<UserProfile> {
-  try {
-    return await apiRequest(
-      { method: 'POST', url: '/auth/register', data: request },
-      decodeUserProfile,
-    )
-  } catch (error: unknown) {
-    if (error instanceof ApiError && error.status === 409) {
-      throw new ApiError('账号已存在，请更换账号或直接登录', 409, error.code)
-    }
-    throw error
   }
 }
 

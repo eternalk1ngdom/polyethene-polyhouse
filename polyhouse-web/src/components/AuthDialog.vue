@@ -13,9 +13,8 @@ import {
   type InputInstance,
 } from 'element-plus'
 import { ApiError } from '../api'
-import { register } from '../api/auth'
 import { useUserStore } from '../stores/useUserStore'
-import { nicknameError, passwordError, usernameError } from '../utils/authValidation'
+import { passwordError, usernameError } from '../utils/authValidation'
 
 /** 弹窗仅接收显示状态，不接收或向父组件传递密码。 */
 interface Props {
@@ -34,28 +33,19 @@ interface AuthFormValues {
   username: string
   /** 原始密码，不做归一化。 */
   password: string
-  /** 注册时的展示昵称。 */
-  nickname: string
-  /** 二次确认仅供本地比较，不发送到服务端。 */
-  confirmation: string
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 const userStore = useUserStore()
-const mode = ref<'login' | 'register'>('login')
 const submitting = ref(false)
 const errorMessage = ref('')
-const successMessage = ref('')
 const formRef = ref<FormInstance>()
 const usernameInput = ref<InputInstance>()
 const form = reactive<AuthFormValues>({
   username: '',
   password: '',
-  nickname: '',
-  confirmation: '',
 })
-const title = computed(() => (mode.value === 'login' ? '欢迎回到聚妙屋' : '开启你的个人空间'))
 
 function fieldRule(validate: (value: string) => string | null): FormItemRule {
   return {
@@ -70,25 +60,10 @@ function fieldRule(validate: (value: string) => string | null): FormItemRule {
 const rules = computed<FormRules<AuthFormValues>>(() => ({
   username: [fieldRule(usernameError)],
   password: [fieldRule(passwordError)],
-  nickname: mode.value === 'register' ? [fieldRule(nicknameError)] : [],
-  confirmation:
-    mode.value === 'register'
-      ? [fieldRule((value) => (value && value === form.password ? null : '两次输入的密码不一致'))]
-      : [],
 }))
 
 function clearPasswords(): void {
   form.password = ''
-  form.confirmation = ''
-}
-
-function changeMode(next: 'login' | 'register'): void {
-  if (submitting.value || next === mode.value) return
-  mode.value = next
-  errorMessage.value = ''
-  successMessage.value = ''
-  clearPasswords()
-  formRef.value?.clearValidate()
 }
 
 function closeDialog(): void {
@@ -101,14 +76,8 @@ async function submit(): Promise<void> {
   if (!valid || submitting.value) return
   submitting.value = true
   errorMessage.value = ''
-  successMessage.value = ''
   try {
-    if (mode.value === 'register') {
-      await register({ username: form.username, password: form.password, nickname: form.nickname })
-      mode.value = 'login'
-      successMessage.value = '注册成功，现在可以登录了。'
-      formRef.value.clearValidate()
-    } else if (await userStore.login({ username: form.username, password: form.password })) {
+    if (await userStore.login({ username: form.username, password: form.password })) {
       emit('update:modelValue', false)
     } else {
       errorMessage.value = '登录状态已变化，请重新操作'
@@ -126,12 +95,9 @@ watch(
   (open) => {
     clearPasswords()
     errorMessage.value = ''
-    successMessage.value = ''
     formRef.value?.clearValidate()
-    if (open) mode.value = 'login'
-    else {
+    if (!open) {
       form.username = ''
-      form.nickname = ''
     }
   },
 )
@@ -142,7 +108,7 @@ watch(
   <div class="auth-host">
     <ElDialog
       :model-value="modelValue"
-      :title="title"
+      title="欢迎回到聚妙屋"
       width="440px"
       class="auth-dialog"
       align-center
@@ -156,45 +122,11 @@ watch(
     >
       <div class="auth-content">
         <p class="auth-eyebrow">POLYHOUSE / 聚妙屋</p>
-        <p class="auth-intro">
-          {{
-            mode === 'login'
-              ? '登录你的账号，继续探索日常里的新可能。'
-              : '一个账号，查看个人资料，记录每天的成长。'
-          }}
-        </p>
-        <div class="auth-tabs" role="group" aria-label="选择登录或注册">
-          <button
-            type="button"
-            :class="{ active: mode === 'login' }"
-            :aria-pressed="mode === 'login'"
-            :disabled="submitting"
-            @click="changeMode('login')"
-          >
-            登录
-          </button>
-          <button
-            type="button"
-            :class="{ active: mode === 'register' }"
-            :aria-pressed="mode === 'register'"
-            :disabled="submitting"
-            @click="changeMode('register')"
-          >
-            注册
-          </button>
-        </div>
+        <p class="auth-intro">登录屋主发放的账号，继续探索日常里的新可能。</p>
         <ElAlert
           v-if="errorMessage"
           :title="errorMessage"
           type="error"
-          :closable="false"
-          show-icon
-          class="form-notice"
-        />
-        <ElAlert
-          v-if="successMessage"
-          :title="successMessage"
-          type="success"
           :closable="false"
           show-icon
           class="form-notice"
@@ -217,45 +149,21 @@ watch(
               placeholder="4～32 位字母、数字或下划线"
               :maxlength="32"
           /></ElFormItem>
-          <ElFormItem v-if="mode === 'register'" label="昵称" prop="nickname"
-            ><ElInput
-              v-model="form.nickname"
-              name="nickname"
-              autocomplete="nickname"
-              placeholder="希望我们怎么称呼你？"
-              :maxlength="32"
-          /></ElFormItem>
           <ElFormItem label="密码" prop="password"
             ><ElInput
               v-model="form.password"
               name="password"
               type="password"
-              :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+              autocomplete="current-password"
               placeholder="至少 8 个字符"
               :maxlength="72"
               show-password
           /></ElFormItem>
-          <ElFormItem v-if="mode === 'register'" label="确认密码" prop="confirmation"
-            ><ElInput
-              v-model="form.confirmation"
-              name="confirmation"
-              type="password"
-              autocomplete="new-password"
-              placeholder="再输入一次密码"
-              :maxlength="72"
-              show-password
-          /></ElFormItem>
-          <ElButton
-            class="submit-button"
-            type="primary"
-            native-type="submit"
-            :loading="submitting"
-            >{{ mode === 'login' ? '登录，回到小屋' : '创建账号' }}</ElButton
+          <ElButton class="submit-button" type="primary" native-type="submit" :loading="submitting"
+            >登录，回到小屋</ElButton
           >
         </ElForm>
-        <p class="auth-footnote">
-          {{ mode === 'login' ? '密码输错可以直接重试。' : '注册成功后，使用账号和密码登录。' }}
-        </p>
+        <p class="auth-footnote">当前为受控内测，账号由屋主创建。密码输错可以直接重试。</p>
       </div>
     </ElDialog>
   </div>
@@ -301,29 +209,6 @@ watch(
   font-size: 13px;
   line-height: 1.8;
   margin: 0 0 24px;
-}
-.auth-tabs {
-  display: flex;
-  gap: 26px;
-  border-bottom: 1px solid var(--ph-line);
-  margin-bottom: 24px;
-}
-.auth-tabs button {
-  padding: 0 2px 12px;
-  color: var(--ph-muted);
-  font-size: 14px;
-  background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-}
-.auth-tabs button.active {
-  border-color: var(--ph-brand);
-  color: var(--ph-brand);
-  font-weight: 600;
-}
-.auth-tabs button:disabled {
-  cursor: wait;
 }
 .form-notice {
   margin-bottom: 20px;

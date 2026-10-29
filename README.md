@@ -58,7 +58,7 @@ mvn spring-boot:run
 
 新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
 
-当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；公共注册关闭与屋主开户属于下一步 P2。
+当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。
 
 ## 公共层响应约定
 
@@ -105,7 +105,7 @@ npm run lint:check
 
 先使用本机预设启动后端，再在 `polyhouse-web/` 执行 `npm run dev`，访问 `http://localhost:5173/`。沿用现有 Vite `/api` 代理到本机 8080；前端不需要也不应配置数据库密码或 JWT 签名密钥。页面路由使用浏览器历史模式，正式静态托管仍需将未知页面路径回退到 `index.html`。
 
-右上角打开登录/注册弹窗；注册成功后切回登录，未自动登录。登录使用 PC 会话，账号及密码原样提交，前端同时检查 72 字节的 UTF-8 密码限制。提交过程中禁用重复操作，密码在提交结束、切换模式及关闭后清除，不保存到 localStorage。
+右上角只打开登录弹窗，公共注册入口已关闭。已确认 OWNER 可从个人菜单进入“屋主工作台”（`/manage/accounts`），创建 USER/ADMIN 并一次交付初始凭据；ADMIN 开户再次验证屋主当前密码。登录使用 PC 会话，账号及密码原样提交，前端同时检查 72 字节的 UTF-8 密码限制。提交过程中禁用重复操作，密码在提交结束及关闭后清除，不保存到 localStorage。
 
 刷新或回到页面时，请求 `/api/auth/me` 确认最新身份；`polyhouse_user` 仅为既有缓存格式，不从其恢复昵称、角色或权限。确认前显示恢复状态；网络/服务故障、403 或响应格式异常不清除 Token，也不显示未确认身份，提供重试。认证请求的 401 清除匹配的旧会话，公开登录的错误密码不触发全局清理。其他标签页登录/退出会同步并重新核验，旧请求不能覆盖新会话。
 
@@ -125,15 +125,15 @@ npm run lint:check
 
 ### 唯一屋主与运维入口
 
-普通注册固定为 USER。唯一屋主通过 `polyhouse/scripts/Initialize-Owner.ps1 -UserId "编号" -Username "小写账号"` 只读检查，再显式加 `-Apply` 首次授予；不是网页或数据库命令。先执行追加迁移 [004_owner_bootstrap.sql](polyhouse/sql/004_owner_bootstrap.sql)，已完成的库不要重放初始化基线。脚本只连接本机，复用忽略的私有预设，不要求网站密码，不随服务启动运行，不提供 HTTP 授权接口。
+公共自助注册已关闭；屋主通过独立开户页创建 USER/ADMIN。唯一屋主通过 `polyhouse/scripts/Initialize-Owner.ps1 -UserId "编号" -Username "小写账号"` 只读检查，再显式加 `-Apply` 首次授予；不是网页或数据库命令。先执行追加迁移 [004_owner_bootstrap.sql](polyhouse/sql/004_owner_bootstrap.sql)，已完成的库不要重放初始化基线。脚本只连接本机，复用忽略的私有预设，不要求网站密码，不随服务启动运行，不提供 HTTP 授权接口。
 
 数据库唯一槽位防止多个 OWNER，单行锁串行初始化并保留首次目标/执行人/时间；重复执行同一屋主不改首次记录，清理旧会话后重新登录。历史记录冲突或已有其他屋主会拒绝，普通注销接口对屋主返回 403，正常退出仍可用。详细操作、失败回滚、部署权限边界及测试隔离见 [屋主初始化与部署说明](docs/operations/owner-bootstrap.md)。正式授予后，全量 OWNER 测试须放在独立测试数据库，不能为测试清空真实屋主。
 
 `User` 映射现有 `sys_user` 表，角色使用 `UserRoleEnum` 的语义字符串，`ext_json` 映射为 JSON 对象，查询自动排除逻辑删除账号。创建、更新时间由 MySQL 维护，实体写入不会覆盖它们。
 
-`RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
+旧 `POST /api/auth/register` 仍校验 `RegisterDTO`，合法请求固定 403、不写库；内部历史夹具方法不再对应公开入口。`RegisterDTO` 仅接收 `username/password/nickname`，`LoginDTO` 接收 `username/password` 和可选 `clientType`（PC/H5/PLUGIN，省略时默认 PC）。账号约定为 4 至 32 位字母、数字或下划线；昵称非空白且不超过 32 个字符；密码至少 8 个字符，UTF-8 编码最多 72 字节，以适配策划书指定的 BCrypt，不能简单按 72 个字符处理中文密码。不裁剪或归一化密码。DTO 的 JSON 输出和默认文本输出均隐藏密码，Service 与 Controller 的 `@Valid` 均执行边界校验。
 
-`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins/passwordChangeRequired`，不返回密码哈希、凭据版本、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。注册、登录、当前用户 HTTP 接口均复用这些安全模型。
+`UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins/passwordChangeRequired`，不返回密码哈希、凭据版本、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。登录、当前用户 HTTP 接口复用这些安全模型；屋主开户使用独立 `AccountCreationVO`，不把初始密码混入用户资料。
 
 初始化基线位于 [polyhouse/sql/001_init.sql](polyhouse/sql/001_init.sql)，按只读策划书归档四张表的结构，不自动执行。现有数据库无需重新初始化；该文件仅供空环境人工建表，不能当作迁移脚本反复执行。账号唯一索引与软删除并存，因此删除后账号仍占用，后续注册不得默认允许复用。
 
@@ -197,7 +197,7 @@ mvn -q '-Dpolyhouse.mysql.integration=true' '-Dpolyhouse.redis.integration=true'
 
 ## JWT 基础工具
 
-当前六项认证 HTTP 接口和认证/角色拦截器均已接入。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
+认证 HTTP 接口和认证/角色拦截器均已接入；公共注册已关闭，屋主开户及结果核对见[独立说明](docs/operations/account-provisioning.md)。签名校验通过不等于账号仍启用、角色仍有效或会话尚未退出，Service 会继续核对 Redis 和数据库。
 
 `JwtUtils` 保持静态且不持有业务状态：`keyFromBase64` 校验外部密钥，`createToken` 签发访问令牌，`parseAndValidate` 验签后返回内部 `TokenClaims`。密钥、当前时间和有效期由调用方传入，工具不读取环境、不注入 Bean、不访问 MySQL/Redis，也不自动裁剪 `Bearer` 前缀。
 
@@ -233,7 +233,7 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 
 ## 注册登录 Service
 
-`AuthService` 提供 `register/login/getCurrentUser/getGrowthStatus/logout/deregister` 业务方法，六项均已有 HTTP 入口。已映射的 `/api/**` 业务请求默认要求有效 Bearer 身份；注册、登录及独立核验请求体 Token 的撤销入口显式跳过统一 Bearer 检查。注册返回安全用户资料，不自动登录；登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
+`AuthService` 提供登录、资料、成长和撤销业务；`register` 仅保留内部历史夹具/兼容调用，旧公共 HTTP 注册已关闭。已映射的 `/api/**` 业务默认要求有效 Bearer；关闭注册的响应、登录及独立核验请求体 Token 的撤销入口显式跳过统一 Bearer 检查。屋主开户走独立服务，登录返回 `LoginVO` 的 `accessToken/tokenType/expiresAt/user`。VO 的默认文本表示隐藏令牌，正常 JSON 响应按需交付令牌。
 
 ### HTTP 入口与权限行为
 
@@ -241,7 +241,7 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 
 | 方法与路径 | 输入 | 成功数据 |
 | --- | --- | --- |
-| `POST /api/auth/register` | JSON：`username/password/nickname`，额外角色字段不生效，注册固定 USER | `UserProfileVO` |
+| `POST /api/auth/register`（已关闭） | 仍校验旧 JSON：`username/password/nickname`，不调用创建业务 | 无成功响应；合法输入 403/40300，非法输入 400 |
 | `POST /api/auth/login` | JSON：`username/password/clientType`，终端可省略 | `LoginVO`，包含 Token、到期时间和安全资料 |
 | `GET /api/auth/me` | 唯一的 `Authorization: Bearer <JWT>` 请求头 | 最新 `UserProfileVO` |
 | `GET /api/auth/growth` | 唯一的 `Authorization: Bearer <JWT>` 请求头，无领取参数 | 当前账号的 `UserGrowthVO` |
@@ -254,11 +254,11 @@ mvn -q '-Dtest=JwtUtilsTest,JwtPropertiesTest' test
 
 `/me` 通过专用解析器取得 `CurrentUserDTO`，复用拦截器在本次请求中核验的不可变脱敏资料，不重复调用认证服务。资料仅存在于服务端请求属性中；正常结束、异常及异步切换均清理，下一次请求和异步重新分发仍完整认证。客户端查询参数不能提供这份身份，公开入口缺少核验结果时拒绝解析。此复用只用于本人资料读取；成长状态查询、头像更新及注销等业务保留原有独立核验或事务内复核，不将请求资料当作写操作的长期授权。
 
-当前角色受限探针只存在于测试源码，不提供生产管理或 AI 接口。请求失败、异常和异步切换均清理上下文；异步业务仍须显式传递身份，不能假定 ThreadLocal 会跨线程传播。
+角色探针只存在于测试源码；生产管理目前仅开放 OWNER 开户/核对，封禁、重置与审核尚未开放，AI 仍未实现。请求失败、异常和异步切换均清理上下文；异步业务仍须显式传递身份，不能假定 ThreadLocal 会跨线程传播。
 
 跨域来源允许本机前端 `http://localhost:5173`、`http://127.0.0.1:5173` 和策划书预留的 `chrome-extension://*`，仅开放 GET/POST/OPTIONS，不携带 Cookie 凭据。预检先于身份认证；来源许可不授予登录或角色权限，拒绝来源/方法仍返回统一 JSON 403。部署到其他域名时需明确配置来源，当前不开放任意网站。
 
-新注册账号在业务层按 `Locale.ROOT` 转小写，查找和判重使用同一规范，匹配本机数据库不区分大小写的唯一索引。既有账号不批量改名；密码保持原样。注册只创建 USER，业务预查和唯一索引共同处理并发或软删除账号冲突，密码只保存 BCrypt 哈希。
+内部历史创建方法按 `Locale.ROOT` 规范账号并固定 USER，仅供旧夹具/兼容调用；生产网页不能调用它。P2 网页开户由服务端统一生成 `ph` 序号账号，并单独校验 OWNER 与目标角色。既有账号不批量改名；密码只保存 BCrypt 哈希，软删除名称仍被唯一索引占用。
 
 按用户最新决定，登录失败只返回统一的“账号或密码错误”，允许立即重新尝试，不累计失败次数、不锁定账号、不返回十五分钟等待提示。不存在账号仍执行等成本的虚拟 BCrypt 验证；禁用或已删除账号仍不能登录。失败尝试不会清除既有有效会话。此决定覆盖只读策划书原有的五次失败锁定方案，策划书文件本身保持不变。
 
@@ -288,7 +288,7 @@ mvn -q '-Dpolyhouse.redis.integration=true' '-Dtest=AuthRedisStoreIntegrationTes
 .\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify
 ```
 
-完整入口自动启用 `AuthHttpIntegrationTest`，验证注册/重复账号、连续失败立即重试、当前资料、过期/篡改/未登记令牌、数据库角色变更与禁用、多端退出和软注销。HTTP 账号用 `http_it_` 随机命名，结束时只清理本次登记的精确记录和会话；不开启请求/响应全文打印，也不把密码或 JWT 写进测试诊断。
+完整入口自动启用 `AuthHttpIntegrationTest`，验证公共注册关闭、连续失败立即重试、当前资料、过期/篡改/未登记令牌、数据库角色变更与禁用、多端退出和软注销。HTTP 账号用 `http_it_` 随机命名，结束时只清理本次登记的精确记录和会话；不开启请求/响应全文打印，也不把密码或 JWT 写进测试诊断。
 
 完整入口也启用 `UserGrowthIntegrationTest`：用可控奖励时钟和真实存储验证 365 天升级、满级后累计、跨上海零点、跨端防重、漏登不补发、8 事务竞争、外层旧快照、数据库主键防重、失败回滚重试和数值溢出。随机账号为 `growth_it_`，只清理本次登记的记录及其级联流水；奖励时钟不改变 JWT 时间或系统时钟。`AuthTransactionIntegrationTest` 同时验证会话发布失败时成长奖励随登录一起回滚。
 
@@ -325,7 +325,7 @@ mvn -q '-Dpolyhouse.jwt.runtime=true' '-Dtest=JwtRuntimeConfigurationIntegration
 
 空白、缺失或超过 4096 字符的 Token 请求返回 400；签名无效、过期，以及注销时会话已被替换或账号失效，返回 401；数据库/Redis 故障返回安全错误，不返回底层异常或凭据。退出允许已被替换但签名仍有效的旧 Token 幂等撤销自己的会话。
 
-前端 `api/auth.ts` 和 `useUserStore.logout()/deregister()` 已可调用：成功后同步清除内存状态与 `polyhouse_token/polyhouse_user`；401 清理失效会话但仍报告操作失败；网络或服务故障保留状态供重试。等待请求期间取得了新 Token 或新会话版本时，旧响应不会清掉新会话，也不删除另一标签页新写入的缓存。登录/注册弹窗、刷新恢复、个人卡片/个人中心、退出反馈及注销确认均已接入；注销始终只针对当前已核实身份，页面不提交用户 ID 或任意用户名来指定对象。
+前端 `api/auth.ts` 和 `useUserStore.logout()/deregister()` 已可调用：成功后同步清除内存状态与 `polyhouse_token/polyhouse_user`；401 清理失效会话但仍报告操作失败；网络或服务故障保留状态供重试。等待请求期间取得了新 Token 或新会话版本时，旧响应不会清掉新会话，也不删除另一标签页新写入的缓存。登录弹窗、刷新恢复、个人卡片/个人中心、退出反馈及注销确认均已接入；注销始终只针对当前已核实身份，页面不提交用户 ID 或任意用户名来指定对象。
 
 本次实现的是软注销：账号不能再登录，用户名继续被唯一索引占用；未物理删除或匿名化个人资料、云端模板和个人预设，也未新增恢复期、二次密码验证或 OWNER 移交策略。OWNER 已禁止通过普通注销入口停用自己，移交/恢复仍须独立设计。上述能力应单独确定规则后实施，不将软删除宣称为个人数据永久清除。MySQL 软注销联调用例默认按开关跳过，需配置本机数据库凭据后使用上面的认证业务联调命令执行。
 

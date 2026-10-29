@@ -36,7 +36,7 @@ const { useAccountUiStore } = await import(
 const { userDisplayName, userRoleLabel, avatarInitial, formatAccountNumber } = await import(
   await moduleUrl('../src/utils/userPresentation.ts')
 )
-const { AuthCommandError, login, register, getCurrentUser } = await import(authUrl)
+const { AuthCommandError, login, getCurrentUser } = await import(authUrl)
 const { ApiError, apiClient, apiRequest, setUnauthorizedHandler, setPasswordChangeRequiredHandler } = await import(apiUrl)
 const { usernameError, passwordError, nicknameError } = await import(
   await moduleUrl('../src/utils/authValidation.ts')
@@ -361,22 +361,17 @@ test('缓存用户资料即使被伪造成屋主也不直接恢复登录，必�
   assert.equal(store.user.privateEntityField, undefined)
 })
 
-test('注册不建立会话，登录明确使用 PC 并且两个公开请求不发送旧 Token', async () => {
+test('登录明确使用 PC，不发送旧 Token，密码不进入缓存', async () => {
   const store = useUserStore()
   store.setSession('old-credential', profile)
   apiClient.defaults.adapter = async (config) => {
     assert.equal(config.headers.get('Authorization'), undefined)
     const request = JSON.parse(config.data)
     assert.equal(request.password, ' Fixture password ')
-    if (config.url === '/auth/register') {
-      assert.equal(request.nickname, '小屋')
-      return success(config, profile)
-    }
     assert.equal(config.url, '/auth/login')
     assert.equal(request.clientType, 'PC')
     return success(config, loginResult())
   }
-  await register({ username: 'fixture', password: ' Fixture password ', nickname: '小屋' })
   assert.equal(store.token, 'old-credential')
   assert.equal(await store.login({ username: 'fixture', password: ' Fixture password ' }), true)
   assert.equal(store.token, 'new-credential')
@@ -602,7 +597,7 @@ test('HTTP 200 的业务失败也不能建立身份或被视为成功', async ()
     data: { code: 40900, message: 'private-details', data: null },
   })
   await assert.rejects(
-    register({ username: 'fixture', password: 'fixture-password', nickname: '测试' }),
+    login({ username: 'fixture', password: 'fixture-password' }),
     (error) => error.status === 409,
   )
   assert.equal(store.isLoggedIn, false)

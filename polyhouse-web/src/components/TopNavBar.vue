@@ -67,7 +67,7 @@ watch(
           ><ElIcon><User /></ElIcon
         ></span>
         <span class="account-label">{{
-          userStore.status === 'checking' ? '正在恢复' : '登录 / 注册'
+          userStore.status === 'checking' ? '正在恢复' : '登录'
         }}</span>
       </button>
       <!-- 只有 /me 或登录响应确认的资料才显示为已登录，缓存用户资料不会进入此分支。 -->
