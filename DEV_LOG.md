@@ -47,7 +47,7 @@
 | 妙压插画布局保护（同日） | 后端编译、前端构建、组件 ESLint/Prettier、独立无头 Edge | 通过；图片与说明分列、裁剪图标浅色化；十档 320～1920px 无遮挡，妙替及周边布局与修改前基线一致；AGENTS 增加布局保护 |
 | IDEA Redis 启动前准备（同日） | `Ensure-LocalRedis.ps1`、Redis 定向测试、后端编译及前端构建 | 冷启动/重复/并发与模拟缺少 WSL 的失败码通过，唯一保活进程；真实 Redis 3 项通过；IDEA 绑定步骤已记录，尚待手动绑定 |
 | 首页工具插画修复（同日） | 后端编译、前端构建、组件 ESLint/Prettier、独立无头 Edge | 通过；320～1920px 十档文字不被交换标记遮挡、箭头尺寸/工具导航正常；最小影响判断补入 AGENTS，业务测试未重复 |
-| 第三方技能统计修正（同日） | 后端编译、前端构建、`Check-UiUxSkill.ps1`、`git check-attr` | 通过；技能 73 文件不变，仅固定第三方目录排除统计；本地提交，远端默认分支统计待更新 |
+| 第三方技能统计修正（2026-10-31 补齐） | 后端编译、前端构建、`Check-UiUxSkill.ps1`、`git check-attr`、GitHub 语言 API | 默认 main 单独补齐规则；远端 API 已无 Python，15 个技能脚本排除、自有代码不受影响，技能 73 文件不变 |
 | P1 安全基础（同日） | `Test-Project.ps1`、`Invoke-LocalAuth.ps1 -Action Verify -AccountSecurityOnly`、迁移前后核对及本机 HTTP | 普通后端 296 项通过/59 项跳过，前端 97 项与构建/静态检查通过；真实隔离 7 项通过，原账号不变；新入口匿名 401、前端 200 |
 | 方案二改版 | 统一普通验收、最终编译/前端 lint/test/build、浏览器真实 USER 与断点检查、`git bundle verify` | 通过；7 个账号接口与头像资源无遗漏；方案一可切回；边界见当前阶段 |
 | UI/UX 开发辅助技能 | `Check-UiUxSkill.ps1`、领域/Vue/设计系统查询、`validate_data.py` | 73 个文件完整性通过；实际查询及 12 个领域/22 个技术栈数据校验通过，未持久化设计系统；安装/恢复见[专门记录](docs/operations/ui-ux-skill.md) |
