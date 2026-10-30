@@ -1,6 +1,6 @@
 # 聚妙屋 Polyhouse 当前状态与日志索引
 
-当前里程碑：**v1.0 开发中，未发布**。更新时间：2026-10-28（Asia/Shanghai）。
+当前里程碑：**v1.0 开发中，未发布**。更新时间：2026-10-31（Asia/Shanghai；本次仅维护语言统计，业务基线不变）。
 
 - 当前阶段：[v1.0-dev.5：妙替本地业务](docs/dev-log/v1.0-dev.5.md)
 - 工程约束：[AGENTS.md](AGENTS.md)；配置与验收入口：[README.md](README.md)
@@ -79,3 +79,5 @@
 | [v1.0-dev.1](docs/dev-log/v1.0-dev.1.md) | 已归档 | 工程基线、认证底座、事务验收与本机预设历史快照 |
 
 尚无正式发布。阶段编号及本地提交均不代表发布版本或已同步 GitHub。
+
+语言统计维护：将第三方技能目录的 `linguist-vendored` 规则单独补入默认分支；此前仅开发分支具备规则，首页 Python 占比未更新。详细原因与验收边界见[技能记录](docs/operations/ui-ux-skill.md)，本补丁不合入开发分支的前后端业务。
