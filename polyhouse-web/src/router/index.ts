@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { toolRegistry } from '../config/toolRegistry'
+import { needsAccountSectionRedirect, resolveAccountSection } from '../utils/accountSections'
 
 // 页面按需加载；导航与卡片只读取注册表，不维护第二份入口列表。
 const toolViews = {
@@ -56,6 +57,8 @@ const router = createRouter({
   scrollBehavior(to, _from, savedPosition) {
     // 浏览器后退优先恢复原位置，锚点等待已挂载的页面，普通切页回到顶部。
     if (savedPosition) return savedPosition
+    // 个人分类只替换头部下方内容，不像跨页导航那样把用户送回页面顶端。
+    if (to.name === 'account' && _from.name === 'account') return false
     if (to.hash === '#tools' || to.hash === '#about') {
       // 原生平滑滚动随距离自然缓入缓出；系统要求减少动态时立即定位，不强制播放动画。
       const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -65,6 +68,17 @@ const router = createRouter({
     }
     return { top: 0 }
   },
+})
+
+router.beforeEach((to) => {
+  if (to.name === 'account' && needsAccountSectionRedirect(to.query.section, to.hash)) {
+    return {
+      name: 'account',
+      query: { ...to.query, section: resolveAccountSection(to.query.section, to.hash) },
+      hash: '',
+      replace: true,
+    }
+  }
 })
 
 router.afterEach((to) => {

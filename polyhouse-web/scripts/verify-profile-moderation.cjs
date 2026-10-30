@@ -19,6 +19,8 @@ let phase='startup'
  let owner,user
  try{
   phase='user-login';user=await session('p4_user');await user.goto(`${base}/account`,{waitUntil:'networkidle'})
+  // 个人中心默认成长；使用真实导航进入资料，不能再假定所有表单同时挂载。
+  phase='profile-section';await user.getByRole('link',{name:'账号资料',exact:true}).click()
   phase='nickname-input';await user.getByLabel('申请新昵称',{exact:true}).fill('审核后的昵称');phase='nickname-submit';await user.getByRole('button',{name:'提交昵称审核'}).click()
   await user.getByText('昵称 · 待审核',{exact:true}).waitFor();assert.ok((await user.locator('#profile-name').textContent()).includes('旧昵称'))
   phase='avatar-submission';await user.getByRole('button',{name:'更换头像',exact:true}).click();const upload=user.getByRole('dialog',{name:'换一张头像'})

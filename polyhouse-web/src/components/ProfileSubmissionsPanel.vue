@@ -2,10 +2,15 @@
 import { computed } from 'vue'
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput } from 'element-plus'
 import PrivateProfileImage from './PrivateProfileImage.vue'
-import { useProfileSubmissions } from '../composables/useProfileSubmissions'
+import type { ProfileSubmissionsState } from '../composables/useProfileSubmissions'
 import type { ReviewStatus } from '../api/profileModeration'
-const { allowed, status, nickname, loading, saving, error, notice, load, submit } =
-  useProfileSubmissions()
+/** 页面拥有申请生命周期；面板卸载只释放视图和私有预览。 */
+interface Props {
+  /** 当前本人在个人页内共享的申请状态，不包含公开资料更新权限。 */
+  state: ProfileSubmissionsState
+}
+const props = defineProps<Props>()
+const { allowed, status, nickname, loading, saving, error, notice, load, submit } = props.state
 const labels: Record<ReviewStatus, string> = {
   PENDING: '待审核',
   APPROVED: '已通过',
@@ -17,8 +22,6 @@ const labels: Record<ReviewStatus, string> = {
 const pendingAvatar = computed(() =>
   status.value?.submissions.find((s) => s.kind === 'AVATAR' && s.status === 'PENDING'),
 )
-// 父页面上传结束后只刷新申请，不把待审值直接写到公开资料。
-defineExpose({ refresh: load })
 </script>
 <template>
   <div v-if="allowed" class="submissions-panel">

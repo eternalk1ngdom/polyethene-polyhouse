@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import {
   ArrowLeft,
@@ -22,6 +22,8 @@ import { useAccountUiStore } from '../stores/useAccountUiStore'
 import { useUserStore } from '../stores/useUserStore'
 import { useUserGrowthStore } from '../stores/useUserGrowthStore'
 import { formatAccountNumber, userDisplayName, userRoleLabel } from '../utils/userPresentation'
+import { accountSections, resolveAccountSection } from '../utils/accountSections'
+import { useProfileSubmissions } from '../composables/useProfileSubmissions'
 
 const userStore = useUserStore()
 const accountUi = useAccountUiStore()
@@ -30,31 +32,78 @@ const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
-const submissionsPanel = ref<InstanceType<typeof ProfileSubmissionsPanel>>()
+const route = useRoute()
+const router = useRouter()
+const sectionContainer = ref<HTMLElement>()
+const sectionNav = ref<HTMLElement>()
+const activeSection = computed(() =>
+  userStore.requiresPasswordChange
+    ? 'security'
+    : resolveAccountSection(route.query.section, route.hash),
+)
+// 页面内保留非敏感草稿和原重试编号；资料视图卸载时不销毁已发送的申请。
+const submissions = useProfileSubmissions(() => activeSection.value === 'profile')
+watch(activeSection, (selected) => {
+  // 后退时若焦点原在即将卸载的表单中，将其交还当前分类；鼠标点导航不抢焦点。
+  if (sectionContainer.value?.contains(document.activeElement)) {
+    void nextTick(() => {
+      if (activeSection.value === selected)
+        sectionNav.value
+          ?.querySelector<HTMLElement>('[aria-current="page"]')
+          ?.focus({ preventScroll: true })
+    })
+  }
+})
 const toolIcons = { Switch, Crop }
+let refreshSequence = 0
+
+watch(
+  [() => userStore.token, () => userStore.user?.id, () => userStore.isLoggedIn],
+  () => {
+    refreshSequence++
+    refreshing.value = false
+    avatarVisible.value = false
+    avatarNotice.value = ''
+  },
+  { flush: 'sync' },
+)
+watch(
+  [() => userStore.requiresPasswordChange, () => route.query.section],
+  () => {
+    // 首次会话直达任何分类仍落到可操作的改密区域；后端闸门继续独立生效。
+    if (userStore.requiresPasswordChange && route.query.section !== 'security')
+      void router.replace({ name: 'account', query: { section: 'security' } })
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  refreshSequence++
+})
 
 function openAvatar(): void {
   avatarVisible.value = true
   avatarNotice.value = ''
 }
 
-async function refreshProfile(): Promise<void> {
+async function refreshProfile(refreshSection = true): Promise<void> {
   if (refreshing.value || accountUi.pending) return
+  const sequence = ++refreshSequence
   refreshing.value = true
   try {
     await userStore.restoreSession()
-    if (userStore.isLoggedIn) {
+    if (sequence === refreshSequence && userStore.isLoggedIn) {
       await growth.refresh()
-      await submissionsPanel.value?.refresh()
+      if (refreshSection && sequence === refreshSequence) await submissions.load()
     }
   } finally {
-    refreshing.value = false
+    if (sequence === refreshSequence) refreshing.value = false
   }
 }
 
 // 直接访问和从菜单进入都再次核对资料；与启动请求并发时复用已有恢复请求。
 onMounted(() => {
-  void refreshProfile()
+  // 本人申请由可见分类的 watcher 负责首次读取，避免挂载时重复拉取。
+  void refreshProfile(false)
 })
 </script>
 
@@ -97,7 +146,7 @@ onMounted(() => {
             class="refresh-button"
             :loading="refreshing"
             :disabled="!!accountUi.pending"
-            @click="refreshProfile"
+            @click="refreshProfile()"
             ><ElIcon><Refresh /></ElIcon>刷新资料</ElButton
           >
         </div>
@@ -117,11 +166,22 @@ onMounted(() => {
         </dl>
       </section>
 
-      <nav class="profile-nav" aria-label="个人空间分区">
-        <a href="#my-growth">我的成长</a><a href="#profile-details-title">账号资料</a
-        ><a href="#my-tools-title">常用工具</a><a href="#account-management-title">账号管理</a>
+      <nav ref="sectionNav" class="profile-nav" aria-label="个人空间分区">
+        <RouterLink
+          v-for="section in accountSections"
+          :key="section.key"
+          :to="{ name: 'account', query: { section: section.key } }"
+          :aria-current="activeSection === section.key ? 'page' : 'false'"
+          :aria-disabled="userStore.requiresPasswordChange && section.key !== 'security'"
+          @click.capture="
+            (event: MouseEvent) => {
+              if (userStore.requiresPasswordChange && section.key !== 'security')
+                event.preventDefault()
+            }
+          "
+          >{{ section.label }}</RouterLink
+        >
       </nav>
-      <UserGrowthPanel v-if="!userStore.requiresPasswordChange" id="my-growth" />
       <ElAlert
         v-if="avatarNotice"
         class="avatar-notice"
@@ -138,13 +198,29 @@ onMounted(() => {
               status === 'PENDING'
                 ? `头像已提交，等待屋主审核；今日还可提交 ${remaining} 次。`
                 : '已核对原头像申请，请查看最新状态。'
-            submissionsPanel?.refresh()
+            submissions.load()
           }
         "
       />
 
-      <div class="account-grid">
-        <section class="info-panel" aria-labelledby="profile-details-title">
+      <RouterLink
+        v-if="avatarNotice && activeSection !== 'profile'"
+        class="application-link"
+        :to="{ name: 'account', query: { section: 'profile' } }"
+        >查看申请状态<ElIcon><ArrowRight /></ElIcon
+      ></RouterLink>
+      <div
+        ref="sectionContainer"
+        :key="activeSection"
+        class="account-section"
+        :data-section="activeSection"
+      >
+        <UserGrowthPanel v-if="activeSection === 'growth'" id="my-growth" />
+        <section
+          v-else-if="activeSection === 'profile'"
+          class="info-panel"
+          aria-labelledby="profile-details-title"
+        >
           <div class="panel-title">
             <span class="panel-icon"
               ><ElIcon><User /></ElIcon
@@ -173,9 +249,13 @@ onMounted(() => {
             </div>
           </dl>
           <p class="panel-note">点击上方头像提交图片；资料审核通过后展示，未通过时保留原内容。</p>
-          <ProfileSubmissionsPanel ref="submissionsPanel" />
+          <ProfileSubmissionsPanel :state="submissions" />
         </section>
-        <section class="info-panel" aria-labelledby="my-tools-title">
+        <section
+          v-else-if="activeSection === 'tools'"
+          class="info-panel"
+          aria-labelledby="my-tools-title"
+        >
           <div class="panel-title">
             <span class="panel-icon apricot"
               ><ElIcon><Document /></ElIcon
@@ -201,64 +281,70 @@ onMounted(() => {
           ></RouterLink>
           <p class="panel-note">云端词库模板与压缩预设尚未开放。</p>
         </section>
+        <section v-else class="management-panel" aria-labelledby="account-management-title">
+          <div class="panel-title">
+            <span class="panel-icon neutral"
+              ><ElIcon><Lock /></ElIcon
+            ></span>
+            <div>
+              <p class="eyebrow">ACCOUNT</p>
+              <h2 id="account-management-title">账号管理</h2>
+            </div>
+          </div>
+          <ElAlert
+            v-if="userStore.requiresPasswordChange"
+            title="请先修改初始密码，重新登录后即可使用其他分类。"
+            type="info"
+            :closable="false"
+            show-icon
+          />
+          <ElAlert
+            v-if="accountUi.actionError"
+            :title="accountUi.actionError"
+            type="error"
+            :closable="false"
+            show-icon
+            class="action-error"
+          />
+          <div class="management-row">
+            <div>
+              <h3>修改密码</h3>
+              <p>验证当前密码后设置新密码，成功后所有终端都需要重新登录。</p>
+            </div>
+            <ElButton :disabled="!!accountUi.pending" @click="accountUi.passwordVisible = true"
+              >修改密码</ElButton
+            >
+          </div>
+          <div class="management-row">
+            <div>
+              <h3>退出当前登录</h3>
+              <p>仅退出当前浏览器终端，其他终端仍可继续使用。</p>
+            </div>
+            <ElButton
+              :loading="accountUi.pending === 'logout'"
+              :disabled="!!accountUi.pending"
+              @click="accountUi.logout()"
+              ><ElIcon><SwitchButton /></ElIcon>退出登录</ElButton
+            >
+          </div>
+          <div class="management-row cancellation-row">
+            <div>
+              <h3>注销账号</h3>
+              <p v-if="userStore.user.role === 'OWNER'">
+                屋主账号不能直接注销，需先完成专门的移交或恢复流程。
+              </p>
+              <p v-else>停用账号并退出所有终端。资料仍会保留，操作前请查看详细说明。</p>
+            </div>
+            <ElButton
+              type="danger"
+              plain
+              :disabled="!!accountUi.pending || refreshing || !accountUi.canDeregister"
+              @click="accountUi.openCancellation()"
+              >注销账号</ElButton
+            >
+          </div>
+        </section>
       </div>
-
-      <section class="management-panel" aria-labelledby="account-management-title">
-        <div class="panel-title">
-          <span class="panel-icon neutral"
-            ><ElIcon><Lock /></ElIcon
-          ></span>
-          <div>
-            <p class="eyebrow">ACCOUNT</p>
-            <h2 id="account-management-title">账号管理</h2>
-          </div>
-        </div>
-        <ElAlert
-          v-if="accountUi.actionError"
-          :title="accountUi.actionError"
-          type="error"
-          :closable="false"
-          show-icon
-          class="action-error"
-        />
-        <div class="management-row">
-          <div>
-            <h3>修改密码</h3>
-            <p>验证当前密码后设置新密码，成功后所有终端都需要重新登录。</p>
-          </div>
-          <ElButton :disabled="!!accountUi.pending" @click="accountUi.passwordVisible = true"
-            >修改密码</ElButton
-          >
-        </div>
-        <div class="management-row">
-          <div>
-            <h3>退出当前登录</h3>
-            <p>仅退出当前浏览器终端，其他终端仍可继续使用。</p>
-          </div>
-          <ElButton
-            :loading="accountUi.pending === 'logout'"
-            :disabled="!!accountUi.pending"
-            @click="accountUi.logout()"
-            ><ElIcon><SwitchButton /></ElIcon>退出登录</ElButton
-          >
-        </div>
-        <div class="management-row cancellation-row">
-          <div>
-            <h3>注销账号</h3>
-            <p v-if="userStore.user.role === 'OWNER'">
-              屋主账号不能直接注销，需先完成专门的移交或恢复流程。
-            </p>
-            <p v-else>停用账号并退出所有终端。资料仍会保留，操作前请查看详细说明。</p>
-          </div>
-          <ElButton
-            type="danger"
-            plain
-            :disabled="!!accountUi.pending || refreshing || !accountUi.canDeregister"
-            @click="accountUi.openCancellation()"
-            >注销账号</ElButton
-          >
-        </div>
-      </section>
     </template>
     <section v-else class="anonymous-panel" aria-labelledby="account-entry-title">
       <span class="anonymous-icon"
@@ -275,7 +361,7 @@ onMounted(() => {
               : '登录后，查看自己的账号资料和成长记录。'
         }}
       </p>
-      <ElButton v-if="userStore.status === 'unavailable'" type="primary" @click="refreshProfile"
+      <ElButton v-if="userStore.status === 'unavailable'" type="primary" @click="refreshProfile()"
         >重试连接</ElButton
       ><ElButton
         v-else
@@ -447,11 +533,11 @@ h1 {
 }
 .profile-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   margin-top: 24px;
   padding: 0 6px;
   border-bottom: 1px solid var(--ph-line);
-  overflow-x: auto;
 }
 .profile-nav a {
   display: block;
@@ -462,11 +548,28 @@ h1 {
 .profile-nav a:hover {
   color: var(--ph-accent-strong);
 }
-.account-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+.profile-nav a[aria-current='page'] {
+  box-shadow: inset 0 -2px var(--ph-ink);
+  font-weight: 600;
+}
+.profile-nav a[aria-disabled='true'] {
+  color: var(--ph-muted);
+  cursor: not-allowed;
+}
+.account-section {
   margin-top: 24px;
+  animation: section-enter 160ms ease-out;
+}
+.account-section > :deep(.growth-panel) {
+  margin-top: 0;
+}
+@keyframes section-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .info-panel,
 .management-panel {
@@ -563,7 +666,7 @@ h1 {
   font-size: 12px;
 }
 .management-panel {
-  margin-top: 24px;
+  margin-top: 0;
 }
 .management-row {
   display: flex;
@@ -600,6 +703,13 @@ h1 {
 .avatar-notice {
   margin-top: 18px;
 }
+.application-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 13px;
+}
 .anonymous-panel {
   text-align: center;
   padding: 70px 24px;
@@ -634,9 +744,6 @@ h1 {
   .account-page {
     width: calc(100% - 40px);
     margin-top: 14px;
-  }
-  .account-grid {
-    grid-template-columns: 1fr;
   }
   .profile-cover {
     height: 145px;
@@ -681,7 +788,7 @@ h1 {
     font-size: 22px;
   }
   .profile-nav {
-    gap: 18px;
+    gap: 8px;
   }
   .profile-nav a {
     font-size: 13px;

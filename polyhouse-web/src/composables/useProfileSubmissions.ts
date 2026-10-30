@@ -4,7 +4,7 @@ import { newProfileRequestId } from '../api/auth'
 import { getProfileStatus, submitNickname, type ProfileStatus } from '../api/profileModeration'
 import { useUserStore } from '../stores/useUserStore'
 /** 本人申请状态与公开资料分离；旧响应、换号和卸载不能回填内容。 */
-export function useProfileSubmissions() {
+export function useProfileSubmissions(enabled: () => boolean = () => true) {
   const store = useUserStore(),
     status = ref<ProfileStatus | null>(null),
     nickname = ref('')
@@ -18,7 +18,7 @@ export function useProfileSubmissions() {
     requestId = '',
     submittedText = ''
   async function load(): Promise<void> {
-    if (!allowed.value) return
+    if (!allowed.value || !enabled()) return
     const current = generation,
       request = ++readId
     loading.value = true
@@ -36,7 +36,7 @@ export function useProfileSubmissions() {
     }
   }
   async function submit(): Promise<void> {
-    if (!allowed.value || saving.value) return
+    if (!allowed.value || !enabled() || saving.value) return
     if (
       !nickname.value.trim() ||
       nickname.value.length > 32 ||
@@ -77,7 +77,12 @@ export function useProfileSubmissions() {
     }
   }
   watch(
-    [() => store.token, () => store.isLoggedIn, () => store.requiresPasswordChange],
+    [
+      () => store.token,
+      () => store.user?.id,
+      () => store.isLoggedIn,
+      () => store.requiresPasswordChange,
+    ],
     () => {
       generation++
       readId++
@@ -89,7 +94,15 @@ export function useProfileSubmissions() {
       loading.value = false
       error.value = ''
       notice.value = ''
-      if (allowed.value) void load()
+    },
+    { immediate: true, flush: 'sync' },
+  )
+  // 状态由个人页持有以保留草稿/原请求号，只有资料分类可见时才主动读取。
+  // 分类切换不取消已发送的写请求，也不把结果未知的操作当作新申请重发。
+  watch(
+    [() => store.token, () => store.user?.id, () => allowed.value, enabled],
+    () => {
+      if (allowed.value && enabled()) void load()
     },
     { immediate: true },
   )
@@ -103,3 +116,6 @@ export function useProfileSubmissions() {
   })
   return { allowed, status, nickname, loading, saving, error, notice, load, submit }
 }
+
+/** 面板接收已有的页面会话状态，不自行创建第二份申请或重试意图。 */
+export type ProfileSubmissionsState = ReturnType<typeof useProfileSubmissions>

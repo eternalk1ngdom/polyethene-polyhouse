@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {readFile} from 'node:fs/promises'
-import {createRenderer,h,nextTick,reactive} from 'vue'
+import {createRenderer,h,nextTick,reactive,ref} from 'vue'
 import {compileScript,parse} from 'vue/compiler-sfc'
 import {AxiosError} from 'axios'
 import ts from 'typescript'
@@ -25,14 +25,42 @@ const record={id:'42',userId:'2',username:'fixture',kind:'NICKNAME',status:'PEND
 const status={submissions:[record],avatarRemainingToday:5,nicknameRemainingToday:1}
 const page={items:[record],total:'1',page:1,pageSize:20}
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return{promise,resolve,reject}}
-function fixture(kind='mine',api={},role='OWNER'){
+function fixture(kind='mine',api={},role='OWNER', initiallyActive=true){
+ const active=ref(initiallyActive)
  const store=reactive({isLoggedIn:true,requiresPasswordChange:false,token:'fixture',user:{id:'1',role,nickname:'旧公开昵称'}})
  installStore(store);installApi({mine:async()=>status,submit:async(id,nickname)=>({...record,requestId:id,proposedValue:nickname}),reviews:async()=>page,published:async()=>({...page,items:[]}),decide:async()=>record,change:async()=>({}),image:async()=>new Blob(['fixture']),...api})
  let c;const props=reactive({submissionId:'42'})
- const component=kind==='image'?{...PrivateImage,setup(p,ctx){c=PrivateImage.setup(p,ctx);return()=>h('div')}}:{setup(){c=kind==='mine'?useProfileSubmissions():useProfileReview();return()=>h('div')}}
+ const component=kind==='image'?{...PrivateImage,setup(p,ctx){c=PrivateImage.setup(p,ctx);return()=>h('div')}}:{setup(){c=kind==='mine'?useProfileSubmissions(()=>active.value):useProfileReview();return()=>h('div')}}
  const ready=[];props.onReady=v=>ready.push(v);const app=renderer.createApp({setup:()=>()=>h(component,props)});app.mount({})
- return{store,c,props,ready,unmount:()=>app.unmount()}
+ return{store,c,props,ready,active,unmount:()=>app.unmount()}
 }
+
+test('资料分类未打开不读取，切换保留草稿和结果未知的原请求号',async(t)=>{
+ let reads=0;const ids=[]
+ const f=fixture('mine',{mine:async()=>{reads++;return status},submit:async(id)=>{ids.push(id);throw new ApiError('offline',0)}},'OWNER',false);t.after(f.unmount)
+ await nextTick();assert.equal(reads,0)
+ f.active.value=true;await nextTick();f.c.nickname.value='分类草稿';await f.c.submit()
+ f.active.value=false;await nextTick();await f.c.load();await f.c.submit()
+ assert.equal(f.c.nickname.value,'分类草稿');assert.equal(ids.length,1);const before=reads
+ f.active.value=true;await nextTick();assert.equal(reads,before+1);await f.c.submit();assert.equal(ids[0],ids[1])
+})
+
+test('切走分类后待处理申请正常收尾但不拉隐藏状态，返回只读刷新',async(t)=>{
+ const wait=deferred();let id,reads=0,writes=0
+ const f=fixture('mine',{mine:async()=>{reads++;return status},submit:async(req)=>{id=req;writes++;return wait.promise}});t.after(f.unmount)
+ await nextTick();f.c.nickname.value='等待响应';const operation=f.c.submit()
+ f.active.value=false;await nextTick();const before=reads;wait.resolve({...record,requestId:id});await operation
+ assert.equal(reads,before);assert.equal(f.c.saving.value,false);assert.match(f.c.notice.value,/审核通过/)
+ f.active.value=true;await nextTick();assert.equal(reads,before+1);assert.equal(writes,1)
+})
+
+test('同 Token 换用户也立即清除页内草稿并丢弃旧申请响应',async(t)=>{
+ const wait=deferred();let id
+ const f=fixture('mine',{submit:async(req)=>{id=req;return wait.promise}});t.after(f.unmount)
+ f.c.nickname.value='旧用户申请';const operation=f.c.submit();f.store.user.id='9'
+ assert.equal(f.c.nickname.value,'');wait.resolve({...record,requestId:id});await operation
+ assert.equal(f.c.notice.value,'');assert.equal(f.c.saving.value,false)
+})
 test('昵称提交去重且不抢先写公开资料，成功后刷新服务端状态',async(t)=>{
  const wait=deferred();let calls=0,request
  const f=fixture('mine',{submit:async(id)=>{calls++;request=id;return wait.promise}});t.after(f.unmount)
