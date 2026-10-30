@@ -155,9 +155,6 @@ watch(
 .cancellation-host :deep(.el-input__wrapper) {
   min-height: 42px;
 }
-.cancellation-host :deep(.el-input__inner:focus-visible) {
-  outline: none;
-}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

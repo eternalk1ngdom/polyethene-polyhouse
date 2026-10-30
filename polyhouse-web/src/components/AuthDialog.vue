@@ -190,10 +190,6 @@ watch(
   min-height: 44px;
   background: white;
 }
-/* 输入框沿用 Element Plus 外框的聚焦高亮，避免全站 tabindex 轮廓在内部再画一层。 */
-.auth-host :deep(.el-input__inner:focus-visible) {
-  outline: none;
-}
 .auth-host :deep(.el-form-item__label) {
   color: var(--ph-ink);
   font-size: 13px;

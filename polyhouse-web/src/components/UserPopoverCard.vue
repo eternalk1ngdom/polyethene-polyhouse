@@ -2,7 +2,7 @@
 import { RouterLink } from 'vue-router'
 import { computed } from 'vue'
 import { ElButton, ElIcon } from 'element-plus'
-import { ArrowRight, SwitchButton, User } from '@element-plus/icons-vue'
+import { ArrowRight, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import type { UserProfile } from '../api/auth'
 import { formatAccountNumber, userDisplayName, userRoleLabel } from '../utils/userPresentation'
 import UserAvatar from './UserAvatar.vue'
@@ -65,7 +65,9 @@ const stats = computed(() => growth.summary ?? props.profile)
       class="profile-link"
       to="/manage"
       @click="emit('navigate')"
-      ><span>{{ profile.role === 'OWNER' ? '屋主工作台' : '管理中心' }}</span
+      ><span
+        ><ElIcon aria-hidden="true"><Setting /></ElIcon
+        >{{ profile.role === 'OWNER' ? '屋主工作台' : '管理中心' }}</span
       ><ElIcon><ArrowRight /></ElIcon
     ></RouterLink>
     <p v-if="error" class="action-error" role="alert">{{ error }}</p>

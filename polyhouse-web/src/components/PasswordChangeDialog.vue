@@ -266,9 +266,6 @@ onBeforeUnmount(reset)
 .password-host :deep(.el-input__wrapper) {
   min-height: 44px;
 }
-.password-host :deep(.el-input__inner:focus-visible) {
-  outline: none;
-}
 .intro {
   color: var(--ph-muted);
   font-size: 14px;

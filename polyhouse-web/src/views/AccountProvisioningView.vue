@@ -193,9 +193,6 @@ onMounted(() => {
 .creation-panel :deep(.el-input__wrapper) {
   min-height: 44px;
 }
-.creation-panel :deep(.el-input__inner:focus-visible) {
-  outline: none;
-}
 .creation-panel :deep(.el-radio) {
   min-height: 44px;
   margin-right: 24px;
