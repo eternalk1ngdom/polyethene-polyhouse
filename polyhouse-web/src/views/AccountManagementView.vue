@@ -12,6 +12,7 @@ import {
   ElSelect,
   ElTag,
 } from 'element-plus'
+import ManagementWorkspace from '../components/ManagementWorkspace.vue'
 import { useAccountManagement } from '../composables/useAccountManagement'
 import { useUserStore } from '../stores/useUserStore'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -65,17 +66,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="management-page">
-    <RouterLink class="back-link" to="/account">← 返回个人中心</RouterLink>
-    <header class="page-heading">
-      <div>
-        <p>ACCOUNT MANAGEMENT</p>
-        <h1>{{ owner ? '屋主工作台' : '管理中心' }}</h1>
-        <span>受控内测 · 账号管理</span>
-      </div>
-      <RouterLink v-if="owner" class="create-link" to="/manage/reviews">资料审核 →</RouterLink>
-      <RouterLink v-if="owner" class="create-link" to="/manage/accounts">创建账号 →</RouterLink>
-    </header>
+  <ManagementWorkspace class="management-page" :owner="owner" :allowed="allowed" section="accounts">
     <template v-if="allowed">
       <ElAlert
         v-if="notice"
@@ -90,7 +81,10 @@ onMounted(() => {
         ><ElButton :loading="saving" @click="confirm">继续核对操作</ElButton>
       </div>
       <section class="accounts-panel" aria-labelledby="accounts-title">
-        <h2 id="accounts-title">账号列表</h2>
+        <div class="panel-heading">
+          <h2 id="accounts-title">账号列表</h2>
+          <RouterLink v-if="owner" class="create-link" to="/manage/accounts">创建账号 →</RouterLink>
+        </div>
         <p class="intro">
           {{
             owner
@@ -280,39 +274,20 @@ onMounted(() => {
         </div>
       </ElForm>
     </ElDialog>
-  </div>
+  </ManagementWorkspace>
 </template>
 
 <style scoped>
-.management-page {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-}
-.back-link {
-  color: var(--ph-muted);
-  font-size: 14px;
-}
-.page-heading {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  margin: 28px 0;
-}
-.page-heading p {
-  letter-spacing: 0.16em;
-  font-size: 11px;
-}
-.page-heading h1 {
-  font-size: clamp(28px, 4vw, 40px);
-  margin: 10px 0;
-}
-.page-heading span,
 .intro,
 .empty {
   color: var(--ph-muted);
+}
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 .create-link {
   padding: 14px 22px;
@@ -329,7 +304,7 @@ onMounted(() => {
   background: white;
 }
 .accounts-panel h2 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 22px;
 }
 .intro {
@@ -448,14 +423,8 @@ onMounted(() => {
   }
 }
 @media (max-width: 600px) {
-  .management-page {
-    padding: 28px 16px 56px;
-  }
   .accounts-panel {
     padding: 20px 16px;
-  }
-  .page-heading {
-    flex-wrap: wrap;
   }
   .filters .el-form-item {
     flex-basis: 100%;

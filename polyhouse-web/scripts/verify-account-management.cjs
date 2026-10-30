@@ -30,7 +30,7 @@ let phase = 'startup'
   await page.getByRole('heading',{name:'账号列表'}).waitFor();await page.locator('.account-row').filter({hasText:'p3_user'}).waitFor()
   assert.equal(await page.locator('.account-row').count(),4)
   await page.getByRole('link',{name:'创建账号 →'}).click();await page.getByRole('heading',{name:'创建账号',exact:true}).waitFor()
-  await page.getByRole('link',{name:'返回账号管理',exact:false}).click()
+  await page.getByRole('link',{name:'返回账号列表',exact:false}).click()
   phase='reset-confirmation';await page.getByRole('button',{name:'重置密码 p3_user',exact:true}).click()
   const dialog=page.getByRole('dialog');await dialog.getByLabel('操作原因（必填）').fill('隔离浏览器验收')
   await dialog.getByLabel('屋主当前密码（再次确认）').fill(password)

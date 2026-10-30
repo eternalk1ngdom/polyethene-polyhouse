@@ -133,7 +133,7 @@ export function useAccountProvisioning() {
       result.value = response
       if (!response.firstDelivery)
         message.value =
-          '账号已创建，初始密码不能再次查询。若未保存，请待屋主密码重置功能开放后重新发放，勿重复创建。'
+          '账号已创建，初始密码不能再次查询。若未保存，请由屋主在账号管理中重置密码后重新交付，勿重复创建。'
     } catch (failure: unknown) {
       if (current !== revision) return
       // 本接口的 400 表示校验/当前密码拒绝，事务未创建账号；允许修正角色而不困在错误意图中。

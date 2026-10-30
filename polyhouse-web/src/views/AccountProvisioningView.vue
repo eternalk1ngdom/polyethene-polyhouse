@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
+import ManagementWorkspace from '../components/ManagementWorkspace.vue'
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElRadio, ElRadioGroup } from 'element-plus'
 import { useAccountProvisioning } from '../composables/useAccountProvisioning'
 import { useUserStore } from '../stores/useUserStore'
@@ -29,13 +30,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="provisioning-page">
-    <RouterLink class="back-link" to="/manage">← 返回账号管理</RouterLink>
-    <header class="page-heading">
-      <p>OWNER WORKSPACE</p>
-      <h1>给朋友，留一个位置。</h1>
-      <span>受控内测 · 账号发放</span>
-    </header>
+  <ManagementWorkspace
+    class="provisioning-page"
+    :owner="allowed"
+    :allowed="allowed"
+    section="accounts"
+    creating
+  >
+    <RouterLink v-if="allowed" class="task-back" to="/manage">← 返回账号列表</RouterLink>
     <section v-if="allowed" class="creation-panel" aria-labelledby="creation-title">
       <h2 id="creation-title">{{ result ? '本次创建结果' : '创建账号' }}</h2>
       <p class="intro">账号和昵称由系统统一生成。新账号首次登录必须修改初始密码。</p>
@@ -116,7 +118,7 @@ onMounted(() => {
     </section>
     <section v-else class="creation-panel" role="status">
       <h2>{{ store.status === 'checking' ? '正在核对身份' : '仅屋主可创建账号' }}</h2>
-      <p class="intro">公共注册已关闭。已有账号请登录；账号管理和资源审核将按计划分阶段开放。</p>
+      <p class="intro">公共注册已关闭。请使用已完成首次改密的屋主账号发放账号。</p>
       <ElButton
         v-if="!store.isLoggedIn && store.status !== 'checking'"
         type="primary"
@@ -127,38 +129,17 @@ onMounted(() => {
         >重试连接</ElButton
       >
     </section>
-  </div>
+  </ManagementWorkspace>
 </template>
 
 <style scoped>
-.provisioning-page {
-  width: min(1040px, calc(100% - 80px));
-  margin: 32px auto 100px;
-  color: var(--ph-ink);
-}
-.back-link {
+.task-back {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  color: var(--ph-muted);
   font-size: 13px;
-}
-.page-heading {
-  margin: 36px 0;
-}
-.page-heading p {
-  letter-spacing: 2px;
-  font-size: 11px;
   color: var(--ph-muted);
-}
-.page-heading h1 {
-  font-size: clamp(28px, 4vw, 44px);
-  margin: 16px 0;
-  line-height: 1.3;
-}
-.page-heading span {
-  color: var(--ph-muted);
-  font-size: 14px;
+  margin-bottom: 16px;
 }
 .creation-panel {
   border: 1px solid var(--ph-line);
@@ -228,10 +209,6 @@ onMounted(() => {
   height: auto;
 }
 @media (max-width: 600px) {
-  .provisioning-page {
-    width: calc(100% - 32px);
-    margin-top: 20px;
-  }
   .creation-panel {
     padding: 24px 18px;
   }

@@ -26,13 +26,13 @@ const status={submissions:[record],avatarRemainingToday:5,nicknameRemainingToday
 const page={items:[record],total:'1',page:1,pageSize:20}
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return{promise,resolve,reject}}
 function fixture(kind='mine',api={},role='OWNER', initiallyActive=true){
- const active=ref(initiallyActive)
+ const active=ref(initiallyActive), section=ref('pending')
  const store=reactive({isLoggedIn:true,requiresPasswordChange:false,token:'fixture',user:{id:'1',role,nickname:'旧公开昵称'}})
  installStore(store);installApi({mine:async()=>status,submit:async(id,nickname)=>({...record,requestId:id,proposedValue:nickname}),reviews:async()=>page,published:async()=>({...page,items:[]}),decide:async()=>record,change:async()=>({}),image:async()=>new Blob(['fixture']),...api})
  let c;const props=reactive({submissionId:'42'})
- const component=kind==='image'?{...PrivateImage,setup(p,ctx){c=PrivateImage.setup(p,ctx);return()=>h('div')}}:{setup(){c=kind==='mine'?useProfileSubmissions(()=>active.value):useProfileReview();return()=>h('div')}}
+ const component=kind==='image'?{...PrivateImage,setup(p,ctx){c=PrivateImage.setup(p,ctx);return()=>h('div')}}:{setup(){c=kind==='mine'?useProfileSubmissions(()=>active.value):useProfileReview(()=>section.value);return()=>h('div')}}
  const ready=[];props.onReady=v=>ready.push(v);const app=renderer.createApp({setup:()=>()=>h(component,props)});app.mount({})
- return{store,c,props,ready,active,unmount:()=>app.unmount()}
+ return{store,c,props,ready,active,section,unmount:()=>app.unmount()}
 }
 
 test('资料分类未打开不读取，切换保留草稿和结果未知的原请求号',async(t)=>{
@@ -120,4 +120,38 @@ test('媒体错误沿用 401 清理与首次改密闸门，不把原始响应传
 test('申请解码拒绝旧上传合同和非法字段，并丢弃私有路径',()=>{
  assert.deepEqual(decodeSubmission(record),record);assert.equal(decodeSubmission({...record,privateKey:'not-forwarded'}).privateKey,undefined)
  for(const bad of [{avatar:'/old.jpg',remainingToday:4},{...record,id:42},{...record,kind:'PASSWORD'},{...record,kind:'AVATAR'},{...record,status:'UNKNOWN'}])assert.throws(()=>decodeSubmission(bad),ApiError)
+})
+
+
+test('审核只读当前分区，旧分区响应丢弃，各自筛选页码保留',async(t)=>{
+ const old=deferred();const pendingCalls=[],publicCalls=[]
+ const f=fixture('review',{
+  reviews:async(...args)=>{pendingCalls.push(args);return pendingCalls.length===1?old.promise:page},
+  published:async(...args)=>{publicCalls.push(args);return {...page,items:[{userId:'3',username:'published'}]}},
+ });t.after(f.unmount)
+ await nextTick();assert.equal(pendingCalls.length,1);assert.equal(publicCalls.length,0)
+ f.c.page.value=3;f.section.value='published';await nextTick();await nextTick()
+ assert.equal(publicCalls.length,1);assert.equal(f.c.items.value.length,0);assert.equal(f.c.published.value[0].username,'published')
+ old.resolve(page);await nextTick();await nextTick();assert.equal(f.c.items.value.length,0)
+ f.c.publicPage.value=2;f.section.value='pending';await nextTick();await nextTick()
+ assert.equal(pendingCalls.at(-1)[0],3);assert.equal(f.c.publicPage.value,2);assert.equal(f.c.published.value.length,0)
+ f.c.publicKind.value='NICKNAME';await nextTick();assert.equal(publicCalls.length,1)
+ f.section.value='published';await nextTick();await nextTick();assert.equal(publicCalls.at(-1)[1],'NICKNAME')
+})
+
+test('审核结果未知后切换/返回只查询，不能重复发送决定',async(t)=>{
+ let writes=0;const f=fixture('review',{decide:async()=>{writes++;throw new ApiError('offline',0)}});t.after(f.unmount)
+ f.c.openDecision(record,true);f.c.reason.value='核对过内容';await f.c.submit()
+ assert.equal(f.c.uncertain.value,true);f.c.close();f.section.value='published';await nextTick();f.section.value='pending';await nextTick()
+ assert.equal(writes,1);assert.equal(f.c.selection.value,null)
+})
+
+test('审核中切换分区只结算一次并刷新当前列表，同 Token 换号立即清理',async(t)=>{
+ const wait=deferred();let writes=0,publicReads=0
+ const f=fixture('review',{decide:async()=>{writes++;return wait.promise},published:async()=>{publicReads++;return {...page,items:[]}}});t.after(f.unmount)
+ f.c.openDecision(record,true);f.c.reason.value='审核原因';const operation=f.c.submit()
+ f.section.value='published';await nextTick();const before=publicReads;wait.resolve(record);await operation
+ assert.equal(writes,1);assert.equal(publicReads,before+1);assert.equal(f.c.selection.value,null)
+ f.c.openPublic({userId:'2',username:'fixture'},'KEEP');f.c.reason.value='原账号私有原因';f.store.user.id='9'
+ assert.equal(f.c.selection.value,null);assert.equal(f.c.reason.value,'');assert.equal(f.c.notice.value,'')
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import ManagementWorkspace from '../components/ManagementWorkspace.vue'
 import {
   ElAlert,
   ElButton,
@@ -14,9 +15,27 @@ import {
 } from 'element-plus'
 import PrivateProfileImage from '../components/PrivateProfileImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
-import { useProfileReview } from '../composables/useProfileReview'
+import { useProfileReview, type ReviewSection } from '../composables/useProfileReview'
 import { useUserStore } from '../stores/useUserStore'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
+const route = useRoute()
+// 可分享/刷新的只读任务参数，不把审核目标、原因或私有内容写进 URL。
+const section = computed<ReviewSection>(() =>
+  route.query.view === 'published' ? 'published' : 'pending',
+)
+const sectionNav = ref<HTMLElement | null>(null)
+const sectionPanel = ref<HTMLElement | null>(null)
+watch(section, (selected) => {
+  // 浏览器后退若移除正在聚焦的筛选控件，将焦点交还当前分区；鼠标导航不抢焦点。
+  if (sectionPanel.value?.contains(document.activeElement)) {
+    void nextTick(() => {
+      if (section.value === selected)
+        sectionNav.value
+          ?.querySelector<HTMLElement>('[aria-current="page"]')
+          ?.focus({ preventScroll: true })
+    })
+  }
+})
 const store = useUserStore(),
   accountUi = useAccountUiStore()
 const {
@@ -46,7 +65,7 @@ const {
   close,
   submit,
   next,
-} = useProfileReview()
+} = useProfileReview(() => section.value)
 const title = computed(() =>
   selection.value?.type === 'decision'
     ? selection.value.approve
@@ -74,13 +93,7 @@ onMounted(() => {
 })
 </script>
 <template>
-  <div class="review-page">
-    <RouterLink class="back" to="/manage">← 返回账号管理</RouterLink>
-    <header>
-      <p>PROFILE REVIEW</p>
-      <h1>资料审核</h1>
-      <span>先确认，再与小屋见面。</span>
-    </header>
+  <ManagementWorkspace class="review-page" :owner="allowed" :allowed="allowed" section="reviews">
     <template v-if="allowed">
       <ElAlert v-if="error" :title="error" type="error" :closable="false" role="alert" /><ElAlert
         v-if="notice"
@@ -89,7 +102,24 @@ onMounted(() => {
         :closable="false"
         role="status"
       />
-      <section aria-labelledby="pending-title">
+      <nav ref="sectionNav" class="review-sections" aria-label="资料审核分区">
+        <RouterLink
+          :to="{ path: '/manage/reviews', query: { view: 'pending' } }"
+          :aria-current="section === 'pending' ? 'page' : 'false'"
+          >待审申请</RouterLink
+        >
+        <RouterLink
+          :to="{ path: '/manage/reviews', query: { view: 'published' } }"
+          :aria-current="section === 'published' ? 'page' : 'false'"
+          >已发布与历史核对</RouterLink
+        >
+      </nav>
+      <section
+        v-if="section === 'pending'"
+        ref="sectionPanel"
+        key="pending"
+        aria-labelledby="pending-title"
+      >
         <div class="section-head">
           <h2 id="pending-title">待审申请</h2>
           <ElButton :loading="loading" :disabled="busy" @click="load">刷新审核列表</ElButton>
@@ -132,8 +162,11 @@ onMounted(() => {
           </div>
         </nav>
       </section>
-      <section aria-labelledby="published-title">
-        <h2 id="published-title">公开资料与历史核对</h2>
+      <section v-else ref="sectionPanel" key="published" aria-labelledby="published-title">
+        <div class="section-head">
+          <h2 id="published-title">已发布与历史核对</h2>
+          <ElButton :loading="loading" :disabled="busy" @click="load">刷新公开资料</ElButton>
+        </div>
         <p>旧内容保留当前展示，尚未自动算作已审。请逐项确认保留或下架；下架只影响所选字段。</p>
         <div class="filters">
           <ElSelect v-model="publicKind" aria-label="公开资料类型"
@@ -142,7 +175,8 @@ onMounted(() => {
               value="NICKNAME" /></ElSelect
           ><ElCheckbox v-model="unverified">仅看未核对历史</ElCheckbox>
         </div>
-        <p v-if="!loading && !published.length">没有符合条件的公开资料。</p>
+        <p v-if="loading" role="status">正在加载…</p>
+        <p v-else-if="!published.length">没有符合条件的公开资料。</p>
         <ul class="review-list">
           <li v-for="item in published" :key="`${item.userId}-${item.kind}`">
             <div class="copy">
@@ -268,30 +302,34 @@ onMounted(() => {
         >
       </template>
     </ElDialog>
-  </div>
+  </ManagementWorkspace>
 </template>
 <style scoped>
-.review-page {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-}
-.back,
-header span,
 section > p,
 .copy small {
   color: var(--ph-muted);
 }
-header {
-  margin: 28px 0;
+.review-sections {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 24px 0;
 }
-header > p {
-  letter-spacing: 0.16em;
-  font-size: 11px;
+.review-sections a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 24px;
+  border: 1px solid var(--ph-line);
+  font-size: 14px;
 }
-header h1 {
-  font-size: 36px;
-  margin: 12px 0;
+.review-sections a:hover {
+  background: var(--ph-soft);
+}
+.review-sections a[aria-current='page'] {
+  background: var(--ph-ink);
+  color: var(--ph-surface);
 }
 section {
   padding: 28px;
@@ -364,13 +402,14 @@ section > p {
 .proposed {
   overflow-wrap: anywhere;
 }
+.review-page :deep(.el-button),
+.review-page :deep(.el-select__wrapper) {
+  min-height: 44px;
+}
 .review-page :deep(.el-alert) {
   margin: 14px 0;
 }
 @media (max-width: 600px) {
-  .review-page {
-    padding: 28px 16px 56px;
-  }
   section {
     padding: 20px 16px;
   }

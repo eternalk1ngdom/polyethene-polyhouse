@@ -59,6 +59,8 @@ const router = createRouter({
     if (savedPosition) return savedPosition
     // 个人分类只替换头部下方内容，不像跨页导航那样把用户送回页面顶端。
     if (to.name === 'account' && _from.name === 'account') return false
+    // 审核分区也是同页只读切换，保留当前位置；跨工作区仍正常回顶。
+    if (to.name === 'profile-review' && _from.name === 'profile-review') return false
     if (to.hash === '#tools' || to.hash === '#about') {
       // 原生平滑滚动随距离自然缓入缓出；系统要求减少动态时立即定位，不强制播放动画。
       const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches

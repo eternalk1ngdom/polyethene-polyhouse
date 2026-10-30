@@ -18,8 +18,10 @@ interface Selection {
   /** 审核通过/驳回。 */ approve?: boolean
   /** 公开内容保留/下架。 */ action?: 'KEEP' | 'TAKEDOWN'
 }
+/** 只请求当前可见的审核任务，历史清点不随待审刷新一起加载。 */
+export type ReviewSection = 'pending' | 'published'
 /** 审核状态与账号管理独立，响应未知只刷新核对，不自动重发危险写操作。 */
-export function useProfileReview() {
+export function useProfileReview(section: () => ReviewSection = () => 'pending') {
   const store = useUserStore(),
     allowed = computed(
       () => store.isLoggedIn && !store.requiresPasswordChange && store.user?.role === 'OWNER',
@@ -52,15 +54,35 @@ export function useProfileReview() {
     loading.value = true
     error.value = ''
     try {
-      const [a, b] = await Promise.all([
-        getReviews(page.value, kind.value === 'ALL' ? '' : kind.value, store.token),
-        getPublished(publicPage.value, publicKind.value, unverified.value, store.token),
-      ])
+      // 一个读请求只服务一个可见分区；切换会递增 readId，旧分区响应不会覆盖新列表。
+      const currentSection = section()
+      const result =
+        currentSection === 'pending'
+          ? {
+              section: 'pending' as const,
+              data: await getReviews(
+                page.value,
+                kind.value === 'ALL' ? '' : kind.value,
+                store.token,
+              ),
+            }
+          : {
+              section: 'published' as const,
+              data: await getPublished(
+                publicPage.value,
+                publicKind.value,
+                unverified.value,
+                store.token,
+              ),
+            }
       if (current !== generation || id !== readId) return
-      items.value = a.items
-      total.value = a.total
-      published.value = b.items
-      publicTotal.value = b.total
+      if (result.section === 'pending') {
+        items.value = result.data.items
+        total.value = result.data.total
+      } else {
+        published.value = result.data.items
+        publicTotal.value = result.data.total
+      }
     } catch (e: unknown) {
       if (current === generation && id === readId) {
         items.value = []
@@ -142,14 +164,26 @@ export function useProfileReview() {
     p.value += delta
     void load()
   }
-  watch([kind, publicKind, unverified], () => {
+  watch(kind, () => {
     page.value = 1
+    if (section() === 'pending') void load()
+  })
+  watch([publicKind, unverified], () => {
     publicPage.value = 1
+    if (section() === 'published') void load()
+  })
+  watch(section, () => {
+    // 隐藏列表立即释放；各自筛选/页码保留，返回时重新核对最新服务端事实。
+    items.value = []
+    published.value = []
+    total.value = '0'
+    publicTotal.value = '0'
     void load()
   })
   watch(
     [
       () => store.token,
+      () => store.user?.id,
       () => store.user?.role,
       () => store.isLoggedIn,
       () => store.requiresPasswordChange,
@@ -170,7 +204,15 @@ export function useProfileReview() {
       publicTotal.value = '0'
       page.value = 1
       publicPage.value = 1
-      if (allowed.value) void load()
+      uncertain.value = false
+    },
+    { immediate: true, flush: 'sync' },
+  )
+  // 身份的私有状态同步清除；读取等待同一轮身份变更完成，避免用新 Token 查询旧身份。
+  watch(
+    [() => store.token, () => store.user?.id, allowed],
+    () => {
+      void load()
     },
     { immediate: true },
   )
