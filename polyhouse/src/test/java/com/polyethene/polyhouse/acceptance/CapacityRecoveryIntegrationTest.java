@@ -121,18 +121,20 @@ class CapacityRecoveryIntegrationTest {
                     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id = ?", Integer.class, userId)).isEqualTo(1);
 
                     // 将本次私有头像目录变成同名普通文件，模拟实际不可写路径，不修改磁盘全局权限。
-                    Files.createFile(sandbox.avatars);
+                    Path pendingDirectory=sandbox.avatars.resolveSibling("avatars-pending");
+                    Files.createFile(pendingDirectory);
                     upload(token, 503);
                     assertThat(jdbc.queryForObject("SELECT JSON_EXTRACT(ext_json, '$.avatarUpload') FROM sys_user WHERE id = ?", String.class, userId)).isNull();
-                    Files.delete(sandbox.avatars);
+                    Files.delete(pendingDirectory);
                     JsonNode avatar = upload(token, 200).path("data");
                     assertThat(avatar.path("remainingToday").asInt()).isEqualTo(4);
-                    HttpResponse<String> media = request("GET", avatar.path("avatar").asText(), null, null);
+                    HttpResponse<String> media = request("GET", "/api/profile-submissions/"+avatar.path("id").asText()+"/image", token, null);
                     assertThat(media.statusCode()).isEqualTo(200);
-                    assertThat(media.headers().firstValue("Cache-Control").orElse("")).contains("max-age=86400");
+                    assertThat(media.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
 
                     // 真文件删除失败生成持久标记，新实例读取标记后能重试，模拟重启后的清理入口。
                     String previousName = "b".repeat(32) + ".jpg";
+                    Files.createDirectories(sandbox.avatars);
                     Path previous = sandbox.avatars.resolve(previousName);
                     Files.createDirectory(previous);
                     Path blocker = Files.writeString(previous.resolve("owned-fixture"), "fixture");
@@ -148,7 +150,7 @@ class CapacityRecoveryIntegrationTest {
                     post("/api/auth/logout", Map.of("token", token), null, 200);
                     get("/api/auth/me", token, 401);
                     assertThat(redis.hasKey(sessionKey)).isFalse();
-                    LOGGER.info("RECOVERY redis/mysql reconnect, failed deregister rollback, avatar retry/cache/cleanup, logout: passed");
+                    LOGGER.info("RECOVERY redis/mysql reconnect, failed deregister rollback, avatar pending retry/private preview/cleanup, logout: passed");
                 } finally {
                     sandbox.redis.block(false);
                     redis.delete(sessionKey);
@@ -202,8 +204,8 @@ class CapacityRecoveryIntegrationTest {
         var bytes = new ByteArrayOutputStream();
         bytes.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fixture.png\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
         ImageIO.write(new BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB), "PNG", bytes);
-        bytes.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        var request = HttpRequest.newBuilder(URI.create(base + "/api/auth/avatar")).timeout(Duration.ofSeconds(8))
+        bytes.write(("\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"requestId\"\r\n\r\n" + UUID.randomUUID() + "\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        var request = HttpRequest.newBuilder(URI.create(base + "/api/auth/avatar/submissions")).timeout(Duration.ofSeconds(8))
                 .header("Authorization", "Bearer " + token).header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build();
         return decoded(http.send(request, HttpResponse.BodyHandlers.ofString()), status);
@@ -234,7 +236,7 @@ class CapacityRecoveryIntegrationTest {
                     sql.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                     created = true;
                     connection.setCatalog(name);
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql")) {
+                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) {
                         String source = Files.readString(Path.of("sql", migration));
                         if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
                         source = source.replace("USE `polyhouse_db`;", "");

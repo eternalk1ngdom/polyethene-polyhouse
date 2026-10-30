@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import { ElAlert, ElButton, ElDialog, ElIcon } from 'element-plus'
 import { Minus, Plus, RefreshLeft, Upload } from '@element-plus/icons-vue'
 import { ApiError } from '../api'
+import { newProfileRequestId } from '../api/auth'
 import {
   avatarSourceSize,
   clampCrop,
@@ -21,7 +22,7 @@ interface Props {
 /** 成功提示交由个人中心展示，取消不会产生后端请求。 */
 interface Emits {
   (event: 'update:modelValue', value: boolean): void
-  (event: 'saved', remainingToday: number): void
+  (event: 'saved', remainingToday: number, status: string): void
 }
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
@@ -36,11 +37,13 @@ const saving = ref(false)
 const fileName = ref('')
 const zoomLabel = computed(() => `${Math.round(crop.value.zoom * 100)}%`)
 let selection = 0
+let submissionRequestId = ''
 let drag: { id: number; x: number; y: number; cropX: number; cropY: number } | undefined
 
 function releaseImage(): void {
   // 作废整个编辑过程，包括尚未结束的编码和上传；旧回调不能再修改新弹窗。
   selection += 1
+  submissionRequestId = ''
   image.value?.close()
   image.value = undefined
   drag = undefined
@@ -79,6 +82,7 @@ async function choose(event: Event): Promise<void> {
     error.value = '原图不能超过 5 MB，请选择较小的图片。'
     return
   }
+  submissionRequestId = ''
   const current = ++selection
   loading.value = true
   try {
@@ -117,11 +121,13 @@ async function choose(event: Event): Promise<void> {
 }
 
 function changeZoom(delta: number): void {
+  submissionRequestId = ''
   crop.value = zoomCrop(crop.value, crop.value.zoom + delta)
   draw()
 }
 
 function reset(): void {
+  submissionRequestId = ''
   if (!image.value) return
   crop.value = initialCrop(image.value.width, image.value.height)
   draw()
@@ -130,6 +136,7 @@ function reset(): void {
 function startDrag(event: PointerEvent): void {
   if (!image.value || saving.value || (event.pointerType === 'mouse' && event.button !== 0)) return
   if (!(event.currentTarget instanceof HTMLElement)) return
+  submissionRequestId = ''
   event.currentTarget.setPointerCapture(event.pointerId)
   drag = {
     id: event.pointerId,
@@ -166,6 +173,7 @@ function keyboardMove(event: KeyboardEvent): void {
   const step = steps[event.key]
   if (!step) return
   event.preventDefault()
+  submissionRequestId = ''
   crop.value = clampCrop({ ...crop.value, x: crop.value.x + step[0], y: crop.value.y + step[1] })
   draw()
 }
@@ -195,13 +203,14 @@ async function save(): Promise<void> {
     )
     if (!isCurrent()) return
     uploadStarted = true
-    const result = await userStore.uploadAvatar(blob)
+    submissionRequestId ||= newProfileRequestId()
+    const result = await userStore.uploadAvatar(blob, submissionRequestId)
     if (!isCurrent()) return
     if (!result) {
       emit('update:modelValue', false)
       return
     }
-    emit('saved', result.remainingToday)
+    emit('saved', result.remainingToday, result.status)
     emit('update:modelValue', false)
   } catch (caught: unknown) {
     if (!isCurrent()) return
@@ -213,9 +222,9 @@ async function save(): Promise<void> {
     error.value =
       caught instanceof ApiError && caught.status >= 400 && caught.status < 500
         ? caught.status === 429
-          ? '今天已成功修改 5 次头像，请明天再试。'
+          ? '今天已提交 5 次头像申请，请明天再试。'
           : caught.message
-        : '暂时无法确认头像是否已保存，请先刷新资料核对，再决定是否重试。'
+        : '结果暂不确定，请先刷新申请状态；原图片重试会核对同一请求。'
   } finally {
     if (isCurrent()) saving.value = false
   }
@@ -250,7 +259,7 @@ onBeforeUnmount(releaseImage)
     @update:model-value="close"
   >
     <div class="avatar-editor">
-      <p class="editor-intro">为小屋里的你，添一点自己的色彩。</p>
+      <p class="editor-intro">图片将先私有保存，屋主审核通过后才会公开。</p>
       <input
         ref="picker"
         class="file-input"
@@ -311,14 +320,15 @@ onBeforeUnmount(releaseImage)
         >{{ image ? '重新选择图片' : '选择图片' }}</ElButton
       >
       <p class="upload-rules">
-        JPEG / PNG · 原图不超过 5 MB、4096×4096<br />每天最多成功修改 5 次，取消不会上传原图。
+        JPEG / PNG · 原图不超过 5 MB、4096×4096<br />每天最多提交 5
+        次，驳回与替代也计次；取消不上传。
       </p>
       <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     </div>
     <template #footer
       ><ElButton :disabled="saving" @click="close">取消</ElButton
       ><ElButton type="primary" :disabled="!image || loading" :loading="saving" @click="save"
-        >保存头像</ElButton
+        >提交头像审核</ElButton
       ></template
     >
   </ElDialog>

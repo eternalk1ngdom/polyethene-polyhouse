@@ -218,14 +218,14 @@ export const useUserStore = defineStore('user', () => {
     return promise
   }
 
-  /** 旧上传不能污染后来登录的账号；成功时推进版本，使在途旧 /me 不能覆盖新头像。 */
-  async function uploadAvatar(file: Blob): Promise<AvatarChange | null> {
+  /** 旧上传不能污染后来登录的账号；申请成功只作废旧读取，不抢先发布新头像。 */
+  async function uploadAvatar(file: Blob, requestId?: string): Promise<AvatarChange | null> {
     if (!isLoggedIn.value || !user.value) throw new ApiError('请先登录再修改头像', 401)
     if (requiresPasswordChange.value) throw new ApiError('请先修改初始密码', 403, 40301)
     const submittedToken = token.value
     const submittedRevision = revision
     const submittedId = user.value.id
-    const change = await uploadAvatarImage(file, submittedToken)
+    const change = await uploadAvatarImage(file, submittedToken, requestId)
     if (
       revision !== submittedRevision ||
       token.value !== submittedToken ||
@@ -240,8 +240,7 @@ export const useUserStore = defineStore('user', () => {
     }
     profileRevision += 1
     pendingRestore = undefined
-    user.value = { ...user.value, avatar: change.avatar }
-    cacheProfile()
+    // 待审内容绝不写入公开资料或 localStorage；/me 仍以已批准头像为准。
     return change
   }
 

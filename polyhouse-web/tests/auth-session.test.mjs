@@ -176,7 +176,7 @@ test('改密返回前其他标签页换号，不等待 storage 事件也不清�
   assert.equal(store.user.id, '99')
 })
 
-test('上传只发送小图和当前 Bearer，成功头像不会被在途旧资料覆盖', async () => {
+test('上传只发送小图、请求号和当前 Bearer，待审内容不提前发布', async () => {
   const store = useUserStore()
   store.setSession('fixture-credential', profile)
   let finishRestore
@@ -185,17 +185,17 @@ test('上传只发送小图和当前 Bearer，成功头像不会被在途旧资�
       return new Promise((resolve) => {
         finishRestore = () => resolve(success(config, profile))
       })
-    assert.equal(config.url, '/auth/avatar')
+    assert.equal(config.url, '/auth/avatar/submissions')
     assert.equal(config.headers.Authorization, 'Bearer fixture-credential')
     assert.ok(config.data instanceof FormData)
-    assert.deepEqual([...config.data.keys()], ['file'])
-    return success(config, { avatar: avatarPath, remainingToday: 4 })
+    assert.deepEqual([...config.data.keys()], ['file', 'requestId'])
+    return success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 })
   }
   const restoring = store.restoreSession()
   await store.uploadAvatar(new Blob(['fixture'], { type: 'image/jpeg' }))
   finishRestore()
   await restoring
-  assert.equal(store.user.avatar, avatarPath)
+  assert.equal(store.user.avatar, null)
   assert.equal(store.user.experience, profile.experience)
 })
 
@@ -205,7 +205,7 @@ test('换号后的旧上传结果不能修改新用户，错误或非法图片�
   let finish
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
-      finish = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+      finish = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
     })
   const pending = store.uploadAvatar(new Blob(['fixture']))
   store.setSession('new-credential', { ...profile, id: '99', avatar: null })
@@ -230,8 +230,8 @@ test('头像变更不会取消同一会话已经发出的退出意图', async ()
   let finishLogout
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
-      if (config.url === '/auth/avatar')
-        finishUpload = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+      if (config.url === '/auth/avatar/submissions')
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
       else finishLogout = () => resolve(success(config))
     })
   const uploading = store.uploadAvatar(new Blob(['fixture']))
@@ -249,9 +249,9 @@ test('上传返回前另一标签已换号时，不等待存储事件也不能�
   store.setSession('old-credential', profile)
   let finishUpload
   apiClient.defaults.adapter = (config) => {
-    if (config.url === '/auth/avatar')
+    if (config.url === '/auth/avatar/submissions')
       return new Promise((resolve) => {
-        finishUpload = () => resolve(success(config, { avatar: avatarPath, remainingToday: 4 }))
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
       })
     return Promise.resolve(success(config, { ...profile, id: '99' }))
   }

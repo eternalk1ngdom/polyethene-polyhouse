@@ -25,6 +25,12 @@ const router = createRouter({
       meta: { title: '账号管理' },
     },
     {
+      path: '/manage/reviews',
+      name: 'profile-review',
+      component: () => import('../views/ProfileReviewView.vue'),
+      meta: { title: '资料审核' },
+    },
+    {
       path: '/manage/accounts',
       name: 'account-provisioning',
       component: () => import('../views/AccountProvisioningView.vue'),

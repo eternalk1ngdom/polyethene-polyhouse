@@ -58,7 +58,7 @@ mvn spring-boot:run
 
 新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
 
-当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。P3 账号列表、封禁/解封及屋主代重置已交付，需再执行 007；页面 `/manage`、权限/一次交付/隔离验收与回退见[账号管理说明](docs/operations/account-management.md)。
+当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。P3 账号列表、封禁/解封及屋主代重置已交付，需再执行 007；页面 `/manage`、权限/一次交付/隔离验收与回退见[账号管理说明](docs/operations/account-management.md)。P4 昵称/头像审核已完成，需继续执行 008，再重启后端；新上传地址、私有目录、历史核对与回退见[资料审核说明](docs/operations/profile-moderation.md)。
 
 ## 公共层响应约定
 
@@ -111,7 +111,9 @@ npm run lint:check
 
 浏览器禁止保存或缓存写入失败时，仍可使用已确认的内存身份，并提示刷新后可能需要重新登录。右上角个人卡片展示真实昵称、身份、等级、累计经验与硬币，并提供个人中心和退出。`/account` 展示资料、成长进度、下级门槛、满级状态、每日奖励状态、工具入口及账号管理；身份未确认时不展示资料。点击个人中心头像可选择 JPEG/PNG 并裁剪保存，导航/小窗同步；未上传或加载失败显示昵称首字，其他资料修改仍未开放。请求错误只向界面传播固定提示，不附带包含凭据的 Axios 对象。
 
-头像在浏览器裁剪，服务端只接收不超过 256 KB 的 256×256 小图，校验并重新编码；每天最多成功更换 5 次，多端共享次数。`POST /api/auth/avatar` 使用 Bearer 和 multipart `file`，返回统一 `Result`，数据为 `avatar` 路径与 `remainingToday`。公开只读图片入口为 `/api/media/avatars/<随机版本>.jpg`。本机图片位于 E 盘独立目录，不进入源码、数据库或 Redis。初始化脚本可用 `-AvatarDirectory` 设置绝对路径，未指定时保留原值或使用项目所在磁盘的独立目录。完整规则、失败边界、备份与 OSS 迁移见[头像存储说明](docs/operations/avatar-storage.md)。
+头像在浏览器裁剪，服务端只接收不超过 256KiB 的 256×256 JPEG/PNG 并重新编码。新 `POST /api/auth/avatar/submissions` 使用 Bearer 和 multipart file/requestId，只返回申请编号/状态/额度；旧立即发布接口已关闭。头像每天最多提交 5 次，昵称 2 次，新提交替代同类待审，七天有效；成功入库计次，驳回/替代不退款，失败/回滚不计次，同意图重试不多扣。
+
+待审图片在本机 E 盘公开目录的同级 `avatars-pending` 私有目录，本人/OWNER 鉴权读取；通过后才写入 `sys_user.avatar` 的公开地址，图片字节不进 MySQL/Redis。个人中心新增昵称申请和本人状态；屋主 `/manage/reviews` 提供私有预览、通过/驳回、历史内容保留/下架。旧资料不自动算已审、不批量重置真实屋主。完整接口、实际存储位置、008 迁移/备份及兼容回退见[资料审核说明](docs/operations/profile-moderation.md)与[头像存储说明](docs/operations/avatar-storage.md)。
 
 个人中心的注销弹窗必须勾选影响说明，并准确输入“注销账号”；取消或确认期间切换账号后，旧确认失效。注销会停用账号并撤销全部终端会话，原账号名不能复用，已有资料和历史记录仍保留，不代表永久删除个人数据。前端成功反馈只在服务端确认后显示；网络/服务故障不能冒充操作成功，也不能据此断言服务端未执行。退出与注销共用命令占用状态，防止跨入口重复提交。
 

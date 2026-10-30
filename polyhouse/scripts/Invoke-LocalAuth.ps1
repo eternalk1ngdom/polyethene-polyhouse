@@ -20,12 +20,14 @@ param(
     # P2 只运行隔离库开户验收，不在开发库创建测试屋主。
     [switch]$AccountProvisioningOnly,
     # P3 仅在隔离库验收管理功能，保护正式屋主。
-    [switch]$AccountManagementOnly
+    [switch]$AccountManagementOnly,
+    # P4 审核只在临时库和本次专属图片目录验收。
+    [switch]$ProfileModerationOnly
 )
 
 $ErrorActionPreference = 'Stop'
-if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
 if (-not (Test-Path -LiteralPath $workspacePath -PathType Leaf)) {
@@ -140,7 +142,9 @@ try {
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($AccountManagementOnly) {
+        if ($ProfileModerationOnly) {
+            & mvn -q '-Dtest=ProfileModerationIntegrationTest' '-Dpolyhouse.profile.integration=true' test
+        } elseif ($AccountManagementOnly) {
             & mvn -q '-Dtest=AccountManagementIntegrationTest' '-Dpolyhouse.management.integration=true' test
         } elseif ($AccountSecurityOnly) {
             & mvn -q '-Dtest=AccountSecurityIntegrationTest' '-Dpolyhouse.security.integration=true' test
@@ -151,6 +155,7 @@ try {
                 '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
         }
         if ($LASTEXITCODE -ne 0) {
+            if ($ProfileModerationOnly) { throw '资料审核隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountManagementOnly) { throw '账号管理隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountProvisioningOnly) { throw '账号开户隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountSecurityOnly) { throw '账号安全隔离验收失败，请检查 Surefire 汇总。' }

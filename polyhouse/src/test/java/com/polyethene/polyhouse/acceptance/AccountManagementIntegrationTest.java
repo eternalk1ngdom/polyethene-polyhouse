@@ -307,7 +307,7 @@ class AccountManagementIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql")) migrate(connection, migration);
+                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) migrate(connection, migration);
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;

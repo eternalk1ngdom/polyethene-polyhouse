@@ -20,6 +20,7 @@ function compile(code, replacements = {}) {
 const apiUrl = compile(await readFile(new URL('../src/api/index.ts', import.meta.url), 'utf8'), {
   axios: import.meta.resolve('axios'),
 })
+const authUrl = compile(await readFile(new URL('../src/api/auth.ts', import.meta.url), 'utf8'), { './index': apiUrl })
 const cropUrl = compile(
   await readFile(new URL('../src/core/avatarCrop.ts', import.meta.url), 'utf8'),
 )
@@ -38,6 +39,7 @@ const { default: component } = await import(
     'element-plus': controlsUrl,
     '@element-plus/icons-vue': controlsUrl,
     '../api': apiUrl,
+    '../api/auth': authUrl,
     '../core/avatarCrop': cropUrl,
     '../stores/useUserStore': storeUrl,
   })
@@ -116,7 +118,7 @@ test('当前上传明确拒绝后保留裁剪图，可以重试成功且只提�
   let attempts = 0
   const fixture = mountEditor(async () => {
     if (++attempts === 1) throw new ApiError('图片不符合要求', 400)
-    return { avatar: '/fixture.jpg', remainingToday: 4 }
+    return { status: 'PENDING', remainingToday: 4 }
   })
   t.after(fixture.unmount)
   const image = fixture.image()
@@ -152,7 +154,7 @@ test('旧上传失败不能污染重开的编辑器，也不能解除新上传�
   await previousSave
   assert.equal(fixture.editor.error.value, '')
   assert.equal(fixture.editor.saving.value, true)
-  current.resolve({ avatar: '/new.jpg', remainingToday: 3 })
+  current.resolve({ status: 'PENDING', remainingToday: 3 })
   await currentSave
   assert.deepEqual(fixture.saved, [3])
 })
@@ -228,7 +230,7 @@ test('网络故障或服务异常提示结果未确认，保留图像和当前�
     try {
       const image = fixture.image()
       await fixture.editor.save()
-      assert.match(fixture.editor.error.value, /无法确认.*保存.*刷新资料/)
+      assert.match(fixture.editor.error.value, /结果暂不确定.*刷新申请状态/)
       assert.equal(fixture.editor.image.value, image)
       assert.equal(image.closed, false)
       assert.equal(fixture.open.value, true)
@@ -254,4 +256,10 @@ test('离开页面释放图片，迟到的上传失败不再产生界面提示',
   assert.equal(fixture.editor.saving.value, false)
   assert.deepEqual(fixture.updates, [])
   assert.deepEqual(fixture.saved, [])
+})
+
+
+test('未知上传结果的显式重试沿用同一申请编号，避免多计额度',async(t)=>{
+ const ids=[];const f=mountEditor(async(_blob,id)=>{ids.push(id);if(ids.length===1)throw new ApiError('offline',0);return{status:'PENDING',remainingToday:4}})
+ t.after(f.unmount);f.image();await f.editor.save();await f.editor.save();assert.equal(ids.length,2);assert.equal(ids[0],ids[1]);assert.match(ids[0],/^[0-9a-f-]{36}$/)
 })

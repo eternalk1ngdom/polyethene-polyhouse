@@ -162,36 +162,62 @@ export function changePassword(request: PasswordChangeRequest, token: string): P
   )
 }
 
-/** 上传只修改头像，避免返回整份旧资料覆盖并发成长状态。 */
+/** 上传只产生审核申请，不能用响应把待审头像写入公共资料。 */
 export interface AvatarChange {
-  /** 随机版本路径使缓存自然失效。 */
-  avatar: string
-  /** 成功后由后端返回当日剩余次数。 */
+  /** 服务端申请编号。 */
+  submissionId: string
+  /** 核对提交结果的防重编号。 */
+  requestId: string
+  /** 重试可返回被替代/已决定的历史申请。 */
+  status: string
+  /** 今日剩余提交额度。 */
   remainingToday: number
 }
-
-/** 只允许本项目的版本化头像路径，拒绝第三方跟踪地址和可执行协议。 */
+/** 公开头像地址仅允许本项目版本化资源。 */
 export function isAvatarPath(value: unknown): value is string {
   return typeof value === 'string' && /^\/api\/media\/avatars\/[a-f0-9]{32}\.jpg$/.test(value)
 }
-
-/** 浏览器只上传裁剪后的小图，不把原图、路径、角色或用户编号发给后端。 */
-export function uploadAvatar(file: Blob, token: string): Promise<AvatarChange> {
+/** UUID 由浏览器安全随机源产生，支持普通 IP 的开发上下文。 */
+export function newProfileRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  // 固定 UUID v4 的版本与变体位，其余位保留安全随机值。
+  bytes[6] = (bytes[6]! & 15) | 64
+  bytes[8] = (bytes[8]! & 63) | 128
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+/** 同一图像意图沿用请求号；旧响应没有申请字段时拒绝，不能误报已发布。 */
+export function uploadAvatar(
+  file: Blob,
+  token: string,
+  requestId = newProfileRequestId(),
+): Promise<AvatarChange> {
   const data = new FormData()
   data.append('file', file, 'avatar.jpg')
+  data.append('requestId', requestId)
   return apiRequest(
-    { method: 'POST', url: '/auth/avatar', data },
+    { method: 'POST', url: '/auth/avatar/submissions', data },
     (value) => {
       if (
         !isRecord(value) ||
-        !isAvatarPath(value.avatar) ||
-        typeof value.remainingToday !== 'number' ||
+        typeof value.id !== 'string' ||
+        !/^[1-9]\d*$/.test(value.id) ||
+        value.requestId !== requestId ||
+        value.kind !== 'AVATAR' ||
+        !['PENDING', 'APPROVED', 'REJECTED', 'SUPERSEDED', 'EXPIRED', 'INVALIDATED'].includes(
+          String(value.status),
+        ) ||
         !Number.isInteger(value.remainingToday) ||
-        value.remainingToday < 0 ||
-        value.remainingToday > 4
+        Number(value.remainingToday) < 0 ||
+        Number(value.remainingToday) > 5
       )
-        throw new ApiError('头像响应不完整，请刷新资料确认保存结果', 502)
-      return { avatar: value.avatar, remainingToday: value.remainingToday }
+        throw new ApiError('头像申请响应不完整，请刷新申请状态核对', 502)
+      return {
+        submissionId: value.id,
+        requestId,
+        status: String(value.status),
+        remainingToday: Number(value.remainingToday),
+      }
     },
     token,
   )

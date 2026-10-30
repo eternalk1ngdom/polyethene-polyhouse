@@ -73,6 +73,7 @@ onMounted(() => {
         <h1>{{ owner ? '屋主工作台' : '管理中心' }}</h1>
         <span>受控内测 · 账号管理</span>
       </div>
+      <RouterLink v-if="owner" class="create-link" to="/manage/reviews">资料审核 →</RouterLink>
       <RouterLink v-if="owner" class="create-link" to="/manage/accounts">创建账号 →</RouterLink>
     </header>
     <template v-if="allowed">
@@ -294,6 +295,7 @@ onMounted(() => {
 }
 .page-heading {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 24px;

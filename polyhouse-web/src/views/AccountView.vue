@@ -15,6 +15,7 @@ import {
 } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import AvatarUploadDialog from '../components/AvatarUploadDialog.vue'
+import ProfileSubmissionsPanel from '../components/ProfileSubmissionsPanel.vue'
 import UserGrowthPanel from '../components/UserGrowthPanel.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -29,6 +30,7 @@ const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
+const submissionsPanel = ref<InstanceType<typeof ProfileSubmissionsPanel>>()
 const toolIcons = { Switch, Crop }
 
 function openAvatar(): void {
@@ -41,7 +43,10 @@ async function refreshProfile(): Promise<void> {
   refreshing.value = true
   try {
     await userStore.restoreSession()
-    if (userStore.isLoggedIn) await growth.refresh()
+    if (userStore.isLoggedIn) {
+      await growth.refresh()
+      await submissionsPanel.value?.refresh()
+    }
   } finally {
     refreshing.value = false
   }
@@ -127,7 +132,15 @@ onMounted(() => {
       />
       <AvatarUploadDialog
         v-model="avatarVisible"
-        @saved="(remaining) => (avatarNotice = `头像已更新，今天还可以修改 ${remaining} 次。`)"
+        @saved="
+          (remaining, status) => {
+            avatarNotice =
+              status === 'PENDING'
+                ? `头像已提交，等待屋主审核；今日还可提交 ${remaining} 次。`
+                : '已核对原头像申请，请查看最新状态。'
+            submissionsPanel?.refresh()
+          }
+        "
       />
 
       <div class="account-grid">
@@ -159,7 +172,8 @@ onMounted(() => {
               <dd>{{ userRoleLabel(userStore.user.role) }}</dd>
             </div>
           </dl>
-          <p class="panel-note">点击上方头像即可更换图片，其他资料编辑稍后开放。</p>
+          <p class="panel-note">点击上方头像提交图片；资料审核通过后展示，未通过时保留原内容。</p>
+          <ProfileSubmissionsPanel ref="submissionsPanel" />
         </section>
         <section class="info-panel" aria-labelledby="my-tools-title">
           <div class="panel-title">

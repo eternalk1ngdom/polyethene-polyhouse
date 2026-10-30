@@ -105,3 +105,43 @@ export async function apiRequest<T>(
     throw safe
   }
 }
+
+/** 私有审核图沿用统一会话失效处理；媒体字节不强行套 JSON Result 外壳。 */
+export async function apiImage(path: string, submittedToken: string): Promise<Blob> {
+  try {
+    const response = await apiClient.request<Blob>({
+      method: 'GET',
+      url: path,
+      responseType: 'blob',
+      headers: { Authorization: `Bearer ${submittedToken}`, 'Cache-Control': 'no-store' },
+    })
+    if (
+      !(response.data instanceof Blob) ||
+      response.data.type !== 'image/jpeg' ||
+      response.data.size === 0 ||
+      response.data.size > 256 * 1024
+    )
+      throw new ApiError('待审图片响应不完整，请重试', 502)
+    return response.data
+  } catch (failure: unknown) {
+    let safe: ApiError
+    if (failure instanceof ApiError) safe = failure
+    else if (axios.isAxiosError(failure)) {
+      let code: number | null = null
+      const raw: unknown = failure.response?.data
+      // Blob 错误仍只读有界 Result 的业务码，不传播原始响应或 Axios 请求对象。
+      if (raw instanceof Blob && raw.size < 8192) {
+        try {
+          const body: unknown = JSON.parse(await raw.text())
+          if (isRecord(body) && typeof body.code === 'number') code = body.code
+        } catch {
+          code = null
+        }
+      }
+      safe = safeError(failure.response?.status ?? 0, code)
+    } else safe = new ApiError('待审图片暂时无法读取', 502)
+    if (safe.sessionExpired) unauthorizedHandler?.(submittedToken)
+    if (safe.code === 40301) passwordChangeRequiredHandler?.(submittedToken)
+    throw safe
+  }
+}
