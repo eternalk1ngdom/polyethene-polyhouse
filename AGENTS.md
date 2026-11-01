@@ -9,6 +9,7 @@
 ## 项目结构
 - `polyhouse/`：Spring Boot 3、JDK 21、MyBatis；根包固定 `com.polyethene.polyhouse`。
 - `polyhouse-web/`：Vue 3、TypeScript、Vite、Element Plus。
+- 测试在各端标准测试根目录内按业务分目录（如 `user/`、`replace/`）；公共/系统测试单列，夹具随模块，跨模块复用时集中存放。Java 包名与目录一致；因同包访问或固定包名保留原位须说明原因，不扩大生产接口。迁移同步引用、发现入口与说明，验证用例无遗漏。
 - `polyhouse/scripts/`：预设、屋主初始化、启动与验收入口，见 `README.md`；不保存真实凭据。
 - `.agents/skills/`：辅助技能；版本与恢复见 `docs/operations/ui-ux-skill.md`。
 - `docs/operations/`：运维/故障说明，命令不得成为静态资源或公开 HTTP 接口。
