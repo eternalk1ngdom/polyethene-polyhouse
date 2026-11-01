@@ -1,6 +1,6 @@
 # 妙压：图片体积卡位（TargetKB）
 
-制定日期：2026-11-01（Asia/Shanghai）。状态：**T1～T3 已实施并通过验收**；T4～T5 为后续候选，未获批准。
+制定日期：2026-11-01（Asia/Shanghai）。状态：**T1～T4 已实施并通过验收**；T5 为后续候选，未获批准。
 
 所属阶段：v1.0 本地开发期，当前日志 [v1.0-dev.11](../dev-log/v1.0-dev.11.md)。本计划在独立工作树 `E:/project/java/polyhouse-press`、分支 `wb/targetkb` 上推进，与妙替深化（`codex/replace-library`）并行；工程约束仍以根 [AGENTS.md](../../AGENTS.md) 为准，并行开工不扩大推送、合并或发布授权。
 
@@ -20,6 +20,8 @@ T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`�
 2026-11-01（T2）：用户确认 T2 范围，并追加四条约束——协议加递增 id 且导出 `isCurrentReply`、`targetKbSource.ts` 复用 `avatarSourceSize()` 不重写段解析、真实样本放 gitignored 目录且至少三类、临时验收页必须放在 `polyhouse-web/` 根目录且跑完删除。T2 只做 Worker 与协议，仍不改页面、`toolRegistry`、`vite.config.ts`、`package.json` 与妙替文件。
 
 2026-11-01（T3）：用户确认按计划继续，T3 范围固定为 `views/TargetKbView.vue` 与 `components/TargetKbPanel.vue`，并在完成后把 `toolRegistry` 的 `target-kb` 改为 `available`；验收要求真实图片端到端、布局与焦点按铁律 8 实际核对，不能只用构建通过代替。
+
+2026-11-01（T4）：用户确认继续推进计划中的 T4，范围为多图选择、批量串行压缩、失败清单与 ZIP 导出；批量上限必须显式（20 张 / 60 MB）、失败项不产出半成品也不进 ZIP、取消后不残留 ZIP；验收要求真实多选端到端、部分失败场景、390px 布局与全量测试/静态检查/构建。仍不改 `vite.config.ts`、`package.json`（`fflate` 已在依赖中）与妙替文件。
 
 ### 0.1 双线协作约定
 
@@ -110,7 +112,7 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 | T1 内核 | 目标解析与判定、二分与降档计划、COM 增重、DPI 改写 + 测试 | `core/targetKbTypes.ts`、`core/targetKbCompress.ts`、`core/jpegComInjector.ts` | 已完成：专项 23 项、全量 158 项、构建与静态检查通过；页面无变化 |
 | T2 编码接入 | `OffscreenCanvas` 编码、Worker 协议、取消 | `workers/targetkb.worker.ts`、`core/targetKbProtocol.ts`、`core/targetKbSource.ts` | 已完成：真实 Chrome 三类样本通过；过期与取消 0 条迟到回复；证据见 dev.11 |
 | T3 页面 | 选图与拖拽、参数、体积对比、单图下载 | `views/TargetKbView.vue`、`components/TargetKbPanel.vue` | 已完成：真实图片端到端、390px 无溢出、Tab 焦点逐项核对；证据见 dev.11 |
-| T4 批量与导出 | 多图、ZIP、失败清单 | 页面 + `fflate` | 批量上限明确；失败不返回半成品 |
+| T4 批量与导出 | 多图、ZIP、失败清单 | 页面 + `fflate` | 已完成：真实多选与部分失败场景通过；上限 20 张 / 60 MB；失败项不产出半成品、不进 ZIP；证据见 dev.11 |
 | T5 候选 | 证件照换底、PDF 压缩、云预设 | 另议 | 需单独批准 |
 
 顺序理由：先"算得对"（T1），再"编得出"（T2），再"点得到"（T3），最后才是批量。
@@ -130,7 +132,7 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 
 ## 7. 当前仍不做什么
 
-- 不做 PNG/WebP 输出、不做批量、不做 ZIP、不做 PDF、不做证件照换底、不做云预设（T4/T5）。
+- 不做 PNG/WebP 输出、不做 PDF、不做证件照换底、不做云预设（T5）。批量与 ZIP 已在 T4 实现，上限 20 张 / 60 MB，串行执行。
 - 不改 `vite.config.ts`、`package.json`，不加依赖。
 - 不推送、不合并、不部署。
 - 不改妙替的任何文件；页面层只按消息 id 判断回调归属，不叠加 revision。
@@ -145,6 +147,7 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 | D4 | DPI 写法 | 只写 JFIF APP0 | 已定（同上） |
 | D5 | 输入上限 | 单张 ≤ 20 MiB、≤ 40 MP | 已实现（2026-11-01）：解码前校验，WebP/AVIF 解析不出尺寸时退回解码后补检 |
 | D6 | 搜索参数 | 质量 0.10–1.00、12 次、降档 0.85×6 | 已定（同上） |
+| D7 | 批量上限 | 单批 ≤ 20 张、合计 ≤ 60 MB，串行执行 | 已实现（2026-11-01）：超限在选图阶段拒绝并说明原因；ZIP 只打包成功项 |
 
 ## 9. 参考
 

@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { zip } from 'fflate'
 import { ElAlert, ElButton, ElIcon, ElInput, ElProgress, ElSwitch } from 'element-plus'
 import { Download, Picture, Upload } from '@element-plus/icons-vue'
+import TargetKbBatchResult from './TargetKbBatchResult.vue'
+import {
+  MAX_BATCH_BYTES,
+  MAX_BATCH_FILES,
+  outputFileName,
+  summarizeBatch,
+  validateBatch,
+  zipEntryName,
+} from '../core/targetKbBatch'
+import type { TargetKbBatchRow } from '../core/targetKbBatch'
 import { createTargetRange, parseTargetSize } from '../core/targetKbCompress'
 import type { TargetKbEncodeResult, TargetKbReply } from '../core/targetKbProtocol'
 import { inspectSource, inspectSourceSize } from '../core/targetKbSource'
 import type { TargetKbTarget } from '../core/targetKbTypes'
+import { formatBytes } from '../utils/byteSize'
 
 /** 文件头只读前 256 KiB：EXIF 缩略图可能很长，切太小会解析不到 SOF。 */
 const HEADER_BYTES = 256 * 1024
@@ -13,75 +25,116 @@ const HEADER_BYTES = 256 * 1024
 /** 页面侧只做格式与范围提示，真正校验仍在内核与 Worker。 */
 const DPI_RANGE = '1～1200'
 
-const picked = ref<File | null>(null)
+const picked = ref<File[]>([])
 const sourceUrl = ref('')
 const sourceSize = ref<{ width: number; height: number } | null>(null)
+const rows = ref<TargetKbBatchRow[]>([])
 const targetInput = ref('')
 const minInput = ref('')
 const dpiInput = ref('')
 const allowShrink = ref(true)
 const busy = ref(false)
+const packing = ref(false)
 const message = ref('')
 const progress = ref<{ attempts: number; quality: number; bytes: number } | null>(null)
 const result = ref<TargetKbEncodeResult | null>(null)
 const resultUrl = ref('')
+const zipUrl = ref('')
+const zipBytes = ref(0)
+
+// 输出字节单独用普通 Map 存放：放进响应式数组会被代理包住，大数组的代理开销没必要。
+const outputs = new Map<number, Uint8Array>()
 
 // 单线程复用：取消只作废当前 id，不重建 Worker；卸载时再终止。
 let worker: Worker | undefined
 let activeId = 0
 let nextId = 1
+let pendingReply: ((reply: TargetKbReply) => void) | null = null
 
-/** 体积统一按 1024 进制显示，与目标体积输入框的换算保持一致。 */
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${bytes} B`
+/** 多选即批量；单张仍走原来的详细结果视图。 */
+const isBatch = computed(() => picked.value.length > 1)
+const batchSummary = computed(() => summarizeBatch(rows.value))
+/** 单张时才做预览与详细结果，模板里据此切换，不依赖非空断言。 */
+const singleFile = computed(() => (picked.value.length === 1 ? (picked.value[0] ?? null) : null))
+/** 提示文案用的整数 MB，避免在模板里做换算。 */
+const MAX_BATCH_MB = Math.round(MAX_BATCH_BYTES / 1024 / 1024)
+
+/** 释放所有临时地址，避免连续换图时旧 Blob 一直占着内存。 */
+function clearUrls(): void {
+  if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
+  if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
+  if (zipUrl.value) URL.revokeObjectURL(zipUrl.value)
+  sourceUrl.value = ''
+  resultUrl.value = ''
+  zipUrl.value = ''
+  zipBytes.value = 0
 }
 
-/** 结果与进度一起失效，避免用户改完参数后仍下载到旧文件。 */
+/** 结果、进度与列表状态一起失效，避免用户改完参数后仍下载到旧文件。 */
 function invalidate(): void {
   if (worker && activeId > 0) worker.postMessage({ id: activeId, kind: 'cancel' })
+  const resolve = pendingReply
+  pendingReply = null
   activeId = 0
   busy.value = false
+  packing.value = false
   progress.value = null
   result.value = null
-  if (resultUrl.value) {
-    URL.revokeObjectURL(resultUrl.value)
-    resultUrl.value = ''
+  outputs.clear()
+  clearUrls()
+  for (const row of rows.value) {
+    row.status = 'pending'
+    row.outputBytes = undefined
+    row.message = undefined
   }
+  resolve?.({ id: 0, ok: false, reason: 'cancelled', message: '已取消' })
 }
 
-/** 收下一张图：先按体积与文件头像素拦一次，再生成预览。 */
-async function acceptFile(next: File): Promise<void> {
+/** 收下选中的图片：先过滤非图片、再校验批量上限，最后才建列表。 */
+async function acceptFiles(list: File[]): Promise<void> {
   invalidate()
   message.value = ''
-  picked.value = null
+  picked.value = []
+  rows.value = []
   sourceSize.value = null
-  if (sourceUrl.value) {
-    URL.revokeObjectURL(sourceUrl.value)
-    sourceUrl.value = ''
-  }
 
-  if (!next.type.startsWith('image/')) {
+  const images = list.filter((file) => file.type.startsWith('image/'))
+  if (images.length === 0) {
     message.value = '请选择图片文件（JPEG、PNG、WebP 或 AVIF）。'
     return
   }
-  const sizeCheck = inspectSourceSize(next.size)
-  if (!sizeCheck.ok) {
-    message.value = sizeCheck.message
+  if (images.length !== list.length)
+    message.value = `已忽略 ${list.length - images.length} 个非图片文件。`
+
+  try {
+    validateBatch(images.map((file) => ({ name: file.name, size: file.size })))
+  } catch (error: unknown) {
+    message.value = error instanceof Error ? error.message : '选择失败，请重试'
     return
   }
 
-  const head = new Uint8Array(await next.slice(0, HEADER_BYTES).arrayBuffer())
+  picked.value = images
+  rows.value = images.map((file) => ({ name: file.name, size: file.size, status: 'pending' }))
+  // 多张时不逐张解析文件头：解析结果只用于单图预览，批量交给 Worker 逐张判断。
+  if (images.length > 1) return
+
+  const only = images[0]!
+  const sizeCheck = inspectSourceSize(only.size)
+  if (!sizeCheck.ok) {
+    message.value = sizeCheck.message
+    picked.value = []
+    rows.value = []
+    return
+  }
+  const head = new Uint8Array(await only.slice(0, HEADER_BYTES).arrayBuffer())
   const inspection = inspectSource(head)
   if (!inspection.ok) {
     message.value = inspection.message
+    picked.value = []
+    rows.value = []
     return
   }
-
-  picked.value = next
-  sourceUrl.value = URL.createObjectURL(next)
-  // 解析不出尺寸（WebP/AVIF）时留空，Worker 会在解码后补检。
+  sourceUrl.value = URL.createObjectURL(only)
   sourceSize.value =
     inspection.width === null || inspection.height === null
       ? null
@@ -91,16 +144,16 @@ async function acceptFile(next: File): Promise<void> {
 /** 文件选择与拖放走同一个入口，避免两条路径行为不一致。 */
 function onSelect(event: Event): void {
   const input = event.target as HTMLInputElement
-  const next = input.files?.[0]
+  const files = Array.from(input.files ?? [])
   input.value = ''
-  if (next) void acceptFile(next)
+  if (files.length) void acceptFiles(files)
 }
 
 /** 拖放只能由 Drag and Drop API 提供文件，Pointer Events 拿不到 File 对象。 */
 function onDrop(event: DragEvent): void {
   event.preventDefault()
-  const next = event.dataTransfer?.files?.[0]
-  if (next) void acceptFile(next)
+  const files = Array.from(event.dataTransfer?.files ?? [])
+  if (files.length) void acceptFiles(files)
 }
 
 function onDragOver(event: DragEvent): void {
@@ -144,18 +197,113 @@ function handleReply(reply: TargetKbReply): void {
     progress.value = reply.progress
     return
   }
+  const resolve = pendingReply
+  pendingReply = null
   activeId = 0
-  busy.value = false
-  if (reply.ok && reply.result) {
-    result.value = reply.result
-    resultUrl.value = URL.createObjectURL(new Blob([reply.result.bytes], { type: 'image/jpeg' }))
-  } else {
-    message.value = reply.message ?? '处理失败，请重试'
+  progress.value = null
+  resolve?.(reply)
+}
+
+/** 串行发送一张图并等待结果；批量与单图共用同一条路径。 */
+function sendEncode(
+  bytes: ArrayBuffer,
+  target: TargetKbTarget,
+  dpi: number | null,
+): Promise<TargetKbReply> {
+  const id = nextId++
+  activeId = id
+  return new Promise((resolve) => {
+    pendingReply = resolve
+    ensureWorker().postMessage(
+      { id, kind: 'encode', bytes, target, allowShrink: allowShrink.value, dpi },
+      [bytes],
+    )
+  })
+}
+
+async function runSingle(target: TargetKbTarget, dpi: number | null): Promise<void> {
+  const file = picked.value[0]
+  if (!file) return
+  try {
+    const bytes = await file.arrayBuffer()
+    const reply = await sendEncode(bytes, target, dpi)
+    if (reply.reason === 'cancelled') return
+    if (reply.ok && reply.result) {
+      result.value = reply.result
+      resultUrl.value = URL.createObjectURL(new Blob([reply.result.bytes], { type: 'image/jpeg' }))
+    } else {
+      message.value = reply.message ?? '处理失败，请重试'
+    }
+  } catch {
+    message.value = '读取图片失败，请重试'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<void> {
+  try {
+    for (let index = 0; index < picked.value.length; index += 1) {
+      if (!busy.value) return
+      const file = picked.value[index]
+      const row = rows.value[index]
+      if (!file || !row) continue
+      row.status = 'running'
+      progress.value = null
+      const bytes = await file.arrayBuffer()
+      const reply = await sendEncode(bytes, target, dpi)
+      if (reply.reason === 'cancelled' || !busy.value) {
+        row.status = 'pending'
+        return
+      }
+      if (reply.ok && reply.result) {
+        row.status = 'done'
+        row.outputBytes = reply.result.bytes.byteLength
+        outputs.set(index, new Uint8Array(reply.result.bytes))
+      } else {
+        row.status = 'failed'
+        row.message = reply.message ?? '处理失败'
+      }
+    }
+    await packZip()
+  } catch {
+    message.value = '批量处理中断，请重试'
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 只打包成功项；有失败就单独列出，不把半成品混进 ZIP。 */
+async function packZip(): Promise<void> {
+  const done = rows.value
+    .map((row, index) => ({ row, index }))
+    .filter((item) => item.row.status === 'done')
+  if (done.length === 0) {
+    message.value = '所有图片都未能压缩，未生成 ZIP。'
+    return
+  }
+  packing.value = true
+  try {
+    const entries: Record<string, Uint8Array> = {}
+    for (const { row, index } of done) {
+      const bytes = outputs.get(index)
+      if (bytes) entries[zipEntryName(index, row.name, bytes.byteLength)] = bytes
+    }
+    const archive = await new Promise<Uint8Array>((resolve, reject) => {
+      // JPEG 已经压缩过，deflate 几乎不再变小；用 store 换取更短的等待。
+      zip(entries, { level: 0 }, (error, data) => (error ? reject(error) : resolve(data)))
+    })
+    zipUrl.value = URL.createObjectURL(new Blob([archive.slice()], { type: 'application/zip' }))
+    zipBytes.value = archive.byteLength
+  } catch {
+    message.value = '打包 ZIP 失败，请重试'
+  } finally {
+    packing.value = false
   }
 }
 
 async function run(): Promise<void> {
-  if (!picked.value || busy.value) return
+  if (!picked.value.length || busy.value) return
   message.value = ''
 
   let target: TargetKbTarget
@@ -170,49 +318,53 @@ async function run(): Promise<void> {
 
   invalidate()
   busy.value = true
-  const file = picked.value
-  try {
-    // 先转移字节再交给 Worker，两端不各留一份原图。
-    const bytes = await file.arrayBuffer()
-    const id = nextId++
-    activeId = id
-    ensureWorker().postMessage(
-      { id, kind: 'encode', bytes, target, allowShrink: allowShrink.value, dpi },
-      [bytes],
-    )
-  } catch {
-    activeId = 0
-    busy.value = false
-    message.value = '读取图片失败，请重试'
-  }
+  if (isBatch.value) await runBatch(target, dpi)
+  else await runSingle(target, dpi)
 }
 
 /** 取消只作废回调，线程留着给下一次用；真正释放内存靠卸载时终止。 */
 function cancel(): void {
   if (!busy.value) return
-  if (worker && activeId > 0) worker.postMessage({ id: activeId, kind: 'cancel' })
+  const id = activeId
+  if (worker && id > 0) worker.postMessage({ id, kind: 'cancel' })
   activeId = 0
+  const resolve = pendingReply
+  pendingReply = null
   busy.value = false
+  packing.value = false
   progress.value = null
-  message.value = '已取消本次压缩。'
+  resolve?.({ id, ok: false, reason: 'cancelled', message: '已取消' })
+  // 批量取消后不保留半成品：已完成的也回到"等待"，用户重跑一次即可。
+  invalidate()
+  message.value = isBatch.value ? '已取消本次批量，未生成结果。' : '已取消本次压缩。'
 }
 
 function download(): void {
-  if (!result.value || !picked.value) return
-  const kb = Math.max(1, Math.round(result.value.bytes.byteLength / 1024))
-  const base = picked.value.name.replace(/\.[^.]+$/, '')
-  const url = URL.createObjectURL(new Blob([result.value.bytes], { type: 'image/jpeg' }))
+  const out = result.value
+  if (!out) return
+  const name = singleFile.value
+    ? outputFileName(singleFile.value.name, out.bytes.byteLength)
+    : '妙压.jpg'
+  const url = URL.createObjectURL(new Blob([out.bytes], { type: 'image/jpeg' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `${base}-${kb}KB.jpg`
+  link.download = name
   link.click()
   // 给浏览器接收下载请求的时间，随后释放临时地址。
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function downloadZip(): void {
+  if (!zipUrl.value) return
+  const link = document.createElement('a')
+  link.href = zipUrl.value
+  link.download = `妙压-${batchSummary.value.done}张.zip`
+  link.click()
+}
+
 const summary = computed(() => {
   const out = result.value
-  const input = picked.value
+  const input = singleFile.value
   if (!out || !input) return null
   const after = out.bytes.byteLength
   const before = input.size
@@ -243,7 +395,7 @@ const summary = computed(() => {
  */
 watch([targetInput, minInput, dpiInput, allowShrink], () => {
   const wasBusy = busy.value
-  if (!wasBusy && !result.value) {
+  if (!wasBusy && !result.value && !zipUrl.value) {
     message.value = ''
     return
   }
@@ -257,6 +409,7 @@ onBeforeUnmount(() => {
   worker = undefined
   if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
   if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
+  if (zipUrl.value) URL.revokeObjectURL(zipUrl.value)
 })
 </script>
 
@@ -265,30 +418,34 @@ onBeforeUnmount(() => {
     <section class="panel" aria-labelledby="pick-title">
       <h2 id="pick-title">1. 选择图片</h2>
       <p id="pick-help">
-        图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000
-        万像素；输出统一为 JPEG，原图不会被修改。
+        图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000 万像素；一次最多
+        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。输出统一为 JPEG，原图不会被修改。
       </p>
       <label class="drop" @dragover="onDragOver" @drop="onDrop">
         <input
           type="file"
+          multiple
           accept="image/jpeg,image/png,image/webp,image/avif"
           aria-describedby="pick-help"
           @change="onSelect"
         />
         <ElIcon class="drop-icon"><Upload /></ElIcon>
         <span class="drop-main">点击选择图片，或把图片拖到这里</span>
-        <span class="drop-sub">JPEG / PNG / WebP / AVIF</span>
+        <span class="drop-sub">可多选；JPEG / PNG / WebP / AVIF</span>
       </label>
 
-      <figure v-if="picked" class="source">
-        <img :src="sourceUrl" :alt="`待压缩的图片：${picked.name}`" />
+      <figure v-if="singleFile" class="source">
+        <img :src="sourceUrl" :alt="`待压缩的图片：${singleFile.name}`" />
         <figcaption>
-          <strong>{{ picked.name }}</strong>
-          <span>{{ formatBytes(picked.size) }}</span>
+          <strong>{{ singleFile.name }}</strong>
+          <span>{{ formatBytes(singleFile.size) }}</span>
           <span v-if="sourceSize">{{ sourceSize.width }}×{{ sourceSize.height }}</span>
           <span v-else>尺寸待解码后确认</span>
         </figcaption>
       </figure>
+      <p v-else-if="picked.length > 1" class="picked-count">
+        已选 {{ picked.length }} 张，合计 {{ formatBytes(batchSummary.inputBytes) }}。
+      </p>
 
       <h2>2. 设置目标</h2>
       <label for="target-size">目标体积上限</label>
@@ -300,7 +457,7 @@ onBeforeUnmount(() => {
         aria-describedby="target-help"
       />
       <p id="target-help">
-        支持 KB、MB 与纯字节；留空无法开始。目标体积指输出文件的字节数，不是画质档位。
+        支持 KB、MB 与纯字节；留空无法开始。目标体积指输出文件的字节数，不是画质档位。多张共用同一组设置。
       </p>
 
       <label for="min-size">体积下限（可选）</label>
@@ -336,7 +493,7 @@ onBeforeUnmount(() => {
       </p>
 
       <div class="actions">
-        <ElButton type="primary" :loading="busy" :disabled="!picked" @click="run">
+        <ElButton type="primary" :loading="busy" :disabled="!picked.length" @click="run">
           {{ busy ? '正在压缩' : '开始压缩' }}
         </ElButton>
         <ElButton v-if="busy" @click="cancel">取消</ElButton>
@@ -356,7 +513,17 @@ onBeforeUnmount(() => {
     <section class="panel" aria-labelledby="result-title">
       <h2 id="result-title">3. 结果与下载</h2>
 
-      <template v-if="result && summary">
+      <TargetKbBatchResult
+        v-if="isBatch"
+        :rows="rows"
+        :summary="batchSummary"
+        :packing="packing"
+        :zip-ready="Boolean(zipUrl)"
+        :zip-bytes="zipBytes"
+        @download="downloadZip"
+      />
+
+      <template v-else-if="result && summary">
         <p role="status" class="headline">
           {{ summary.before }} → {{ summary.after }}
           <span class="change" :class="{ grew: summary.change > 0 }">
@@ -505,6 +672,10 @@ label:not(.drop) {
 .source figcaption strong {
   color: var(--ph-ink);
   font-weight: 500;
+}
+.picked-count {
+  margin: 14px 0 0;
+  font-size: 13px;
 }
 .switch-row {
   display: flex;
