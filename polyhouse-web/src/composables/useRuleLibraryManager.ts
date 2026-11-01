@@ -2,6 +2,7 @@ import { ref, shallowRef } from 'vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import {
   normalizeRuleSetName,
+  serializeRuleLibrary,
   validateRuleLibrary,
   type RuleLibrary,
   type RuleSet,
@@ -19,6 +20,18 @@ export interface RuleLibraryManagerServices {
   createId(): string
   /** UTC 毫秒时间由校验层兜底，时钟回退不回写更早的更新时间。 */
   now(): number
+}
+
+/** 下载的是一个固定整库快照，未保存候选与已读取的本机版本须明确区分。 */
+export interface RuleLibraryExport {
+  /** 使用本机日期和候选标记，不在文件名中泄露用户词库名称。 */
+  readonly filename: string
+  /** 复用 v1 紧凑格式，避免缩进使临界容量备份无法重新解析。 */
+  readonly json: string
+  /** 用于说明备份范围，不代表浏览器已将文件保存到磁盘。 */
+  readonly setCount: number
+  /** 导出不能把内存候选标记为已持久化。 */
+  readonly unsaved: boolean
 }
 
 /** 将词库管理与文件/替换任务分离，保存失败仍保留 R1 的内存候选。 */
@@ -204,6 +217,36 @@ export function useRuleLibraryManager(
     return true
   }
 
+  /** 正常导出先重读；只有明确确认才备份候选，绝不为导出舍弃或写入数据。 */
+  function prepareExport(allowUnsaved = false): RuleLibraryExport | undefined {
+    if (pending.value) return undefined
+    issue.value = ''
+    const unsaved = hasUnsaved.value
+    if (unsaved !== allowUnsaved) {
+      issue.value = unsaved ? '请明确确认导出尚未保存的词库候选' : '候选状态已改变，请重新选择导出'
+      return undefined
+    }
+    if (!unsaved && !reload()) {
+      issue.value = '无法确认本机词库，未生成备份；请先处理读取错误'
+      return undefined
+    }
+    try {
+      const json = serializeRuleLibrary(state.value.data)
+      const date = new Date(services.now())
+      if (!Number.isFinite(date.getTime())) throw new Error('无法确定备份日期，请检查本机时间')
+      const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
+      return Object.freeze({
+        filename: `妙替词库-${stamp}${unsaved ? '-未保存候选' : ''}.json`,
+        json,
+        setCount: state.value.data.sets.length,
+        unsaved,
+      })
+    } catch {
+      issue.value = '词库或备份日期不符合要求，未生成备份；现有内容保留'
+      return undefined
+    }
+  }
+
   return {
     state,
     selectedId,
@@ -218,5 +261,6 @@ export function useRuleLibraryManager(
     clear,
     retry,
     reload,
+    prepareExport,
   }
 }

@@ -22,7 +22,10 @@ const storageUrl = compile(
   { '../utils/ruleLibrary': pureUrl },
 )
 const managerUrl = compile(
-  await readFile(new URL('../../src/composables/useRuleLibraryManager.ts', import.meta.url), 'utf8'),
+  await readFile(
+    new URL('../../src/composables/useRuleLibraryManager.ts', import.meta.url),
+    'utf8',
+  ),
   {
     vue: import.meta.resolve('vue'),
     '../utils/ruleLibrary': pureUrl,
@@ -31,7 +34,7 @@ const managerUrl = compile(
 )
 const { createRuleLibraryStorage } = await import(storageUrl)
 const { useRuleLibraryManager } = await import(managerUrl)
-const { parseRuleLibrary } = await import(pureUrl)
+const { parseRuleLibrary, RULE_LIBRARY_MAX_BYTES } = await import(pureUrl)
 const rules = (replace = '小红') => [{ search: '小明', replace }]
 
 function fixture() {
@@ -79,6 +82,9 @@ function fixture() {
       now = value
     },
     writes: () => writes,
+    rawValue: (value) => {
+      raw = value
+    },
   }
 }
 
@@ -193,6 +199,105 @@ test('两个管理实例陈旧保存被拒绝，候选保留，确认重读后�
   assert.equal(parseRuleLibrary(f.raw()).sets.length, 2)
 })
 
+test('导出重读其他页面最新整库，保留顺序、元数据和 Unicode，且不写入', async () => {
+  const f = fixture()
+  const first = f.manager()
+  const stale = f.manager()
+  const special = [
+    { search: ' 小明😀\n', replace: '' },
+    { search: 'constructor', replace: '__proto__\n ' },
+  ]
+  await first.saveRules('中文😀', special)
+  await first.saveRules('第二组', rules())
+  const original = f.raw()
+  const writes = f.writes()
+  f.clock(new Date(2026, 10, 2, 12).getTime())
+  const backup = stale.prepareExport()
+  assert.equal(backup.filename, '妙替词库-20261102.json')
+  assert.equal(backup.json, original)
+  assert.deepEqual(parseRuleLibrary(backup.json), first.state.value.data)
+  assert.equal(backup.setCount, 2)
+  assert.equal(backup.unsaved, false)
+  assert.equal(stale.selectedId.value, first.state.value.data.sets[0].id)
+  assert.equal(f.raw(), original)
+  assert.equal(f.writes(), writes)
+})
+
+test('有效空库可导出，坏存储、未知版本和读取失败不生成空备份且不覆盖原文', () => {
+  const f = fixture()
+  const manager = f.manager()
+  assert.deepEqual(parseRuleLibrary(manager.prepareExport().json), { version: 1, sets: [] })
+  for (const raw of ['{', '{"version":2,"sets":[]}']) {
+    f.rawValue(raw)
+    assert.equal(manager.prepareExport(), undefined)
+    assert.equal(f.raw(), raw)
+    assert.equal(manager.state.value.status, 'invalid-storage')
+  }
+  f.failRead(true)
+  assert.equal(manager.prepareExport(), undefined)
+  assert.equal(f.writes(), 0)
+  assert.equal(f.manager().prepareExport(), undefined)
+})
+
+test('原始 UTF-8 恰达 256 KiB 仍可导出紧凑可解析备份，超一字节拒绝且保留原文', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  await manager.saveRules('中文😀', rules())
+  const compact = f.raw()
+  const padded = compact.padEnd(
+    compact.length + RULE_LIBRARY_MAX_BYTES - Buffer.byteLength(compact, 'utf8'),
+    ' ',
+  )
+  assert.equal(Buffer.byteLength(padded, 'utf8'), RULE_LIBRARY_MAX_BYTES)
+  f.rawValue(padded)
+  const backup = manager.prepareExport()
+  assert.equal(backup.json, compact)
+  assert.deepEqual(parseRuleLibrary(backup.json), parseRuleLibrary(padded))
+  assert.equal(f.raw(), padded)
+  f.rawValue(`${padded} `)
+  assert.equal(manager.prepareExport(), undefined)
+  assert.equal(f.raw(), `${padded} `)
+})
+
+test('保存失败候选仅在明确确认时可导出，不重读、不消除未保存状态，可随后重试', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  await manager.saveRules('已保存', rules())
+  const original = f.raw()
+  f.failWrite(true)
+  await manager.saveRules('未保存', rules('候选'))
+  const snapshot = manager.state.value
+  f.failRead(true)
+  assert.equal(manager.prepareExport(), undefined)
+  const backup = manager.prepareExport(true)
+  assert.match(backup.filename, /-未保存候选\.json$/u)
+  assert.equal(backup.unsaved, true)
+  assert.deepEqual(parseRuleLibrary(backup.json), snapshot.data)
+  assert.equal(manager.state.value, snapshot)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(f.raw(), original)
+  f.failRead(false)
+  f.failWrite(false)
+  assert.equal(await manager.retry(), true)
+  assert.equal(manager.prepareExport(true), undefined)
+})
+
+test('冲突候选可独立备份，不能覆盖另一页面的已保存版本', async () => {
+  const f = fixture()
+  const first = f.manager()
+  const stale = f.manager()
+  await first.saveRules('其他页面', rules())
+  await stale.saveRules('本页候选', rules('不同'))
+  const raw = f.raw()
+  const backup = stale.prepareExport(true)
+  assert.equal(parseRuleLibrary(backup.json).sets[0].name, '本页候选')
+  assert.equal(stale.state.value.status, 'conflict')
+  assert.equal(stale.hasUnsaved.value, true)
+  assert.equal(f.raw(), raw)
+  stale.pending.value = true
+  assert.equal(stale.prepareExport(true), undefined)
+})
+
 // 真实 SFC setup 的行为测试；DOM、鼠标和焦点另由真实浏览器验收。
 const managerFixtureUrl = url(
   'export let current; export const setCurrent = (value) => { current = value }; export const useRuleLibraryManager = () => current',
@@ -241,6 +346,126 @@ function mount(manager, initialRules = rules('编辑中')) {
   app.mount({})
   return { page, current, emitted, unmount: () => app.unmount() }
 }
+
+// 只替换浏览器下载边界，组件 setup 与管理/校验层仍执行真实实现。
+function downloadFixture(t, fail = false) {
+  const blobs = []
+  const links = []
+  const revoked = []
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  t.mock.method(URL, 'createObjectURL', (blob) => {
+    blobs.push(blob)
+    return 'blob:rule-library-test'
+  })
+  t.mock.method(URL, 'revokeObjectURL', (url) => revoked.push(url))
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      createElement: () => {
+        const link = {
+          href: '',
+          download: '',
+          click() {
+            if (fail) throw new Error('fixture download denied')
+            links.push({ href: this.href, download: this.download })
+          },
+        }
+        return link
+      },
+    },
+  })
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, 'document', previous)
+    else delete globalThis.document
+  })
+  return {
+    blobs,
+    links,
+    revoked,
+    fail: (value) => {
+      fail = value
+    },
+  }
+}
+
+test('正常下载完整 JSON，不载入规则或写存储，提示仅已发起下载并释放临时地址', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  await manager.saveRules('备份', rules())
+  const view = mount(manager)
+  t.after(view.unmount)
+  const download = downloadFixture(t)
+  const raw = f.raw()
+  const writes = f.writes()
+  view.page.exportLibrary()
+  assert.equal(download.links.length, 1)
+  assert.equal(download.blobs[0].type, 'application/json;charset=utf-8')
+  assert.equal(await download.blobs[0].text(), raw)
+  assert.equal(view.emitted.length, 0)
+  assert.deepEqual(view.current.value, rules('编辑中'))
+  assert.equal(f.writes(), writes)
+  assert.match(view.page.feedback.value, /已发起 1 组/u)
+  assert.match(view.page.feedback.value, /请确认文件已保存/u)
+  assert.equal(download.revoked.length, 0)
+  t.mock.timers.tick(1000)
+  assert.deepEqual(download.revoked, ['blob:rule-library-test'])
+})
+
+test('候选导出先确认，取消不下载，确认后仍保持未保存状态及父页面编辑', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  f.failWrite(true)
+  await manager.saveRules('候选', rules())
+  const view = mount(manager)
+  t.after(view.unmount)
+  const download = downloadFixture(t)
+  view.page.exportLibrary()
+  assert.equal(view.page.mode.value, 'export')
+  assert.equal(view.page.dialogOpen.value, true)
+  assert.equal(download.links.length, 0)
+  view.page.dialogOpen.value = false
+  await view.page.confirm()
+  assert.equal(download.links.length, 0)
+  view.page.exportLibrary()
+  await view.page.confirm()
+  assert.equal(download.links.length, 1)
+  assert.match(download.links[0].download, /-未保存候选\.json$/u)
+  assert.equal(view.page.dialogOpen.value, false)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(manager.state.value.persisted, false)
+  assert.equal(f.raw(), null)
+  assert.equal(view.emitted.length, 0)
+  t.mock.timers.tick(1000)
+})
+
+test('下载边界失败保留候选和确认弹窗，可重试，且释放已创建的临时地址', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  f.failWrite(true)
+  await manager.saveRules('候选', rules())
+  const view = mount(manager)
+  t.after(view.unmount)
+  const download = downloadFixture(t, true)
+  view.page.exportLibrary()
+  await view.page.confirm()
+  assert.equal(view.page.dialogOpen.value, true)
+  assert.equal(download.links.length, 0)
+  assert.equal(view.page.feedback.value, '')
+  assert.match(manager.issue.value, /无法发起词库下载/u)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(f.raw(), null)
+  t.mock.timers.tick(1000)
+  assert.deepEqual(download.revoked, ['blob:rule-library-test'])
+  download.fail(false)
+  await view.page.confirm()
+  assert.equal(download.links.length, 1)
+  assert.equal(view.page.dialogOpen.value, false)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(f.raw(), null)
+  t.mock.timers.tick(1000)
+  assert.equal(download.revoked.length, 2)
+})
 
 test('载入不同的非空规则先确认，取消不发事件，确认发可编辑副本', async (t) => {
   const f = fixture()

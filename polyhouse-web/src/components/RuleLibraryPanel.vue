@@ -33,7 +33,7 @@ const dialogOpen = ref(false)
 // ElDialog 的旧关闭回调结束前不重开或再次提交，避免新弹窗被旧回调关掉。
 const closing = ref(false)
 const controlsDisabled = computed(() => pending.value || closing.value)
-const mode = ref<'save' | 'rename' | 'load' | 'delete' | 'clear' | 'reload'>('save')
+const mode = ref<'save' | 'rename' | 'load' | 'delete' | 'clear' | 'reload' | 'export'>('save')
 const dialogTarget = shallowRef<RuleSet>()
 const name = ref('')
 const overwriteConfirmed = ref(false)
@@ -51,6 +51,7 @@ const title = computed(
       delete: '删除词库',
       clear: '清除本机词库',
       reload: '重新读取本机词库',
+      export: '导出未保存候选',
     })[mode.value],
 )
 const notice = computed(
@@ -99,7 +100,39 @@ function reload(): void {
   }
 }
 
-/** 仅持久化成功才关闭保存表单；失败继续显示原候选并允许重试。 */
+/** 候选必须先确认；正常导出由管理层重读，读取失败不下载初始化空库。 */
+function exportLibrary(): void {
+  if (controlsDisabled.value || dialogOpen.value) return
+  feedback.value = ''
+  if (hasUnsaved.value) open('export')
+  else downloadLibrary()
+}
+
+/** 浏览器仅接收下载请求，不能据此保证用户保存到磁盘；临时地址延后释放。 */
+function downloadLibrary(allowUnsaved = false): boolean {
+  const backup = manager.prepareExport(allowUnsaved)
+  if (!backup) return false
+  let url: string | undefined
+  try {
+    url = URL.createObjectURL(new Blob([backup.json], { type: 'application/json;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = backup.filename
+    link.click()
+    feedback.value = `已发起 ${backup.setCount} 组词库${backup.unsaved ? '未保存候选' : ''}的 JSON 下载，请确认文件已保存。`
+    return true
+  } catch {
+    issue.value = '无法发起词库下载，现有内容保留，请重试或检查浏览器下载设置'
+    return false
+  } finally {
+    if (url) {
+      const downloadUrl = url
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+    }
+  }
+}
+
+/** 管理修改须持久化成功才结束；导出只等待下载请求成功，不解除候选状态。 */
 async function confirm(): Promise<void> {
   if (pending.value || closing.value || !dialogOpen.value) return
   feedback.value = ''
@@ -119,6 +152,7 @@ async function confirm(): Promise<void> {
     success = await manager.remove(dialogTarget.value.id)
   else if (mode.value === 'clear') success = await manager.clear()
   else if (mode.value === 'reload') success = manager.reload(true)
+  else if (mode.value === 'export') success = downloadLibrary(true)
   if (success) {
     dialogOpen.value = false
     expanded.value = true
@@ -205,6 +239,9 @@ async function closed(): Promise<void> {
       </template>
       <p v-else class="library-help">还没有词库，可将当前规则保存为第一组。</p>
       <div class="library-actions">
+        <ElButton :disabled="controlsDisabled" @click="exportLibrary">{{
+          hasUnsaved ? '导出未保存候选' : '导出全部词库'
+        }}</ElButton>
         <ElButton text :disabled="controlsDisabled" @click="reload">重新读取本机词库</ElButton>
         <ElButton
           v-if="state.data.sets.length"
@@ -214,6 +251,10 @@ async function closed(): Promise<void> {
           >清除本机词库</ElButton
         >
       </div>
+      <p class="library-help">
+        导出全部词库为本机明文
+        JSON，不含当前未存入词库的编辑、草稿或文件。建议定期备份；导入恢复尚未提供。
+      </p>
     </div>
     <p v-if="feedback" class="library-help" role="status">{{ feedback }}</p>
     <div v-if="notice" class="library-notice" :role="state.persisted ? 'status' : 'alert'">
@@ -274,6 +315,10 @@ async function closed(): Promise<void> {
         <p v-else-if="mode === 'clear'">
           确定清除本机全部 {{ state.data.sets.length }} 组词库？此操作不能撤销，当前编辑的规则保留。
         </p>
+        <p v-else-if="mode === 'export'">
+          将导出本页全部 {{ state.data.sets.length }}
+          组词库的未保存候选，文件名带“未保存候选”标记；本机已保存的版本可能不同。导出不会完成保存或解决冲突，刷新或离开前仍请保管备份。
+        </p>
         <p v-else>
           重新读取会舍弃本页尚未保存的词库改动，读取其他页面已保存的版本。当前编辑的规则保留。
         </p>
@@ -285,26 +330,28 @@ async function closed(): Promise<void> {
       <template #footer>
         <div class="library-dialog-actions">
           <ElButton :disabled="pending" @click="dialogOpen = false">{{
-            hasUnsaved ? '保留并关闭' : '取消'
+            hasUnsaved && mode !== 'export' ? '保留并关闭' : '取消'
           }}</ElButton>
           <ElButton
-            v-if="hasUnsaved && canRetry && mode !== 'reload'"
+            v-if="hasUnsaved && canRetry && mode !== 'reload' && mode !== 'export'"
             type="primary"
             :loading="pending"
             @click="retry"
             >重试保存</ElButton
           >
           <ElButton
-            v-if="!hasUnsaved || mode === 'reload'"
+            v-if="!hasUnsaved || mode === 'reload' || mode === 'export'"
             type="primary"
             :loading="pending"
             @click="confirm"
             >{{
-              mode === 'save' && collision
-                ? '确认覆盖'
-                : mode === 'save' || mode === 'rename'
-                  ? '保存'
-                  : '确认'
+              mode === 'export'
+                ? '确认导出候选'
+                : mode === 'save' && collision
+                  ? '确认覆盖'
+                  : mode === 'save' || mode === 'rename'
+                    ? '保存'
+                    : '确认'
             }}</ElButton
           >
         </div>
