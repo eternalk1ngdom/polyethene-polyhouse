@@ -7,7 +7,7 @@
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
 | [P5 前：个人中心与管理工作台整理](pre-p5-account-workspace-ui.md) | U0～U4 已收口；普通构建/测试与真实隔离页面组合验收通过；不代表 P5/部署完成 | [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
-| [妙压：图片体积卡位（TargetKB）](target-kb-compression.md) | T1 纯内核范围已批准、尚未实施；T2～T5 为候选，工具仍为占位页 | [v1.0-dev.11](../dev-log/v1.0-dev.11.md) |
+| [妙压：图片体积卡位（TargetKB）](target-kb-compression.md) | T1 纯内核已完成并验收；T2～T5 为候选，工具仍为占位页 | [v1.0-dev.11](../dev-log/v1.0-dev.11.md) |
 
 2026-10-31 决定：上线/部署相关计划整体搁置，后端依赖升级方案已被用户否定；当前只做本地开发，U4 已收口；本轮完成文档治理。接下来先讨论妙替深化待批准草案，上线准备继续搁置，恢复时重新评估。
 

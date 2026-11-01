@@ -1,6 +1,6 @@
 # 妙压：图片体积卡位（TargetKB）
 
-制定日期：2026-11-01（Asia/Shanghai）。状态：**T1 范围已获批准，代码尚未实施**；T2～T5 为后续候选。
+制定日期：2026-11-01（Asia/Shanghai）。状态：**T1 已按建议值实施并通过专项验收**；T2～T5 为后续候选，未获批准。
 
 所属阶段：v1.0 本地开发期，当前日志 [v1.0-dev.11](../dev-log/v1.0-dev.11.md)。本计划在独立工作树 `E:/project/java/polyhouse-press`、分支 `wb/targetkb` 上推进，与妙替深化（`codex/replace-library`）并行；工程约束仍以根 [AGENTS.md](../../AGENTS.md) 为准，并行开工不扩大推送、合并或发布授权。
 
@@ -14,6 +14,8 @@
 - 不修改妙替的任何文件；不推送、不合并、不部署。
 
 T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`（含 `vue-tsc`）。无后端改动不运行 Maven。**T1 不产生任何用户可见变化**，页面仍是占位页，汇报必须如实说明，不能用"内核完成"暗示功能可用。
+
+2026-11-01 实施结果：T1 已按第 8 节建议值完成，专项 23 项、全量前端 158 项测试与构建通过；实际证据见 [dev.11](../dev-log/v1.0-dev.11.md)。
 
 ### 0.1 双线协作约定
 
@@ -35,10 +37,10 @@ T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`�
 
 ## 2. 基线与目标
 
-| 现状 | 位置 | 目标（T1 不全部实现） |
+| 现状 | 位置 | 目标（T1 已完成部分见 dev.11） |
 | --- | --- | --- |
 | 妙压只有占位页 | `views/TargetKbView.vue:1-12` | T3 换成真实页面 |
-| 压缩字节层为空壳 | `core/jpegComInjector.ts:1` | T1 实现 COM 增重与 DPI 改写 |
+| 压缩字节层为空壳 | `core/jpegComInjector.ts:1` | 已实现 COM 增重与 DPI 改写 |
 | 无目标体积解析与判定 | — | T1 实现 |
 | 无搜索策略 | — | T1 实现二分质量 + 尺寸降档 |
 | Worker 为空壳 | `workers/targetkb.worker.ts:1` | T2 接入 `OffscreenCanvas` 编码 |
@@ -57,12 +59,14 @@ T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`�
 纯函数只决定"下一步试什么"，编码由调用方注入，因此可在 Node 里用假编码器验证：
 
 ```
-nextQuality(state) -> { quality, done, reason }
+startSearch(input) -> { kind: 'probe', probe, state }
+advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 ```
 
-- 质量区间 `[0.10, 1.00]`，最多 12 次评估。
-- 结果落在目标区间即成功；超上限则压上界，小于下限则抬下界。
-- 12 次后取"满足上限的最大质量"；一个都没有则返回失败，**不输出超限文件**。
+- 先以质量 1.0 试一次：原图本来就不超限时一次结束，不必牺牲画质。
+- 之后在 `[0.10, 1.00]` 内二分，单档位最多 12 次评估，收敛阈值 0.001。
+- 只以"不超过上限"为约束求最大质量；**低于下限不再继续抬质量**，交给 COM 段补齐。区间搜索在"最高质量仍小于下限"时会无解，补齐才是正确出口。
+- 12 次后取"满足上限的最大质量"；一个都没有则降档或失败，**不输出超限文件**。
 
 ### 3.3 尺寸降档
 
@@ -72,7 +76,8 @@ nextQuality(state) -> { quality, done, reason }
 ### 3.4 小图增重（JPEG COM 段）
 
 - 输出小于下限时，插入 COM（`0xFFFE`）段填充；单段数据上限 65533 字节，超出拆多段。
-- 插在 SOI 之后，不改变像素、不改变可解码性；必须验证遍历段后仍能正确找到 EOI。
+- 补齐在搜索结束后按 `padToBytes` 执行，不改像素、不改编码；差额小于 5 字节时无法精确补齐，返回未满足而不是写出超限文件。
+- 插在头部元数据（APPn 与 COM）之后，保证 JFIF 仍是最前面的段；必须验证遍历段后仍能正确找到 EOI。
 - 局限：只对 JPEG 有效。T1 输出统一 JPEG，所以不影响；将来若支持 PNG 输出需另设方案。
 
 ### 3.5 DPI 写入
@@ -95,7 +100,7 @@ nextQuality(state) -> { quality, done, reason }
 
 | 步骤 | 工作 | 落点 | 独立验收 |
 | --- | --- | --- | --- |
-| T1 内核 | 目标解析与判定、二分与降档计划、COM 增重、DPI 改写 + 测试 | `core/targetKbTypes.ts`、`core/targetKbCompress.ts`、`core/jpegComInjector.ts` | 专项测试通过；构建与静态检查通过；页面无变化 |
+| T1 内核 | 目标解析与判定、二分与降档计划、COM 增重、DPI 改写 + 测试 | `core/targetKbTypes.ts`、`core/targetKbCompress.ts`、`core/jpegComInjector.ts` | 已完成：专项 23 项、全量 158 项、构建与静态检查通过；页面无变化 |
 | T2 编码接入 | `OffscreenCanvas` 编码、Worker 协议、取消 | `workers/targetkb.worker.ts`、`core/targetKbProtocol.ts` | 真实浏览器单图压缩成功；取消与过期回调隔离 |
 | T3 页面 | 选图与拖拽、参数、体积对比、单图下载 | `views/TargetKbView.vue`、`components/TargetKbPanel.vue` | 真实图片端到端；布局与焦点按铁律 8 |
 | T4 批量与导出 | 多图、ZIP、失败清单 | 页面 + `fflate` | 批量上限明确；失败不返回半成品 |
@@ -105,14 +110,16 @@ nextQuality(state) -> { quality, done, reason }
 
 ## 6. T1 验收清单
 
-- [ ] 目标解析：`200KB`、`1.5MB`、纯数字、空、负数、非数字、超 20 MiB、下限大于上限
-- [ ] 判定：恰好等于上限、超 1 字节、区间内、只给上限
-- [ ] 二分：单调编码器、非单调编码器、始终超限、始终小于下限、12 次内收敛
-- [ ] 降档：0.85 连乘、最小边长 64px、6 档后返回失败
-- [ ] COM：单段、多段、恰好 65533 字节边界、已有 COM 段不破坏、段遍历仍能定位 EOI
-- [ ] DPI：无 APP0 时插入、有 APP0 时改写、非法值拒绝、字节长度变化符合预期
-- [ ] `npm run lint:check`、`npm run build` 通过；无 `any`、无 `@ts-ignore`
-- [ ] 未改妙替文件、未改 `toolRegistry`、未新增依赖
+- [x] 目标解析：`200KB`、`1.5MB`、纯数字、空、负数、非数字、超 20 MiB、下限大于上限
+- [x] 判定：恰好等于上限、超 1 字节、区间内、只给上限
+- [x] 二分：单调编码器、非单调编码器、始终超限、始终小于下限、12 次内收敛
+- [x] 降档：0.85 连乘、最小边长 64px、6 档后返回失败
+- [x] COM：单段、多段、恰好 65533 字节边界、已有 COM 段不破坏、段遍历仍能定位 EOI
+- [x] DPI：无 APP0 时插入、有 APP0 时改写、非法值拒绝、字节长度变化符合预期
+- [x] `npm run lint:check`、`npm run build` 通过；无 `any`、无 `@ts-ignore`
+- [x] 未改妙替文件、未改 `toolRegistry`、未新增依赖
+
+专项 23 项通过；全量前端 158 项通过（基线 135 项 + 新增 23 项）。测试用假编码器与合成 JPEG 段，**没有验证真实浏览器编码结果**，那属于 T2。
 
 ## 7. 不做什么
 
@@ -127,11 +134,11 @@ nextQuality(state) -> { quality, done, reason }
 | 编号 | 事项 | 建议 | 状态 |
 | --- | --- | --- | --- |
 | D1 | 首轮范围 | 只做纯内核 + 测试 | 已定（2026-11-01） |
-| D2 | 输出格式 | T1 统一 JPEG | 待批 |
-| D3 | 小图增重方式 | JPEG COM 段填充 | 待批 |
-| D4 | DPI 写法 | 只写 JFIF APP0 | 待批 |
-| D5 | 输入上限 | 单张 ≤ 20 MiB、≤ 40 MP | 待批 |
-| D6 | 搜索参数 | 质量 0.10–1.00、12 次、降档 0.85×6 | 待批 |
+| D2 | 输出格式 | T1 统一 JPEG | 已定（2026-11-01 按建议值实施） |
+| D3 | 小图增重方式 | JPEG COM 段填充 | 已定（同上） |
+| D4 | DPI 写法 | 只写 JFIF APP0 | 已定（同上） |
+| D5 | 输入上限 | 单张 ≤ 20 MiB、≤ 40 MP | 上限已定；像素上限在 T2 解码前校验 |
+| D6 | 搜索参数 | 质量 0.10–1.00、12 次、降档 0.85×6 | 已定（同上） |
 
 ## 9. 参考
 
