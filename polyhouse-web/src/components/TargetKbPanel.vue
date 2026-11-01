@@ -433,6 +433,16 @@ function cancel(): void {
   message.value = isBatch.value ? '已取消本次批量，未生成结果。' : '已取消本次压缩。'
 }
 
+/**
+ * 放弃结果：释放输出字节与 ZIP 地址，但保留已选图片和参数。
+ * 用户可能只是不想下载、想换个目标再压一次，不该被迫重新选图。
+ */
+function discardResult(): void {
+  if (busy.value) return
+  invalidate()
+  message.value = '已放弃结果，可调整设置后重新压缩。'
+}
+
 function download(): void {
   const out = result.value
   if (!out) return
@@ -512,7 +522,8 @@ onBeforeUnmount(() => {
       <h2 id="pick-title">1. 选择图片</h2>
       <p id="pick-help">
         图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000 万像素；一次最多
-        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。输出统一为 JPEG，原图不会被修改。
+        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。输出统一为 JPEG，原图不会被修改；PNG
+        的透明区域会变成白底（JPEG 不支持透明）。
       </p>
       <label class="drop" @dragover="onDragOver" @drop="onDrop">
         <input
@@ -645,6 +656,7 @@ onBeforeUnmount(() => {
         :zip-ready="Boolean(zipUrl)"
         :zip-bytes="zipBytes"
         @download="downloadZip"
+        @discard="discardResult"
       />
 
       <template v-else-if="result && summary">
@@ -680,9 +692,12 @@ onBeforeUnmount(() => {
           <img :src="resultUrl" alt="压缩后的图片预览" />
           <figcaption>压缩结果预览（{{ result.width }}×{{ result.height }}）</figcaption>
         </figure>
-        <ElButton type="primary" class="download" @click="download">
-          <ElIcon><Download /></ElIcon>下载 JPEG
-        </ElButton>
+        <div class="result-actions">
+          <ElButton type="primary" @click="download">
+            <ElIcon><Download /></ElIcon>下载 JPEG
+          </ElButton>
+          <ElButton text @click="discardResult">放弃结果</ElButton>
+        </div>
       </template>
 
       <template v-else-if="busy">
@@ -926,8 +941,15 @@ label:not(.drop) {
   font-size: 12px;
   color: var(--ph-muted);
 }
-.download {
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
   margin-top: 16px;
+}
+.result-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 .hint {
   margin-top: 12px;

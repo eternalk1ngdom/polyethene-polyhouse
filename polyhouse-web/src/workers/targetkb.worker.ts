@@ -16,6 +16,7 @@ import type {
   TargetKbRequest,
 } from '../core/targetKbProtocol'
 import type { TargetKbProbe } from '../core/targetKbTypes'
+import { formatBytes } from '../utils/byteSize'
 
 /** 当前有效任务编号；0 表示没有任务，任何回复都应丢弃。 */
 let activeId = 0
@@ -167,14 +168,21 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
       step = advanceSearch(step.state, encoded.bytes.byteLength)
     }
 
-    if (step.kind === 'failed')
+    if (step.kind === 'failed') {
+      // 失败时把"最低能到多少"一起告诉用户：此刻手里就有最小质量 / 最小尺寸那次编码的字节数，
+      // 只说"请放宽目标"等于让用户盲猜一个数字。
+      const minBytes = probes.reduce((min, probe) => Math.min(min, probe.bytes), Infinity)
+      const minText = Number.isFinite(minBytes) ? formatBytes(minBytes) : null
+      const floor = minText === null ? '已到最低质量' : `最低约 ${minText}`
+      const target = formatBytes(request.target.maxBytes)
       throw new TargetKbError(
         'exceeds-target',
         // 关闭缩尺寸时并没有缩过图，提示不能照抄另一条路径，否则用户会以为程序擅自改了分辨率。
         request.allowShrink
-          ? '已降到最低质量并缩到最小尺寸，仍超过目标体积；请放宽目标或先缩小图片。'
-          : '已降到最低质量仍超过目标体积；请放宽目标、允许缩小尺寸，或先把图片改小。',
+          ? `已降到最低质量并缩到最小尺寸，${floor}，仍超过目标 ${target}；请把目标调到 ${minText ?? '更大'} 以上，或先缩小图片。`
+          : `已降到最低质量（未缩小尺寸），${floor}，仍超过目标 ${target}；请把目标调大、允许缩小尺寸，或先缩小图片。`,
       )
+    }
 
     const chosen = candidates.get(probeKey(step.result))
     if (!chosen) throw new TargetKbError('internal', '内部状态异常：找不到最终编码结果。')

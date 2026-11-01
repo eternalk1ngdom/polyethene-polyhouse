@@ -23,8 +23,8 @@ interface Props {
 
 const props = defineProps<Props>()
 
-/** 下载交给面板，子组件不持有 Blob 地址。 */
-const emit = defineEmits<{ download: [] }>()
+/** 下载交给面板，子组件不持有 Blob 地址；放弃结果同样由面板清理。 */
+const emit = defineEmits<{ download: []; discard: [] }>()
 
 /** 进度按"已出结果（成功或失败）"计算，正在跑的那张不算完成。 */
 const percent = computed(() => {
@@ -98,9 +98,15 @@ function stateText(row: TargetKbBatchRow): string {
       </ul>
     </div>
 
-    <ElButton v-if="zipReady" type="primary" class="download" @click="emit('download')">
-      <ElIcon><Download /></ElIcon>下载 ZIP（{{ formatBytes(zipBytes) }}）
-    </ElButton>
+    <div class="actions">
+      <ElButton v-if="zipReady" type="primary" @click="emit('download')">
+        <ElIcon><Download /></ElIcon>下载 ZIP（{{ formatBytes(zipBytes) }}）
+      </ElButton>
+      <!-- 不下载也应该能收场：结果会一直占着内存与右侧区域，没有出口就只能靠改参数或换图绕开。 -->
+      <ElButton v-if="summary.done > 0 || summary.failed > 0" text @click="emit('discard')">
+        放弃结果
+      </ElButton>
+    </div>
   </div>
 </template>
 
@@ -183,8 +189,15 @@ function stateText(row: TargetKbBatchRow): string {
   color: var(--ph-ink);
   font-weight: 500;
 }
-.download {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
   margin-top: 16px;
+}
+.actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 @media (max-width: 700px) {
   .rows li {
