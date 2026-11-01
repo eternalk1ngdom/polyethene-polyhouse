@@ -76,6 +76,48 @@ test('非单调编码器也只返回实测满足上限的参数', () => {
   )
 })
 
+test('远超上限时先探最低质量，不再逐格二分空转', () => {
+  // 最高质量输出是上限的 200 倍：任何质量都装不下，每一档只该编码两次就降档。
+  const { outcome, probes } = run(
+    { target: { minBytes: 0, maxBytes: 1000 }, longEdge: 4000 },
+    () => 200000,
+  )
+  assert.equal(outcome.kind, 'failed')
+  assert.equal(probes[0].quality, 1)
+  assert.equal(probes[1].quality, 0.1, '第二次应直接探底而不是二分到 0.55')
+  const edges = [...new Set(probes.map((probe) => probe.maxEdge))]
+  assert.equal(edges.length, 7, '仍然是原尺寸加 6 档降级')
+  assert.equal(probes.length, 14, `每档两次编码，实际 ${probes.length} 次`)
+})
+
+test('探底成功后立刻夹住区间，最终质量贴着上限', () => {
+  // 上限 25000，q=1.0 输出 200000（正好 8 倍）触发探底；q=0.1 输出 20000 装得下。
+  const encode = (probe) => Math.round(200000 * probe.quality)
+  const { outcome, probes } = run(
+    { target: { minBytes: 0, maxBytes: 25000 }, longEdge: 2000 },
+    encode,
+  )
+  assert.equal(probes[0].quality, 1)
+  assert.equal(probes[1].quality, 0.1)
+  assert.equal(outcome.kind, 'done')
+  assert.equal(outcome.result.scaleStep, 0, '质量区间里有解就不该降档')
+  assert.ok(outcome.result.bytes <= 25000)
+  assert.ok(
+    outcome.result.quality > 0.11 && outcome.result.quality <= 0.125,
+    `质量应贴着 0.125，实际 ${outcome.result.quality}`,
+  )
+})
+
+test('最高质量只略微超限时仍走二分，不额外探底', () => {
+  // 上限 100000、q=1.0 输出 200000，只有 2 倍，质量区间里必然有解。
+  const { probes } = run(
+    { target: { minBytes: 0, maxBytes: 100000 }, longEdge: 2000 },
+    (probe) => Math.round(200000 * probe.quality),
+  )
+  assert.equal(probes[0].quality, 1)
+  assert.ok(probes[1].quality > 0.4, `第二次应是二分的 0.55，实际 ${probes[1].quality}`)
+})
+
 test('下限高于实际可编码体积时用补齐而不是继续压质量', () => {
   const { outcome } = run(
     { target: { minBytes: 150000, maxBytes: 204800 }, longEdge: 2000 },

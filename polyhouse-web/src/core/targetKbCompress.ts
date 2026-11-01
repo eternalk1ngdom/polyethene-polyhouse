@@ -1,4 +1,5 @@
 import {
+  FLOOR_PROBE_RATIO,
   MAX_ATTEMPTS,
   MAX_QUALITY,
   MAX_SCALE_STEPS,
@@ -19,8 +20,12 @@ import type {
 /** 体积单位换算表；不带单位时按字节理解，避免把 "200" 误当 200KB。 */
 const SIZE_UNITS: Record<string, number> = { B: 1, KB: 1024, MB: 1024 * 1024 }
 
-/** 收敛阈值：质量差小于千分之一再细分已没有实际意义。 */
-const QUALITY_EPSILON = 0.001
+/**
+ * 收敛阈值：质量差小于千分之五再细分已没有实际意义。
+ * 同一张照片质量差 0.005 通常不到 1% 体积，肉眼也看不出来；
+ * 而从 0.001 放宽到 0.005 能少编码两次，换算成 25MP 图约省半秒。
+ */
+const QUALITY_EPSILON = 0.005
 
 /** 搜索输入：目标区间与是否允许缩小尺寸。 */
 export interface TargetKbSearchInput {
@@ -89,6 +94,7 @@ export function startSearch(input: TargetKbSearchInput): TargetKbStep {
     low: MIN_QUALITY,
     high: MAX_QUALITY,
     attempts: 0,
+    floorProbed: false,
     best: null,
     probe,
   }
@@ -98,6 +104,13 @@ export function startSearch(input: TargetKbSearchInput): TargetKbStep {
 /**
  * 用实测字节数推进一步：返回下一次试探、成功结果或失败原因。
  * 只做纯计算，编码由调用方完成，因此可以在 Node 中用假编码器验证整个搜索过程。
+ *
+ * 策略是"先探顶、必要时探底、再二分"：
+ * 1. 先按最高质量编码，本来就不超限的图片一次就结束，不牺牲画质；
+ * 2. 顶格就远超上限（达到 FLOOR_PROBE_RATIO 倍）时，先探一次最低质量：
+ *    最低质量仍超限说明这一档靠质量压不下来，立刻降档——比逐格二分到 0.1
+ *    少编码约十次；能压下则两端都有实测值，后续二分反而更稳；
+ * 3. 其余情况在 [low, high] 上二分，记录"满足上限的最大质量"作为结果。
  */
 export function advanceSearch(state: TargetKbSearchState, bytes: number): TargetKbStep {
   if (!Number.isFinite(bytes) || bytes < 1) throw new Error('编码结果字节数无效')
@@ -106,6 +119,7 @@ export function advanceSearch(state: TargetKbSearchState, bytes: number): Target
   let best = state.best
   let low = state.low
   let high = state.high
+  let failed = false
 
   if (bytes <= state.target.maxBytes) {
     // 记录"满足上限"的最大质量，最终结果取它而不是最后一次试探，避免退化到更糊的画质。
@@ -114,11 +128,33 @@ export function advanceSearch(state: TargetKbSearchState, bytes: number): Target
     low = state.probe.quality
   } else {
     high = state.probe.quality
+    failed = true
   }
 
   if (attempts >= MAX_ATTEMPTS || high - low <= QUALITY_EPSILON) {
     if (best) return { kind: 'done', result: toResult(state, best) }
     return descend(state, bytes)
+  }
+
+  // 顶格编码远超上限：与其一格一格往 0.1 逼近，不如直接问"最低质量能不能装下"。
+  // 探底失败时 high 会落到 0.1、与 low 重合，下一次推进自然转入降档。
+  const shouldProbeFloor =
+    failed &&
+    !state.floorProbed &&
+    state.probe.quality > MIN_QUALITY &&
+    bytes >= state.target.maxBytes * FLOOR_PROBE_RATIO
+  if (shouldProbeFloor) {
+    const probe: TargetKbProbe = { quality: MIN_QUALITY, maxEdge: state.maxEdge }
+    const next: TargetKbSearchState = {
+      ...state,
+      low,
+      high,
+      attempts,
+      best,
+      floorProbed: true,
+      probe,
+    }
+    return { kind: 'probe', probe, state: next }
   }
 
   const probe: TargetKbProbe = {
@@ -131,6 +167,7 @@ export function advanceSearch(state: TargetKbSearchState, bytes: number): Target
     high,
     attempts,
     best,
+    floorProbed: state.floorProbed,
     probe,
   }
   return { kind: 'probe', probe, state: next }
@@ -178,6 +215,7 @@ function descend(state: TargetKbSearchState, bytes: number): TargetKbStep {
     low: MIN_QUALITY,
     high: MAX_QUALITY,
     attempts: 0,
+    floorProbed: false,
     best: null,
     probe,
   }

@@ -15,6 +15,15 @@ export const MAX_QUALITY = 1
 /** 单个档位内最多编码次数，控制最坏情况下的等待时间。 */
 export const MAX_ATTEMPTS = 12
 
+/**
+ * 探底阈值：最高质量的字节数达到上限这么多倍时，先探一次最低质量。
+ *
+ * 同一张照片 q=1.0 与 q=0.1 的字节数通常相差 8~12 倍，所以这个倍数正好是
+ * "最低质量也可能压不下来"的界线：低于它，质量区间里一定有解，逐格二分最快；
+ * 高于它，很可能整档无解，先探一次底就能立刻决定是否降档。
+ */
+export const FLOOR_PROBE_RATIO = 8
+
 /** 降档时最长边的缩放比例，每次缩小约 15%。 */
 export const SCALE_FACTOR = 0.85
 
@@ -75,6 +84,8 @@ export interface TargetKbSearchState {
   high: number
   /** 当前档位已评估次数，用于限制总编码次数。 */
   attempts: number
+  /** 当前档位是否已探过最低质量；避免同一档位重复探底。 */
+  floorProbed: boolean
   /** 满足上限的最大质量结果。 */
   best: TargetKbCandidate | null
   /** 本次交给调用方编码的参数。 */
