@@ -97,6 +97,13 @@ test('PNG 走 IHDR 分支，同样受像素上限约束', () => {
   assert.equal(inspectSource(buildPng(9000, 5000)).reason, 'pixels-too-large')
 })
 
+test('超限提示按 10^6 报百万像素，不把 43.2MP 说成 41.2MP', () => {
+  // 8000×5400 = 43,200,000 像素；若按 1024² 换算会显示 41.2，用户一乘就能看出不对。
+  const over = inspectSource(buildJpeg(8000, 5400))
+  assert.equal(over.ok, false)
+  assert.match(over.message, /8000×5400（43\.2MP）/)
+})
+
 test('解析不出尺寸的格式不拒绝，交给解码后补检', () => {
   // WebP 头部：RIFF....WEBP，avatarSourceSize 只认 PNG/JPEG，因此返回 null。
   const webp = new Uint8Array(32)

@@ -33,8 +33,12 @@ function toMegabytes(bytes: number): string {
 }
 
 /** 把像素数换成一位小数的 MP，用于提示文案。 */
+/**
+ * 像素数换算成"百万像素"：1 MP = 1,000,000 像素，与相机、手机的规格写法一致。
+ * 不能用 1024×1024——那会把 8000×5400 的图说成 41.2MP，而用户自己一乘就知道是 43.2MP。
+ */
 function toMegapixels(pixels: number): string {
-  return (pixels / (1024 * 1024)).toFixed(1)
+  return (pixels / 1000000).toFixed(1)
 }
 
 /** 通过检查，同时带回头部解析结果，供调用方决定是否还要解码后补检。 */
