@@ -4,7 +4,7 @@
 
 - 当前：[v1.0-dev.11 妙压开工准备](docs/dev-log/v1.0-dev.11.md)，先读“当前摘要”，详情按任务需要读取。妙替 R1/R2 在 `codex/replace-library`（dev.10），本分支不含。
 - Git：双工作树并行——妙替 `E:/project/java/polyethene-polyhouse`（`codex/replace-library`），妙压 `E:/project/java/polyhouse-press`（`wb/targetkb`，基线 `efda7b6`）；共享同一 `.git`，新功能只本地提交。[Git 入门](docs/learning/git-basics.md)。
-- 当前批准计划：[妙压体积卡位](docs/plans/target-kb-compression.md)（仅 T1 纯内核，未实施）；妙替深化在另一分支；[计划索引](docs/plans/README.md)。
+- 当前批准计划：[妙压体积卡位](docs/plans/target-kb-compression.md)（T1、T2 已完成，T3～T5 未批准）；妙替深化在另一分支；[计划索引](docs/plans/README.md)。
 - 规则：[AGENTS.md](AGENTS.md)；配置/启动：[README.md](README.md)；[只读策划书索引](docs/design/blueprint-index.md)。不沿索引加载全部历史。
 
 ## 已实现与边界
@@ -12,16 +12,16 @@
 - 认证、Redis 多端会话、退出/软注销、唯一 OWNER 与每日成长；P0～P4 受控开户/权限/改密/封禁解封/资料审核，以及 U1～U4 个人中心与工作台整理已完成。接口/迁移见 README 的运维链接。
 - 公共注册关闭；OWNER 开户 USER/ADMIN。ADMIN 仅管理 USER，INSIDER 不自动有管理权；昵称/头像先审后发。真实历史资料仍待人工审核，不宣称全部已审。
 - 前端暂定方案二：白底墨色与个人小窗/空间；统一“开门小屋”SVG，不自动更换整体风格。[设计](docs/design/frontend-v2.md) / [方案一备份与回滚](docs/operations/frontend-variants.md)。
-- 妙替已支持小型文本批处理、AC 内核、预览与 ZIP；手动选 UTF-8/GBK/GB18030，统一导出 UTF-8，`.py` 按全文处理，具体限制见 README。妙压仅完成纯内核 T1（无页面、无 Worker）；云模板、AI、Docker 编排未实现；3D/社交不在当前范围。
+- 妙替已支持小型文本批处理、AC 内核、预览与 ZIP；手动选 UTF-8/GBK/GB18030，统一导出 UTF-8，`.py` 按全文处理，具体限制见 README。妙压完成纯内核 T1 与 Worker 编码 T2（无页面，用户无可见变化）；云模板、AI、Docker 编排未实现；3D/社交不在当前范围。
 - **本机已有正式屋主**：不清空初始化记录，不在开发库运行含 OWNER 夹具的全量实例测试。真实验收使用明确隔离专项。
 - 凭据与固定运行密钥复用 Git 忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，不重复索取/复制/输出。Redis 需独立服务，启动前检查不等于运行期监控。
 
 ## 最近验证与下一步
 
-- 妙压 T1 内核：专项 23 项、全量前端 158 项、ESLint 与含类型检查的构建通过；未接页面，用户无可见变化，真实浏览器编码未验，证据见 dev.11。
+- 妙压 T2：真实 Chrome 三类照片通过（25.6MP 降档 33 次编码 7.4 秒 → 122,745 B；手机照 11 次 0.96 秒 → 503,959 B 且写入 DPI 300；小图补 COM 到 61,440 B），过期/取消 0 条迟到回复，40MP 与 20MiB 解码前拦截；174 测试、ESLint 与构建通过。页面未接，用户无可见变化，证据见 dev.11。
 - 业务历史基线：`8d68bc9`，U4 于 2026-11-01 收口：普通后端 323 通过/103 实例跳过，前端 135 测试及构建/静态检查通过；四组隔离验收与页面组合验收详见 [dev.8 的 U4 记录](docs/dev-log/v1.0-dev.8.md#u4-局部综合回归收口2026-10-312026-11-01)。不代表新改动自动通过或已上线。
 - 当前只做本地开发；**P5/上线/服务器操作搁置，后端依赖升级已否决，不再提议或询问**。恢复部署时需重新评估网络入口、人工资料核对、备份/恢复与发布；非标端口/审核不构成合规豁免。
-- 质量优先、按独立步骤推进：妙替 R2 在 `codex/replace-library` 实施中；妙压 T1 已收口，T2（Worker 编码与浏览器验收）需另行批准。既有 Git 授权不延伸为新功能的自动推送、合并或发布。
+- 质量优先、按独立步骤推进：妙替 R2 在 `codex/replace-library` 实施中；妙压 T2 已收口，T3（页面）需另行批准。既有 Git 授权不延伸为新功能的自动推送、合并或发布。
 
 ## 历史索引（按需）
 

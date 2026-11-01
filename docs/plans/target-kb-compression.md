@@ -1,6 +1,6 @@
 # 妙压：图片体积卡位（TargetKB）
 
-制定日期：2026-11-01（Asia/Shanghai）。状态：**T1 已按建议值实施并通过专项验收**；T2～T5 为后续候选，未获批准。
+制定日期：2026-11-01（Asia/Shanghai）。状态：**T1、T2 已实施并通过验收**；T3～T5 为后续候选，未获批准。
 
 所属阶段：v1.0 本地开发期，当前日志 [v1.0-dev.11](../dev-log/v1.0-dev.11.md)。本计划在独立工作树 `E:/project/java/polyhouse-press`、分支 `wb/targetkb` 上推进，与妙替深化（`codex/replace-library`）并行；工程约束仍以根 [AGENTS.md](../../AGENTS.md) 为准，并行开工不扩大推送、合并或发布授权。
 
@@ -16,6 +16,8 @@
 T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`（含 `vue-tsc`）。无后端改动不运行 Maven。**T1 不产生任何用户可见变化**，页面仍是占位页，汇报必须如实说明，不能用"内核完成"暗示功能可用。
 
 2026-11-01 实施结果：T1 已按第 8 节建议值完成，专项 23 项、全量前端 158 项测试与构建通过；实际证据见 [dev.11](../dev-log/v1.0-dev.11.md)。
+
+2026-11-01（T2）：用户确认 T2 范围，并追加四条约束——协议加递增 id 且导出 `isCurrentReply`、`targetKbSource.ts` 复用 `avatarSourceSize()` 不重写段解析、真实样本放 gitignored 目录且至少三类、临时验收页必须放在 `polyhouse-web/` 根目录且跑完删除。T2 只做 Worker 与协议，仍不改页面、`toolRegistry`、`vite.config.ts`、`package.json` 与妙替文件。
 
 ### 0.1 双线协作约定
 
@@ -43,7 +45,7 @@ T1 验收方式：`node --test` 专项、`npm run lint:check`、`npm run build`�
 | 压缩字节层为空壳 | `core/jpegComInjector.ts:1` | 已实现 COM 增重与 DPI 改写 |
 | 无目标体积解析与判定 | — | T1 实现 |
 | 无搜索策略 | — | T1 实现二分质量 + 尺寸降档 |
-| Worker 为空壳 | `workers/targetkb.worker.ts:1` | T2 接入 `OffscreenCanvas` 编码 |
+| Worker 为空壳 | `workers/targetkb.worker.ts:1` | 已完成：T2 接入 `OffscreenCanvas` 编码与协议 |
 | 工具状态为 planned | `config/toolRegistry.ts:43-54` | T3 完成后才改 |
 
 ## 3. 算法设计
@@ -91,17 +93,20 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 - 不读文件、不建 `Image`/`Canvas`、不访问存储、不引用 Vue 或 Element Plus，遵守铁律 7。
 - 输入输出只用 `Uint8Array`、数值与类型对象；编码器通过参数注入。
 
-## 4. Worker 协议（T2 候选，T1 不实现）
+## 4. Worker 协议（T2 已实现）
 
-- 请求 `{ id, kind: 'plan' | 'encode', target, quality, maxEdge }`，回复 `{ id, ok, bytes, width, height, reason }`。
-- 取消与过期回调隔离沿用妙替 Worker 的做法；T2 前先读 `polyReplace.worker.ts` 与 `polyReplaceProtocol.ts` 对齐风格，不另造一套。
+- 请求 `{ id, kind: 'encode' | 'cancel', bytes, target, allowShrink, dpi }`；回复 `{ id, ok, result | reason, message }`。
+- 一条 `encode` 就是一次完整任务：Worker 内部跑完二分、降档、DPI 与补齐，只在结束时回复一次；`result.probes` 带每次试探的质量、字节与耗时。
+- `id` 由页面递增分配，Worker 维护 `activeId`；`isCurrentReply(replyId, activeId)` 判断归属，`activeId = 0` 表示没有有效任务。取消只清 `activeId`，不终止线程。
+- 页面层（T3）只按 id 判断回调归属，不再叠加 revision；妙替的 `polyReplaceProtocol.ts` 与 worker 保持原样，不统一风格。
+- 落点：`core/targetKbProtocol.ts`、`core/targetKbSource.ts`（复用 `avatarCrop.ts` 的 `avatarSourceSize()`）、`workers/targetkb.worker.ts`。
 
 ## 5. 分步实施
 
 | 步骤 | 工作 | 落点 | 独立验收 |
 | --- | --- | --- | --- |
 | T1 内核 | 目标解析与判定、二分与降档计划、COM 增重、DPI 改写 + 测试 | `core/targetKbTypes.ts`、`core/targetKbCompress.ts`、`core/jpegComInjector.ts` | 已完成：专项 23 项、全量 158 项、构建与静态检查通过；页面无变化 |
-| T2 编码接入 | `OffscreenCanvas` 编码、Worker 协议、取消 | `workers/targetkb.worker.ts`、`core/targetKbProtocol.ts` | 真实浏览器单图压缩成功；取消与过期回调隔离 |
+| T2 编码接入 | `OffscreenCanvas` 编码、Worker 协议、取消 | `workers/targetkb.worker.ts`、`core/targetKbProtocol.ts`、`core/targetKbSource.ts` | 已完成：真实 Chrome 三类样本通过；过期与取消 0 条迟到回复；证据见 dev.11 |
 | T3 页面 | 选图与拖拽、参数、体积对比、单图下载 | `views/TargetKbView.vue`、`components/TargetKbPanel.vue` | 真实图片端到端；布局与焦点按铁律 8 |
 | T4 批量与导出 | 多图、ZIP、失败清单 | 页面 + `fflate` | 批量上限明确；失败不返回半成品 |
 | T5 候选 | 证件照换底、PDF 压缩、云预设 | 另议 | 需单独批准 |
@@ -124,7 +129,7 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 ## 7. 不做什么
 
 - 不改 `toolRegistry` 的 `status`，页面仍是占位页（T3 才改）。
-- 不接 Worker、不建协议、不做进度条（T2）。
+- 进度条与页面交互仍不做（T3）。
 - 不做 PNG/WebP 输出、不做批量、不做 ZIP、不做 PDF、不做证件照换底、不做云预设。
 - 不改 `vite.config.ts`、`package.json`，不加依赖。
 - 不推送、不合并、不部署。
@@ -137,7 +142,7 @@ advanceSearch(state, bytes) -> { kind: 'probe' | 'done' | 'failed', ... }
 | D2 | 输出格式 | T1 统一 JPEG | 已定（2026-11-01 按建议值实施） |
 | D3 | 小图增重方式 | JPEG COM 段填充 | 已定（同上） |
 | D4 | DPI 写法 | 只写 JFIF APP0 | 已定（同上） |
-| D5 | 输入上限 | 单张 ≤ 20 MiB、≤ 40 MP | 上限已定；像素上限在 T2 解码前校验 |
+| D5 | 输入上限 | 单张 ≤ 20 MiB、≤ 40 MP | 已实现（2026-11-01）：解码前校验，WebP/AVIF 解析不出尺寸时退回解码后补检 |
 | D6 | 搜索参数 | 质量 0.10–1.00、12 次、降档 0.85×6 | 已定（同上） |
 
 ## 9. 参考
