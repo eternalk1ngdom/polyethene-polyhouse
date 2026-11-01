@@ -153,13 +153,27 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
       })
       if (encoded.bytes.byteLength <= request.target.maxBytes)
         candidates.set(probeKey(step.probe), encoded.bytes)
+      // 大图单次任务可能要编码几十次，先把进度发出去，页面才不会看起来像卡死。
+      if (isCurrentReply(request.id, activeId))
+        self.postMessage({
+          id: request.id,
+          ok: true,
+          progress: {
+            attempts: probes.length,
+            quality: step.probe.quality,
+            bytes: encoded.bytes.byteLength,
+          },
+        } satisfies TargetKbReply)
       step = advanceSearch(step.state, encoded.bytes.byteLength)
     }
 
     if (step.kind === 'failed')
       throw new TargetKbError(
         'exceeds-target',
-        '已降到最低质量并缩到最小尺寸，仍超过目标体积；请放宽目标或先缩小图片。',
+        // 关闭缩尺寸时并没有缩过图，提示不能照抄另一条路径，否则用户会以为程序擅自改了分辨率。
+        request.allowShrink
+          ? '已降到最低质量并缩到最小尺寸，仍超过目标体积；请放宽目标或先缩小图片。'
+          : '已降到最低质量仍超过目标体积；请放宽目标、允许缩小尺寸，或先把图片改小。',
       )
 
     const chosen = candidates.get(probeKey(step.result))

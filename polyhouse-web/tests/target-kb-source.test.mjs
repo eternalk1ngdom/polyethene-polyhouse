@@ -25,6 +25,7 @@ const {
   MAX_SOURCE_BYTES,
   MAX_SOURCE_PIXELS,
   inspectSource,
+  inspectSourceSize,
   checkDecodedPixels,
   fitWithinLongEdge,
 } = await loadSource()
@@ -125,4 +126,14 @@ test('最长边缩放：不超限时原样返回，超限时等比且不小于 1
 test('上限常量与计划 D5 一致', () => {
   assert.equal(MAX_SOURCE_BYTES, 20 * 1024 * 1024)
   assert.equal(MAX_SOURCE_PIXELS, 40 * 1024 * 1024)
+})
+
+test('只校验体积时不必读整张图，也不判断像素', () => {
+  // 页面选图时先用它拦一次，所以它必须在不看文件头的情况下也能给出结论。
+  assert.equal(inspectSourceSize(1024).ok, true)
+  assert.equal(inspectSourceSize(MAX_SOURCE_BYTES).ok, true)
+  const over = inspectSourceSize(MAX_SOURCE_BYTES + 1)
+  assert.equal(over.ok, false)
+  assert.equal(over.reason, 'file-too-large')
+  assert.equal(inspectSourceSize(1).width, null)
 })

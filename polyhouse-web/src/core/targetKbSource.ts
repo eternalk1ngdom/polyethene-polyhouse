@@ -48,15 +48,25 @@ function reject(reason: SourceRejection, message: string): SourceInspection {
 }
 
 /**
+ * 只校验文件体积。
+ * 页面选图时先用它拦一次，不必为了一句提示把整张图读进内存。
+ */
+export function inspectSourceSize(byteLength: number): SourceInspection {
+  if (byteLength > MAX_SOURCE_BYTES)
+    return reject(
+      'file-too-large',
+      `图片 ${toMegabytes(byteLength)}MB，超过 20MB 上限；请先缩小或压缩后再试。`,
+    )
+  return accept(null, null)
+}
+
+/**
  * 解码前检查：先看文件体积，再看文件头里的像素数。
  * 顺序不能反——体积检查零成本，像素检查要先读字节。
  */
 export function inspectSource(bytes: Uint8Array): SourceInspection {
-  if (bytes.byteLength > MAX_SOURCE_BYTES)
-    return reject(
-      'file-too-large',
-      `图片 ${toMegabytes(bytes.byteLength)}MB，超过 20MB 上限；请先缩小或压缩后再试。`,
-    )
+  const sizeCheck = inspectSourceSize(bytes.byteLength)
+  if (!sizeCheck.ok) return sizeCheck
 
   const size = avatarSourceSize(bytes)
   // WebP/AVIF 等格式解析不出头部尺寸：不在这里拒绝，交给解码后补检，避免误伤可用格式。

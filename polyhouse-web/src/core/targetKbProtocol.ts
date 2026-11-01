@@ -91,6 +91,16 @@ export interface TargetKbEncodeResult {
   elapsedMs: number
 }
 
+/** 进行中的试探进度；让页面在大图上能看到"还在动"，而不是只转圈。 */
+export interface TargetKbProgress {
+  /** 已完成试探次数。 */
+  attempts: number
+  /** 最近一次试探的质量。 */
+  quality: number
+  /** 最近一次试探的字节数。 */
+  bytes: number
+}
+
 /** Worker 回复；成功带结果，失败只带原因与提示，不返回半成品。 */
 export interface TargetKbReply {
   /** 对应请求的 id。 */
@@ -99,6 +109,8 @@ export interface TargetKbReply {
   ok: boolean
   /** 成功时的输出。 */
   result?: TargetKbEncodeResult
+  /** 进行中的进度；与 result 互斥，收到它不代表任务结束。 */
+  progress?: TargetKbProgress
   /** 失败原因。 */
   reason?: TargetKbFailureReason
   /** 可直接展示的中文提示。 */
