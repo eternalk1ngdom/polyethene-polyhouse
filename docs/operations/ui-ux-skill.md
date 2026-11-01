@@ -43,10 +43,10 @@ python -B .agents/skills/ui-ux-pro-max/scripts/search.py "form validation" --sta
 从仓库根目录执行：
 
 ```powershell
-.\polyhouse\scripts\Check-UiUxSkill.ps1
+python -B polyhouse/scripts/Check-UiUxSkill.py
 ```
 
-脚本只检查来源字段、固定路径、文件是否齐全、SHA-256 是否一致以及是否出现未登记文件，不联网、不执行技能、不读取私有预设。首次结果为 `FilesVerified=73`。Python 字节码缓存不属于安装清单，通过目录内 `.gitignore` 排除；日常查询加 `-B` 可避免生成缓存。
+校验器是项目自有的 Python 标准库脚本，复用已有 Python，不依赖 PowerShell 编码或 .NET API。它先校验来源字段与清单路径，再逐层拒绝符号链接/目录联接，核对文件、SHA-256 和未登记文件；不联网、不执行技能、不读取私有预设、不写文件，失败退出码为 1。首次结果为 `FilesVerified=73`。Python 字节码缓存不属于安装清单，通过目录内 `.gitignore` 排除；查询和校验命令加 `-B` 可避免生成缓存。
 
 散列用于发现意外变化，不代表第三方代码已经过完整安全审计，也不能替代对更新内容的审查。不要为了让检查通过而直接重算清单覆盖旧散列；先用 Git 差异定位原因。
 
@@ -62,7 +62,7 @@ Rename-Item -LiteralPath '.agents/skills/ui-ux-pro-max/SKILL.md' -NewName 'SKILL
 
 ```powershell
 Rename-Item -LiteralPath '.agents/skills/ui-ux-pro-max/SKILL.md.disabled' -NewName 'SKILL.md'
-.\polyhouse\scripts\Check-UiUxSkill.ps1
+python -B polyhouse/scripts/Check-UiUxSkill.py
 ```
 
 停用期间完整性检查会按预期报告缺少入口，不应修改清单“修复”它。这里仅重命名一个文件，不递归删除 `.agents`，也不调整全局配置。

@@ -74,7 +74,7 @@ MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开�
 
 按 [AGENTS.md](AGENTS.md) 的改动影响选择检查：仅文档不运行构建。以下是可用入口，不要求每轮全部运行。已有正式屋主，禁止在开发库执行不带隔离专项的全量 OWNER 测试，不能为测试清空屋主记录。
 
-项目级 UI/UX 开发辅助技能已固定为 v2.15.0，只供开发时按需查询，不属于网页运行依赖。来源、文件清单、停用/恢复与更新方式见[专门记录](docs/operations/ui-ux-skill.md)；从仓库根目录执行 `.\polyhouse\scripts\Check-UiUxSkill.ps1` 可只读检查完整性。安装不会自动改网站或替代 `AGENTS.md`。
+项目级 UI/UX 开发辅助技能已固定为 v2.15.0，只供开发时按需查询，不属于网页运行依赖。来源、文件清单、停用/恢复与更新方式见[专门记录](docs/operations/ui-ux-skill.md)；从仓库根目录执行 `python -B polyhouse/scripts/Check-UiUxSkill.py` 可只读检查完整性。安装不会自动改网站或替代 `AGENTS.md`。
 
 项目根目录可执行统一普通验收（先准备 JDK 21、Maven、满足 `package.json` 的 Node 版本，并在 `polyhouse-web/` 安装锁定依赖）：
 
