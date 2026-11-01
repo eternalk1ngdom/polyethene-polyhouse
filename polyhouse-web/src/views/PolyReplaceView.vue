@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElAlert, ElButton, ElInput } from 'element-plus'
+import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
@@ -227,6 +228,7 @@ function download(): void {
         </p>
         <h2>2. 设置替换规则</h2>
         <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
+        <RuleLibraryPanel :rules="rules" @load="rules = $event" />
         <div v-for="(rule, index) in rules" :key="index" class="rule">
           <label :for="`search-${index}`">查找 {{ index + 1 }}</label>
           <ElInput

@@ -46,6 +46,7 @@ const { default: component } = await import(
       'vue-router': controls,
       'element-plus': controls,
       '../core/polyReplaceBatch': batch,
+      '../components/RuleLibraryPanel.vue': url('export default {}'),
     },
   )
 )

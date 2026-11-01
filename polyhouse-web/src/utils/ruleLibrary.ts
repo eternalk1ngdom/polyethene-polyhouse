@@ -24,6 +24,11 @@ export interface RuleSet {
 
 export const RULE_LIBRARY_MAX_BYTES = 256 * 1024
 
+/** 保存和管理操作共用同一重名口径，不归一化实际的字面替换文本。 */
+export function normalizeRuleSetName(name: string): string {
+  return name.trim().normalize('NFC').toLowerCase()
+}
+
 /** 只接受固定字段的普通数据对象，不把外部字段混入应用对象或原型。 */
 function record(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (
@@ -82,7 +87,7 @@ export function validateRuleLibrary(value: unknown): RuleLibrary {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(id) || ids.has(id))
       throw new Error('词库标识无效或重复')
     const name = text(typeof set.name === 'string' ? set.name.trim() : set.name, 32)
-    const normalizedName = name.normalize('NFC').toLowerCase()
+    const normalizedName = normalizeRuleSetName(name)
     if (names.has(normalizedName)) throw new Error('词库名称重复，请另存或明确选择覆盖')
     ids.add(id)
     names.add(normalizedName)
