@@ -18,6 +18,7 @@ const {
   validateBatch,
   summarizeBatch,
   sanitizeName,
+  mergePicked,
   outputFileName,
   zipEntryName,
 } = await import(toModuleUrl(source))
@@ -83,4 +84,61 @@ test('同名文件靠序号区分，不会在 ZIP 里互相覆盖', () => {
   assert.notEqual(first, second)
   assert.equal(first, '01-same-1KB.jpg')
   assert.equal(second, '02-same-1KB.jpg')
+})
+
+/** 构造一个满足 mergePicked 入参形状的"文件"。 */
+function pick(name, size, lastModified = 1000, type = 'image/jpeg') {
+  return { name, size, lastModified, type }
+}
+
+test('追加拖入：新图加在已有列表后面，已有项原样保留', () => {
+  const existing = [pick('a.jpg', 100)]
+  const { added, duplicates, notImages } = mergePicked(existing, [pick('b.jpg', 200)])
+  assert.deepEqual(
+    added.map((file) => file.name),
+    ['b.jpg'],
+  )
+  assert.equal(duplicates, 0)
+  assert.equal(notImages, 0)
+})
+
+test('重复判定用名字 + 体积 + 修改时间，只看名字会误杀同名不同图', () => {
+  const existing = [pick('a.jpg', 100, 1000)]
+  // 完全相同的文件：应判为重复，不再追加第二份。
+  assert.equal(mergePicked(existing, [pick('a.jpg', 100, 1000)]).duplicates, 1)
+  // 同名但体积不同（不同照片撞名）：不算重复。
+  assert.equal(mergePicked(existing, [pick('a.jpg', 200, 1000)]).added.length, 1)
+  // 同名同体积但修改时间不同：也不算重复。
+  assert.equal(mergePicked(existing, [pick('a.jpg', 100, 2000)]).added.length, 1)
+})
+
+test('同一批里重复的文件只保留一份', () => {
+  const { added, duplicates } = mergePicked([], [pick('a.jpg', 100), pick('a.jpg', 100)])
+  assert.equal(added.length, 1)
+  assert.equal(duplicates, 1)
+})
+
+test('非图片单独计数，不与重复混为一谈', () => {
+  const { added, duplicates, notImages } = mergePicked([], [
+    pick('a.jpg', 100),
+    pick('note.txt', 10, 1000, 'text/plain'),
+    pick('b.png', 300, 1000, 'image/png'),
+  ])
+  assert.deepEqual(
+    added.map((file) => file.name),
+    ['a.jpg', 'b.png'],
+  )
+  assert.equal(notImages, 1)
+  assert.equal(duplicates, 0)
+})
+
+test('合并后再校验上限：追加会让总数超限时能挡住', () => {
+  const existing = Array.from({ length: 20 }, (_, index) => pick(`p${index}.jpg`, 1024))
+  const { added } = mergePicked(existing, [pick('extra.jpg', 1024)])
+  assert.equal(added.length, 1)
+  // 校验的是"已有 + 新增"，所以第 21 张必须被 validateBatch 拒绝。
+  assert.throws(
+    () => validateBatch([...existing, ...added]),
+    /一次最多 20 张/,
+  )
 })

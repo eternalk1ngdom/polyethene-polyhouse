@@ -7,6 +7,7 @@ import TargetKbBatchResult from './TargetKbBatchResult.vue'
 import {
   MAX_BATCH_BYTES,
   MAX_BATCH_FILES,
+  mergePicked,
   outputFileName,
   summarizeBatch,
   validateBatch,
@@ -129,54 +130,82 @@ function invalidate(): void {
   resolve?.({ id: 0, ok: false, reason: 'cancelled', message: '已取消' })
 }
 
-/** 收下选中的图片：先过滤非图片、再校验批量上限，最后才建列表。 */
-async function acceptFiles(list: File[]): Promise<void> {
-  invalidate()
-  message.value = ''
-  releaseEntries()
-
-  const images = list.filter((file) => file.type.startsWith('image/'))
-  if (images.length === 0) {
-    message.value = '请选择图片文件（JPEG、PNG、WebP 或 AVIF）。'
-    return
-  }
-  if (images.length !== list.length)
-    message.value = `已忽略 ${list.length - images.length} 个非图片文件。`
-
-  try {
-    validateBatch(images.map((file) => ({ name: file.name, size: file.size })))
-  } catch (error: unknown) {
-    message.value = error instanceof Error ? error.message : '选择失败，请重试'
-    return
-  }
-
-  entries.value = images.map((file) => ({
-    id: nextEntryId++,
-    file,
-    url: URL.createObjectURL(file),
-    width: null,
-    height: null,
-    status: 'pending',
-  }))
-  // 多张时不逐张解析文件头：解析结果只用于单图预览，批量交给 Worker 逐张判断。
-  if (images.length > 1) return
-
-  const only = entries.value[0]!
-  const sizeCheck = inspectSourceSize(only.file.size)
+/**
+ * 单张时补解析文件头，用于显示原始尺寸。
+ * 解析失败或超限就整批退回：这张图后面也压不了，留着只会让用户白等。
+ */
+async function inspectSingle(entry: PickedEntry): Promise<void> {
+  const sizeCheck = inspectSourceSize(entry.file.size)
   if (!sizeCheck.ok) {
     message.value = sizeCheck.message
     releaseEntries()
     return
   }
-  const head = new Uint8Array(await only.file.slice(0, HEADER_BYTES).arrayBuffer())
+  const head = new Uint8Array(await entry.file.slice(0, HEADER_BYTES).arrayBuffer())
   const inspection = inspectSource(head)
   if (!inspection.ok) {
     message.value = inspection.message
     releaseEntries()
     return
   }
-  only.width = inspection.width
-  only.height = inspection.height
+  entry.width = inspection.width
+  entry.height = inspection.height
+}
+
+/**
+ * 收下选中的图片：去重、校验合并后的批量上限，然后**追加**到列表末尾。
+ * 追加而不是替换——用户常常先拖一张试，再陆续把其余的补进来。
+ */
+async function acceptFiles(list: File[]): Promise<void> {
+  message.value = ''
+
+  const { added, duplicates, notImages } = mergePicked(
+    entries.value.map((entry) => entry.file),
+    list,
+  )
+  const notes: string[] = []
+  if (notImages > 0) notes.push(`已忽略 ${notImages} 个非图片文件`)
+  if (duplicates > 0) notes.push(`已忽略 ${duplicates} 张重复图片`)
+
+  if (added.length === 0) {
+    message.value =
+      notImages === list.length
+        ? '请选择图片文件（JPEG、PNG、WebP 或 AVIF）。'
+        : notes.length
+          ? `${notes.join('，')}。`
+          : '这些图片已经在列表里了。'
+    return
+  }
+
+  // 先按"已有 + 新增"校验，超限就整批不加，避免列表被加到一半才失败。
+  const merged = [
+    ...entries.value.map((entry) => ({ name: entry.file.name, size: entry.file.size })),
+    ...added.map((file) => ({ name: file.name, size: file.size })),
+  ]
+  try {
+    validateBatch(merged)
+  } catch (error: unknown) {
+    message.value = error instanceof Error ? error.message : '选择失败，请重试'
+    return
+  }
+
+  // 列表构成变了，之前的批量结果不再对应；这里在追加之前作废，被拒绝的选择不会清空已有列表。
+  invalidate()
+
+  for (const file of added) {
+    entries.value.push({
+      id: nextEntryId++,
+      file,
+      url: URL.createObjectURL(file),
+      width: null,
+      height: null,
+      status: 'pending',
+    })
+  }
+
+  // 多张时不逐张解析文件头：解析结果只用于单图预览，批量交给 Worker 逐张判断。
+  if (entries.value.length === 1) await inspectSingle(entries.value[0]!)
+  if (notes.length) message.value = `${notes.join('，')}。`
 }
 
 /**
@@ -192,6 +221,9 @@ function removeEntry(id: number): void {
   if (removed) URL.revokeObjectURL(removed.url)
   invalidate()
   message.value = removed ? `已移除 ${removed.file.name}` : ''
+  // 删到只剩一张时补解析尺寸，否则大预览会一直显示"尺寸待解码后确认"。
+  const only = entries.value[0]
+  if (entries.value.length === 1 && only && only.width === null) void inspectSingle(only)
 }
 
 /** 清空待选区，回到未选图的状态。 */
@@ -492,7 +524,7 @@ onBeforeUnmount(() => {
         />
         <ElIcon class="drop-icon"><Upload /></ElIcon>
         <span class="drop-main">点击选择图片，或把图片拖到这里</span>
-        <span class="drop-sub">可多选；JPEG / PNG / WebP / AVIF</span>
+        <span class="drop-sub">可多选；再次拖入会追加到列表末尾；JPEG / PNG / WebP / AVIF</span>
       </label>
 
       <figure v-if="singleEntry" class="source">
