@@ -3,7 +3,7 @@
 更新时间：2026-11-02（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.10 妙替本机词库与草稿](docs/dev-log/v1.0-dev.10.md)，先读“当前摘要”，详情按任务需要读取。
-- Git：main 同步基线 `5d4b956`；当前独立分支 `codex/replace-library-export` 交付 R4 导出，未推送/合并。历史修复分支不继续承载新任务；后续 GitHub 写操作须确认。[R4 记录](docs/dev-log/v1.0-dev.10.md#r4-完整词库导出2026-11-02) / [Git 入门](docs/learning/git-basics.md)。
+- Git：main 同步基线 `5d4b956`；R4 导出本地提交 `1b12476`。当前 `codex/chinese-commit-messages` 在其上独立调整提交语言约定与日志，未推送/合并；GitHub 写操作须确认。[R4 记录](docs/dev-log/v1.0-dev.10.md#r4-完整词库导出2026-11-02) / [Git 入门](docs/learning/git-basics.md)。
 - 当前批准计划：[妙替 R4 导出](docs/plans/poly-replace-deepening.md#03-r4-第一闭环完整词库导出)；R1～R3 与[文档工作流](docs/plans/context-efficiency.md)已交付；[计划索引](docs/plans/README.md)。
 - 规则：[AGENTS.md](AGENTS.md)；配置/启动：[README.md](README.md)；[只读策划书索引](docs/design/blueprint-index.md)。不沿索引加载全部历史。
 
