@@ -70,6 +70,40 @@ export function judgeSize(bytes: number, target: TargetKbTarget): TargetKbVerdic
   return 'within'
 }
 
+/** 交付计划：原样返回源文件，还是进入编码搜索。 */
+export type TargetKbPlan = 'passthrough' | 'encode'
+
+/** 判定原样交付所需的输入。 */
+export interface TargetKbPlanInput {
+  /** 源文件字节数。 */
+  sourceBytes: number
+  /** 源文件是否为 JPEG；只有 JPEG 能只改 JFIF APP0 写 DPI 而不动像素。 */
+  isJpeg: boolean
+  /** 目标体积区间。 */
+  target: TargetKbTarget
+  /** 目标 DPI；null 表示不改。 */
+  dpi: number | null
+}
+
+/**
+ * 判断能不能把源文件原样交给用户。
+ *
+ * 上限只是"允许的最大值"，不是"要填满的配额"。搜索的第一发是 q=1.0，
+ * 而 q=1.0 重编码出的 JPEG 恒大于已经压过的源文件（二次有损编码、WebP 本身更省），
+ * 于是 70 KB 的图会被"压"成 148 KB。所以源文件本身已落在区间内时，一个字节都不该动。
+ */
+export function planDelivery(input: TargetKbPlanInput): TargetKbPlan {
+  const { sourceBytes, isJpeg, target, dpi } = input
+  if (!Number.isFinite(sourceBytes) || sourceBytes < 1) throw new Error('源文件字节数无效')
+  // 低于下限：只能编码后补 COM 段凑体积。
+  if (sourceBytes < target.minBytes) return 'encode'
+  // 已超上限：必须压。
+  if (sourceBytes > target.maxBytes) return 'encode'
+  // 要求写 DPI 但源不是 JPEG：只有转成 JPEG 才带得上 JFIF APP0。
+  if (dpi !== null && !isJpeg) return 'encode'
+  return 'passthrough'
+}
+
 /**
  * 开始搜索：先以最高质量试探一次。
  * 大多数图片本来就不超限，这样一次编码即可结束，不必牺牲画质。

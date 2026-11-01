@@ -22,6 +22,8 @@ export interface TargetKbBatchRow {
   status: TargetKbBatchStatus
   /** 成功后的输出字节数。 */
   outputBytes?: number
+  /** 是否原样返回（源文件已在目标区间内，未做压缩）。 */
+  passthrough?: boolean
   /** 失败原因，直接展示给用户。 */
   message?: string
 }
@@ -165,10 +167,30 @@ export function sanitizeName(name: string): string {
   return cleaned || 'image'
 }
 
-/** 去掉扩展名后的基名；扩展名统一改成 .jpg，因为输出固定是 JPEG。 */
+/** 去掉扩展名后的基名；扩展名由调用方按实际输出类型决定。 */
 function baseName(name: string): string {
   const base = sanitizeName(name).replace(/\.[^.]+$/, '').trim()
   return base || 'image'
+}
+
+/**
+ * 按输出类型取下载后缀。
+ * 原样交付时输出就是源文件的格式，不能一律写 .jpg——否则用户会拿到一个后缀是
+ * jpg、内容却是 PNG 的文件。
+ */
+export function mimeExtension(mime: string): string {
+  switch (mime) {
+    case 'image/jpeg':
+      return 'jpg'
+    case 'image/png':
+      return 'png'
+    case 'image/webp':
+      return 'webp'
+    case 'image/avif':
+      return 'avif'
+    default:
+      return 'bin'
+  }
 }
 
 /** 按实际字节数取整到 KB，下载名与 ZIP 内名称都用它，方便用户核对体积。 */
@@ -176,16 +198,21 @@ function kilobytes(bytes: number): number {
   return Math.max(1, Math.round(bytes / 1024))
 }
 
-/** 单张下载名：原名 + 实际体积，保持与页面展示一致。 */
-export function outputFileName(originalName: string, bytes: number): string {
-  return `${baseName(originalName)}-${kilobytes(bytes)}KB.jpg`
+/** 单张下载名：原名 + 实际体积 + 实际后缀，保持与页面展示一致。 */
+export function outputFileName(originalName: string, bytes: number, ext = 'jpg'): string {
+  return `${baseName(originalName)}-${kilobytes(bytes)}KB.${ext}`
 }
 
 /**
- * ZIP 内名称：序号 + 原名 + 体积。
+ * ZIP 内名称：序号 + 原名 + 体积 + 实际后缀。
  * 序号同时解决同名文件互相覆盖的问题，并让解压后的顺序与列表一致。
  */
-export function zipEntryName(index: number, originalName: string, bytes: number): string {
+export function zipEntryName(
+  index: number,
+  originalName: string,
+  bytes: number,
+  ext = 'jpg',
+): string {
   const order = String(index + 1).padStart(2, '0')
-  return `${order}-${baseName(originalName)}-${kilobytes(bytes)}KB.jpg`
+  return `${order}-${baseName(originalName)}-${kilobytes(bytes)}KB.${ext}`
 }

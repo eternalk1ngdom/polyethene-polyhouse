@@ -81,12 +81,13 @@ test('文件体积：正好 20 MiB 放行，多 1 字节拒绝', () => {
 })
 
 test('像素上限：正好 40 MP 放行，多一个像素拒绝', () => {
-  const exact = inspectSource(buildJpeg(8192, 5120))
+  // 8000×5000 正好 40,000,000 像素，与"40MP 上限"字面对齐。
+  const exact = inspectSource(buildJpeg(8000, 5000))
   assert.equal(exact.ok, true)
-  assert.equal(exact.width, 8192)
-  assert.equal(exact.height, 5120)
+  assert.equal(exact.width, 8000)
+  assert.equal(exact.height, 5000)
 
-  const over = inspectSource(buildJpeg(8193, 5120))
+  const over = inspectSource(buildJpeg(8001, 5000))
   assert.equal(over.ok, false)
   assert.equal(over.reason, 'pixels-too-large')
   assert.match(over.message, /40MP/)
@@ -117,7 +118,7 @@ test('解析不出尺寸的格式不拒绝，交给解码后补检', () => {
 
 test('解码后补检只挡像素超限，非法尺寸一并拒绝', () => {
   assert.equal(checkDecodedPixels(8000, 5000).ok, true)
-  assert.equal(checkDecodedPixels(8193, 5120).reason, 'pixels-too-large')
+  assert.equal(checkDecodedPixels(8001, 5000).reason, 'pixels-too-large')
   assert.equal(checkDecodedPixels(0, 100).reason, 'pixels-too-large')
   assert.equal(checkDecodedPixels(100.5, 100).reason, 'pixels-too-large')
 })
@@ -132,7 +133,8 @@ test('最长边缩放：不超限时原样返回，超限时等比且不小于 1
 
 test('上限常量与计划 D5 一致', () => {
   assert.equal(MAX_SOURCE_BYTES, 20 * 1024 * 1024)
-  assert.equal(MAX_SOURCE_PIXELS, 40 * 1024 * 1024)
+  // MP 是十进制单位：40 MP 就是 40,000,000 像素，不是 40×1024²。
+  assert.equal(MAX_SOURCE_PIXELS, 40 * 1000000)
 })
 
 test('只校验体积时不必读整张图，也不判断像素', () => {

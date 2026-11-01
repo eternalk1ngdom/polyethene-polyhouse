@@ -2,10 +2,11 @@
  * 妙压 Worker：解码、按质量二分编码、按需补齐体积，全部在本地线程完成，不接账号或 HTTP。
  * 取消与过期回调的隔离方式与妙替一致（id + 作废），但不改妙替的协议文件。
  */
-import { advanceSearch, startSearch } from '../core/targetKbCompress'
+import { advanceSearch, planDelivery, startSearch } from '../core/targetKbCompress'
 import { padWithComSegments, prepareDelivery } from '../core/jpegComInjector'
 import { isCurrentReply, parseRequest } from '../core/targetKbProtocol'
 import { checkDecodedPixels, fitWithinLongEdge, inspectSource } from '../core/targetKbSource'
+import type { SourceInspection } from '../core/targetKbSource'
 import type {
   TargetKbEncodeRequest,
   TargetKbEncodeResult,
@@ -98,7 +99,7 @@ async function decodeImage(bytes: Uint8Array<ArrayBuffer>): Promise<ImageBitmap>
 async function encodeOnce(
   bitmap: ImageBitmap,
   probe: TargetKbProbe,
-): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; width: number; height: number }> {
   const size = fitWithinLongEdge(bitmap.width, bitmap.height, probe.maxEdge)
   const canvas = new OffscreenCanvas(size.width, size.height)
   const context = canvas.getContext('2d')
@@ -119,7 +120,75 @@ async function encodeOnce(
 }
 
 /**
- * 一次完整压缩：校验 → 解码 → 二分搜索 → 写 DPI → 补齐。
+ * 原样交付：源文件本身已落在目标区间内，就一个字节都不改。
+ *
+ * 上限是"允许的最大值"，不是要填满的配额。搜索的第一发是 q=1.0，而 q=1.0 重编码
+ * 出的 JPEG 恒大于已经压过的源文件，照原策略会把 70 KB 的图"压"成 148 KB。
+ *
+ * 返回 null 表示这条路径不适用（需要增重、需要压缩、或写 DPI 后反而超限），交给编码流程。
+ */
+async function tryPassthrough(
+  request: TargetKbEncodeRequest,
+  source: Uint8Array<ArrayBuffer>,
+  inspection: SourceInspection,
+  mime: string,
+  startedAt: number,
+): Promise<TargetKbEncodeResult | null> {
+  // 认不出类型就给不出正确的下载后缀，宁可走编码流程。
+  if (mime === 'application/octet-stream') return null
+  const plan = planDelivery({
+    sourceBytes: source.byteLength,
+    isJpeg: mime === 'image/jpeg',
+    target: request.target,
+    dpi: request.dpi,
+  })
+  if (plan === 'encode') return null
+
+  // 写 DPI 可能插入 18 字节的 APP0；宁可退回编码，也不能交付超上限的文件。
+  const delivered = prepareDelivery(source, request.dpi)
+  if (delivered.byteLength > request.target.maxBytes) return null
+
+  const size = await measureSource(delivered, inspection)
+  if (!isCurrentReply(request.id, activeId)) return null
+  return {
+    bytes: toExactBuffer(delivered),
+    width: size.width,
+    height: size.height,
+    quality: null,
+    maxEdge: null,
+    scaleStep: 0,
+    passthrough: true,
+    mime,
+    probes: [],
+    padding: { targetBytes: 0, added: 0, satisfied: true },
+    dpi: request.dpi,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  }
+}
+
+/**
+ * 原样交付时只需要宽高：文件头能解析出来就直接用，解析不出（WebP/AVIF）才解码一次。
+ * 这条路径不编码，所以对 JPEG/PNG 而言整个任务几乎是零耗时。
+ */
+async function measureSource(
+  bytes: Uint8Array<ArrayBuffer>,
+  inspection: SourceInspection,
+): Promise<{ width: number; height: number }> {
+  if (inspection.width !== null && inspection.height !== null)
+    return { width: inspection.width, height: inspection.height }
+  const bitmap = await decodeImage(bytes)
+  try {
+    // 头部解析不出尺寸的格式，像素上限只能在这一步补检。
+    const decoded = checkDecodedPixels(bitmap.width, bitmap.height)
+    if (!decoded.ok) throw new TargetKbError(decoded.reason ?? 'internal', decoded.message)
+    return { width: bitmap.width, height: bitmap.height }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * 一次完整压缩：校验 → 原样交付判定 → 解码 → 二分搜索 → 写 DPI → 补齐。
  * 返回 null 表示任务已被更新的请求作废，此时不能回复任何结果。
  */
 async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeResult | null> {
@@ -127,6 +196,10 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
   const source = new Uint8Array(request.bytes)
   const inspection = inspectSource(source)
   if (!inspection.ok) throw new TargetKbError(inspection.reason ?? 'internal', inspection.message)
+
+  const mime = sniffMime(source)
+  const passthrough = await tryPassthrough(request, source, inspection, mime, startedAt)
+  if (passthrough) return passthrough
 
   const bitmap = await decodeImage(source)
   try {
@@ -213,6 +286,9 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
       quality: step.result.quality,
       maxEdge: step.result.maxEdge,
       scaleStep: step.result.scaleStep,
+      // 走到这里说明确实编码过，输出统一是 JPEG。
+      passthrough: false,
+      mime: 'image/jpeg',
       probes,
       padding,
       dpi: request.dpi,

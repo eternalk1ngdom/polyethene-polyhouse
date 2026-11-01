@@ -49,7 +49,8 @@ const totalsText = computed(() =>
 )
 
 function stateText(row: TargetKbBatchRow): string {
-  if (row.status === 'done') return formatBytes(row.outputBytes ?? 0)
+  // 原样返回的项输出体积等于输入，写"无需压缩"比再报一遍同样的数字清楚。
+  if (row.status === 'done') return row.passthrough ? '无需压缩' : formatBytes(row.outputBytes ?? 0)
   if (row.status === 'failed') return '失败'
   if (row.status === 'running') return '处理中'
   return '等待'

@@ -8,6 +8,7 @@ import {
   MAX_BATCH_BYTES,
   MAX_BATCH_FILES,
   mergePicked,
+  mimeExtension,
   outputFileName,
   summarizeBatch,
   validateBatch,
@@ -45,6 +46,10 @@ interface PickedEntry {
   status: TargetKbBatchStatus
   /** 成功后的输出字节数。 */
   outputBytes?: number
+  /** 成功后的实际输出类型；决定下载与 ZIP 内文件的后缀。 */
+  outputMime?: string
+  /** 是否原样返回（源文件已在目标区间内）。 */
+  passthrough?: boolean
   /** 失败原因，直接展示。 */
   message?: string
 }
@@ -85,6 +90,7 @@ const rows = computed<TargetKbBatchRow[]>(() =>
     size: entry.file.size,
     status: entry.status,
     outputBytes: entry.outputBytes,
+    passthrough: entry.passthrough,
     message: entry.message,
   })),
 )
@@ -323,7 +329,7 @@ async function runSingle(target: TargetKbTarget, dpi: number | null): Promise<vo
     if (reply.reason === 'cancelled') return
     if (reply.ok && reply.result) {
       result.value = reply.result
-      resultUrl.value = URL.createObjectURL(new Blob([reply.result.bytes], { type: 'image/jpeg' }))
+      resultUrl.value = URL.createObjectURL(new Blob([reply.result.bytes], { type: reply.result.mime }))
     } else {
       message.value = reply.message ?? '处理失败，请重试'
     }
@@ -351,6 +357,8 @@ async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<voi
       if (reply.ok && reply.result) {
         entry.status = 'done'
         entry.outputBytes = reply.result.bytes.byteLength
+        entry.outputMime = reply.result.mime
+        entry.passthrough = reply.result.passthrough
         outputs.set(entry.id, new Uint8Array(reply.result.bytes))
       } else {
         entry.status = 'failed'
@@ -380,7 +388,9 @@ async function packZip(): Promise<void> {
     for (const entry of done) {
       const bytes = outputs.get(entry.id)
       if (!bytes) continue
-      archiveEntries[zipEntryName(order, entry.file.name, bytes.byteLength)] = bytes
+      // 后缀跟随实际输出类型：原样交付的 PNG/WebP 不能写成 .jpg。
+      const ext = mimeExtension(entry.outputMime ?? 'image/jpeg')
+      archiveEntries[zipEntryName(order, entry.file.name, bytes.byteLength, ext)] = bytes
       order += 1
     }
     const archive = await new Promise<Uint8Array>((resolve, reject) => {
@@ -446,10 +456,12 @@ function discardResult(): void {
 function download(): void {
   const out = result.value
   if (!out) return
+  // 后缀跟随实际输出类型，原样交付的 PNG/WebP 不能存成 .jpg。
+  const ext = mimeExtension(out.mime)
   const name = singleEntry.value
-    ? outputFileName(singleEntry.value.file.name, out.bytes.byteLength)
-    : '妙压.jpg'
-  const url = URL.createObjectURL(new Blob([out.bytes], { type: 'image/jpeg' }))
+    ? outputFileName(singleEntry.value.file.name, out.bytes.byteLength, ext)
+    : `妙压.${ext}`
+  const url = URL.createObjectURL(new Blob([out.bytes], { type: out.mime }))
   const link = document.createElement('a')
   link.href = url
   link.download = name
@@ -476,13 +488,17 @@ const summary = computed(() => {
     before: formatBytes(before),
     after: formatBytes(after),
     change: before > 0 ? Math.round(((after - before) / before) * 100) : 0,
-    dimension:
-      out.scaleStep > 0
+    passthrough: out.passthrough,
+    dimension: out.passthrough
+      ? `${out.width}×${out.height}（原图未改动）`
+      : out.scaleStep > 0
         ? `${out.width}×${out.height}（缩小 ${out.scaleStep} 档）`
         : `${out.width}×${out.height}（保持原尺寸）`,
-    quality: out.quality.toFixed(2),
+    // 原样交付没有"采用质量"这回事，留空让模板整行不渲染。
+    quality: out.quality === null ? '' : out.quality.toFixed(2),
     attempts: out.probes.length,
     seconds: (out.elapsedMs / 1000).toFixed(1),
+    format: out.mime.replace('image/', '').toUpperCase(),
     padding:
       out.padding.targetBytes === 0
         ? ''
@@ -522,8 +538,8 @@ onBeforeUnmount(() => {
       <h2 id="pick-title">1. 选择图片</h2>
       <p id="pick-help">
         图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000 万像素；一次最多
-        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。输出统一为 JPEG，原图不会被修改；PNG
-        的透明区域会变成白底（JPEG 不支持透明）。
+        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。原图已经在目标体积内会原样返回、不做任何
+        转码；需要压缩时才转成 JPEG，这时 PNG 的透明区域会变成白底（JPEG 不支持透明）。
       </p>
       <label class="drop" @dragover="onDragOver" @drop="onDrop">
         <input
@@ -660,7 +676,10 @@ onBeforeUnmount(() => {
       />
 
       <template v-else-if="result && summary">
-        <p role="status" class="headline">
+        <p v-if="summary.passthrough" role="status" class="headline untouched">
+          原图 {{ summary.before }} 已在目标体积内，无需压缩，一个字节都没改。
+        </p>
+        <p v-else role="status" class="headline">
           {{ summary.before }} → {{ summary.after }}
           <span class="change" :class="{ grew: summary.change > 0 }">
             {{ summary.change > 0 ? '+' : '' }}{{ summary.change }}%
@@ -671,11 +690,11 @@ onBeforeUnmount(() => {
             <dt>输出尺寸</dt>
             <dd>{{ summary.dimension }}</dd>
           </div>
-          <div>
+          <div v-if="summary.quality">
             <dt>采用质量</dt>
             <dd>{{ summary.quality }}</dd>
           </div>
-          <div>
+          <div v-if="!summary.passthrough">
             <dt>编码次数</dt>
             <dd>{{ summary.attempts }} 次 · 用时 {{ summary.seconds }} 秒</dd>
           </div>
@@ -689,12 +708,16 @@ onBeforeUnmount(() => {
           </div>
         </dl>
         <figure class="preview">
-          <img :src="resultUrl" alt="压缩后的图片预览" />
-          <figcaption>压缩结果预览（{{ result.width }}×{{ result.height }}）</figcaption>
+          <img :src="resultUrl" :alt="summary.passthrough ? '原图预览' : '压缩后的图片预览'" />
+          <figcaption>
+            {{ summary.passthrough ? '原图预览' : '压缩结果预览' }}（{{ result.width }}×{{
+              result.height
+            }}）
+          </figcaption>
         </figure>
         <div class="result-actions">
           <ElButton type="primary" @click="download">
-            <ElIcon><Download /></ElIcon>下载 JPEG
+            <ElIcon><Download /></ElIcon>下载 {{ summary.format }}
           </ElButton>
           <ElButton text @click="discardResult">放弃结果</ElButton>
         </div>
@@ -905,6 +928,10 @@ label:not(.drop) {
 }
 .change.grew {
   color: var(--ph-accent-strong);
+}
+/* 原样返回不是"压缩结果"，语气要和压缩成功区分开。 */
+.headline.untouched {
+  color: var(--ph-muted);
 }
 .facts {
   margin: 0;

@@ -75,13 +75,17 @@ export interface TargetKbEncodeResult {
   width: number
   /** 输出像素高。 */
   height: number
-  /** 最终采用的质量。 */
-  quality: number
+  /** 最终采用的质量；原样交付（未编码）时为 null。 */
+  quality: number | null
   /** 最终采用的最长边；null 表示未缩放。 */
   maxEdge: number | null
   /** 已降档次数。 */
   scaleStep: number
-  /** 每次试探的实测记录，按发生顺序。 */
+  /** 是否一个字节都没改、直接返回了源文件。 */
+  passthrough: boolean
+  /** 实际输出类型；原样交付时就是源文件的类型。 */
+  mime: string
+  /** 每次试探的实测记录，按发生顺序；原样交付时为空。 */
   probes: TargetKbProbeRecord[]
   /** COM 段补齐情况。 */
   padding: TargetKbPadding

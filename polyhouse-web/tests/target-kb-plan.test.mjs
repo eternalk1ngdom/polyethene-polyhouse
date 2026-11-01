@@ -21,7 +21,7 @@ async function loadCompress() {
   return import(toModuleUrl(source, { './targetKbTypes': toModuleUrl(types) }))
 }
 
-const { startSearch, advanceSearch } = await loadCompress()
+const { startSearch, advanceSearch, planDelivery } = await loadCompress()
 
 /** 驱动搜索直到结束；编码器由用例提供，用来替代真实 Canvas 编码。 */
 function run(input, encode) {
@@ -191,4 +191,40 @@ test('拒绝无效的搜索输入与编码结果', () => {
   const step = startSearch({ target: { minBytes: 0, maxBytes: 204800 }, longEdge: 100 })
   assert.throws(() => advanceSearch(step.state, 0), /字节数无效/)
   assert.throws(() => advanceSearch(step.state, Number.NaN), /字节数无效/)
+})
+
+test('源文件已在目标区间内时原样交付，不编码', () => {
+  // 上限只是允许的最大值，不是要填满的配额：70KB 的图设 150KB 目标，不该被"压"成 148KB。
+  const plan = planDelivery({
+    sourceBytes: 70176,
+    isJpeg: false,
+    target: { minBytes: 0, maxBytes: 150 * 1024 },
+    dpi: null,
+  })
+  assert.equal(plan, 'passthrough')
+})
+
+test('超出上限或低于下限都必须编码', () => {
+  const target = { minBytes: 60 * 1024, maxBytes: 150 * 1024 }
+  // 超上限：必须压。
+  assert.equal(planDelivery({ sourceBytes: 200 * 1024, isJpeg: true, target, dpi: null }), 'encode')
+  // 低于下限：只能编码后补 COM 段。
+  assert.equal(planDelivery({ sourceBytes: 20 * 1024, isJpeg: true, target, dpi: null }), 'encode')
+})
+
+test('要求写 DPI 时只有 JPEG 能原样交付', () => {
+  const target = { minBytes: 0, maxBytes: 150 * 1024 }
+  // JPEG 可以只改 JFIF APP0，不动像素。
+  assert.equal(planDelivery({ sourceBytes: 70176, isJpeg: true, target, dpi: 300 }), 'passthrough')
+  // PNG/WebP 带不上 JFIF APP0，只能转成 JPEG。
+  assert.equal(planDelivery({ sourceBytes: 70176, isJpeg: false, target, dpi: 300 }), 'encode')
+})
+
+test('源文件字节数非法时直接报错，不静默放行', () => {
+  const target = { minBytes: 0, maxBytes: 150 * 1024 }
+  assert.throws(() => planDelivery({ sourceBytes: 0, isJpeg: true, target, dpi: null }), /字节数无效/)
+  assert.throws(
+    () => planDelivery({ sourceBytes: Number.NaN, isJpeg: true, target, dpi: null }),
+    /字节数无效/,
+  )
 })

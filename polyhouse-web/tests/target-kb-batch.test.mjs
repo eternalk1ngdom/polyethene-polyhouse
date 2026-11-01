@@ -21,6 +21,7 @@ const {
   mergePicked,
   outputFileName,
   zipEntryName,
+  mimeExtension,
 } = await import(toModuleUrl(source))
 
 /** 构造一批等大的条目，用来验证数量与总体积两条上限。 */
@@ -71,11 +72,24 @@ test('文件名清理：路径分隔符与非法字符不能进 ZIP', () => {
   assert.equal(sanitizeName('   '), 'image')
 })
 
-test('下载名与 ZIP 内名称：扩展名统一为 jpg，体积取整到 KB', () => {
+test('下载名与 ZIP 内名称：默认 jpg，体积取整到 KB', () => {
   assert.equal(outputFileName('photo.PNG', 122745), 'photo-120KB.jpg')
   assert.equal(outputFileName('无扩展名', 2048), '无扩展名-2KB.jpg')
   assert.equal(zipEntryName(0, 'photo.jpg', 122745), '01-photo-120KB.jpg')
   assert.equal(zipEntryName(11, 'a/b.jpg', 500), '12-a_b-1KB.jpg')
+})
+
+test('原样交付时后缀跟随实际输出类型', () => {
+  // 原样返回的 PNG/WebP 内容没变，后缀写成 .jpg 会让用户拿到名不副实的文件。
+  assert.equal(outputFileName('photo.png', 70176, 'png'), 'photo-69KB.png')
+  assert.equal(outputFileName('photo.webp', 70176, 'webp'), 'photo-69KB.webp')
+  assert.equal(zipEntryName(0, 'photo.webp', 70176, 'webp'), '01-photo-69KB.webp')
+  assert.equal(mimeExtension('image/jpeg'), 'jpg')
+  assert.equal(mimeExtension('image/png'), 'png')
+  assert.equal(mimeExtension('image/webp'), 'webp')
+  assert.equal(mimeExtension('image/avif'), 'avif')
+  // 认不出的类型不假装成 JPEG。
+  assert.equal(mimeExtension('application/octet-stream'), 'bin')
 })
 
 test('同名文件靠序号区分，不会在 ZIP 里互相覆盖', () => {

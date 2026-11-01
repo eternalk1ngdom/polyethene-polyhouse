@@ -7,8 +7,12 @@ import { avatarSourceSize } from './avatarCrop'
 /** 单张输入文件上限 20 MiB（计划 D5）；再大意味着解码峰值内存不可控。 */
 export const MAX_SOURCE_BYTES = 20 * 1024 * 1024
 
-/** 单张输入像素上限 40 MP（计划 D5）；常见 4K 截图约 8 MP，40 MP 已覆盖相机原图。 */
-export const MAX_SOURCE_PIXELS = 40 * 1024 * 1024
+/**
+ * 单张输入像素上限 40 MP（计划 D5）；常见 4K 截图约 8 MP，40 MP 已覆盖相机原图。
+ * 用 10⁶ 而不是 1024²：MP 是十进制单位，写 40 就该是 40,000,000 像素，
+ * 否则提示里会出现"41.9MP 也算 40MP 以内"这种对不上账的边界。
+ */
+export const MAX_SOURCE_PIXELS = 40 * 1000000
 
 /** 拒绝原因；调用方据此给出可解释的提示，而不是笼统的"处理失败"。 */
 export type SourceRejection = 'file-too-large' | 'pixels-too-large'

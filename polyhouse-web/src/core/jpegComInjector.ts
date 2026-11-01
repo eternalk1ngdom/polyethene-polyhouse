@@ -133,8 +133,9 @@ export function padWithComSegments(bytes: Uint8Array, targetBytes: number): ComP
  * 写入 JFIF 的 DPI。
  * 已有 JFIF APP0 时原地改写密度字段，文件长度不变；没有时在 SOI 后插入一个。
  * 这里只写 JFIF，不伪造 EXIF，避免同一份数据里出现两个互相矛盾的 DPI 声明。
+ * 返回值恒为新分配的普通 ArrayBuffer 视图，便于直接作为 Blob 的一部分。
  */
-export function rewriteJfifDpi(bytes: Uint8Array, dpi: number): Uint8Array {
+export function rewriteJfifDpi(bytes: Uint8Array, dpi: number): Uint8Array<ArrayBuffer> {
   if (!Number.isInteger(dpi) || dpi < 1 || dpi > 1200) throw new Error('DPI 必须是 1～1200 的整数')
   const app0 = readSegments(bytes).find(
     (segment) =>
@@ -178,7 +179,10 @@ export function rewriteJfifDpi(bytes: Uint8Array, dpi: number): Uint8Array {
  * 若先按编码长度放行、之后再写 DPI，最终文件就会超出上限 18 字节。
  * 把它单独成函数，是为了让这条顺序约束有名字、可被测试锁住。
  */
-export function prepareDelivery(encoded: Uint8Array, dpi: number | null): Uint8Array {
+export function prepareDelivery(
+  encoded: Uint8Array<ArrayBuffer>,
+  dpi: number | null,
+): Uint8Array<ArrayBuffer> {
   return dpi === null ? encoded : rewriteJfifDpi(encoded, dpi)
 }
 
