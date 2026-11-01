@@ -3,7 +3,7 @@
  * 取消与过期回调的隔离方式与妙替一致（id + 作废），但不改妙替的协议文件。
  */
 import { advanceSearch, startSearch } from '../core/targetKbCompress'
-import { padWithComSegments, rewriteJfifDpi } from '../core/jpegComInjector'
+import { padWithComSegments, prepareDelivery } from '../core/jpegComInjector'
 import { isCurrentReply, parseRequest } from '../core/targetKbProtocol'
 import { checkDecodedPixels, fitWithinLongEdge, inspectSource } from '../core/targetKbSource'
 import type {
@@ -146,14 +146,18 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
       if (!isCurrentReply(request.id, activeId)) return null
       const probeStarted = performance.now()
       const encoded = await encodeOnce(bitmap, step.probe)
+      // 交付给用户的字节是"写完 DPI 之后"的那份，所以从这一步起就用它的长度参与判定。
+      // 编码器自带 JFIF APP0 时改写长度不变；不带时会插入 18 字节，
+      // 若先按编码长度判定为"未超限"再写 DPI，最终文件就会超出上限 18 字节。
+      const measured = prepareDelivery(encoded.bytes, request.dpi)
       probes.push({
         quality: step.probe.quality,
         maxEdge: step.probe.maxEdge,
-        bytes: encoded.bytes.byteLength,
+        bytes: measured.byteLength,
         elapsedMs: Math.round(performance.now() - probeStarted),
       })
-      if (encoded.bytes.byteLength <= request.target.maxBytes)
-        candidates.set(probeKey(step.probe), encoded.bytes)
+      if (measured.byteLength <= request.target.maxBytes)
+        candidates.set(probeKey(step.probe), measured)
       // 大图单次任务可能要编码几十次，先把进度发出去，页面才不会看起来像卡死。
       if (isCurrentReply(request.id, activeId))
         self.postMessage({
@@ -162,10 +166,10 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
           progress: {
             attempts: probes.length,
             quality: step.probe.quality,
-            bytes: encoded.bytes.byteLength,
+            bytes: measured.byteLength,
           },
         } satisfies TargetKbReply)
-      step = advanceSearch(step.state, encoded.bytes.byteLength)
+      step = advanceSearch(step.state, measured.byteLength)
     }
 
     if (step.kind === 'failed') {
@@ -187,11 +191,9 @@ async function compress(request: TargetKbEncodeRequest): Promise<TargetKbEncodeR
     const chosen = candidates.get(probeKey(step.result))
     if (!chosen) throw new TargetKbError('internal', '内部状态异常：找不到最终编码结果。')
 
-    // 必须先写 DPI 再补齐：原图没有 JFIF APP0 时写 DPI 会新增 18 字节，
-    // 顺序颠倒会让补齐后的最终体积超出目标。
-    // 依赖：Chrome 的 convertToBlob 恒写 JFIF APP0，所以写 DPI 长度不变；
-    // 若将来换成不写 APP0 的编码器，插入的 18 字节会让"刚好等于上限"的结果超出 18 字节。
-    let output = request.dpi === null ? chosen : rewriteJfifDpi(chosen, request.dpi)
+    // 选中的候选在试探阶段就已经写完 DPI，长度也是按写后的字节判定的，
+    // 所以这里不再改写——否则会重复插入 APP0 或让"刚好等于上限"的结果溢出。
+    let output = chosen
     let padding: TargetKbPadding = { targetBytes: 0, added: 0, satisfied: true }
     if (step.result.needsPadding) {
       const padded = padWithComSegments(output, step.result.padToBytes)

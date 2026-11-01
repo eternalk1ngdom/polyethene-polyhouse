@@ -170,6 +170,18 @@ export function rewriteJfifDpi(bytes: Uint8Array, dpi: number): Uint8Array {
   return output
 }
 
+/**
+ * 把一次编码结果转成"最终要交付的字节"：需要写 DPI 就在这里写。
+ *
+ * 关键约束：**判定是否超出目标体积必须用返回值的长度，不能用编码器返回的长度。**
+ * 编码器自带 JFIF APP0 时改写长度不变；不带时会插入 18 字节，
+ * 若先按编码长度放行、之后再写 DPI，最终文件就会超出上限 18 字节。
+ * 把它单独成函数，是为了让这条顺序约束有名字、可被测试锁住。
+ */
+export function prepareDelivery(encoded: Uint8Array, dpi: number | null): Uint8Array {
+  return dpi === null ? encoded : rewriteJfifDpi(encoded, dpi)
+}
+
 /** 读取 JFIF 声明的 DPI；没有 JFIF APP0 时返回 null，调用方据此决定是否写入。 */
 export function readJfifDpi(bytes: Uint8Array): number | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)

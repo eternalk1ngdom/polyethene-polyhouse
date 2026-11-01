@@ -12,7 +12,7 @@ function toModuleUrl(source) {
 }
 
 const source = await readFile(new URL('../src/core/jpegComInjector.ts', import.meta.url), 'utf8')
-const { readSegments, padWithComSegments, rewriteJfifDpi, readJfifDpi, MAX_COM_PAYLOAD } =
+const { readSegments, padWithComSegments, rewriteJfifDpi, readJfifDpi, prepareDelivery, MAX_COM_PAYLOAD } =
   await import(toModuleUrl(source))
 
 /** 构造结构合法的最小 JPEG：段头、SOS 与 EOI 都可被解析，但不保证能解码出像素。 */
@@ -160,4 +160,25 @@ test('拒绝非法 DPI', () => {
   const base = buildJpeg()
   for (const dpi of [0, -1, 1201, 1.5, Number.NaN])
     assert.throws(() => rewriteJfifDpi(base, dpi), /DPI/)
+})
+
+test('交付前必须先写 DPI 再量体积：不带 APP0 的编码器会多 18 字节', () => {
+  const target = 1000
+  // 编码器返回的字节刚好等于上限——这正是最危险的情形。
+  const encoded = new Uint8Array(target)
+  encoded.set(buildJpeg({ app0: false }))
+
+  // 编码器自带 APP0 时改写不改变长度，先判后写与先写后判等价。
+  const withApp0 = new Uint8Array(target)
+  withApp0.set(buildJpeg())
+  assert.equal(prepareDelivery(withApp0, 300).length, target)
+
+  // 不带 APP0 时：按编码长度判定会放行，但交付物实际超限 18 字节。
+  assert.ok(encoded.length <= target, '旧的判定口径会放行')
+  const delivered = prepareDelivery(encoded, 300)
+  assert.equal(delivered.length, target + 18)
+  assert.ok(delivered.length > target, '交付长度才是判定依据，必须判为超限')
+
+  // 不写 DPI 时原样返回，不引入额外字节。
+  assert.equal(prepareDelivery(encoded, null).length, target)
 })
