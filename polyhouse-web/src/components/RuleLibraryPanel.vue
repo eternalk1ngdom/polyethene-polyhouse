@@ -169,9 +169,7 @@ async function closed(): Promise<void> {
         >{{ expanded ? '收起管理' : `管理词库（${state.data.sets.length}）` }}</ElButton
       >
     </div>
-    <p class="library-help">
-      仅保存在当前浏览器，不随账号；清除浏览器数据会丢失。规则不会自动保存。
-    </p>
+    <p class="library-help">仅保存在当前浏览器，不随账号；清除浏览器数据会丢失。词库需主动保存。</p>
     <div v-if="expanded" id="local-library-controls" class="library-controls">
       <template v-if="state.data.sets.length">
         <label for="local-rule-set">选择本机词库</label>

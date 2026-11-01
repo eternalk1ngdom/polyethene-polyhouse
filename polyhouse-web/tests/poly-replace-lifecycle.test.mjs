@@ -20,7 +20,9 @@ const batch = compile(
   await readFile(new URL('../src/core/polyReplaceBatch.ts', import.meta.url), 'utf8'),
   { './acReplacer': core },
 )
-const controls = url('export const RouterLink = {}, ElAlert = {}, ElButton = {}, ElInput = {}')
+const controls = url(
+  'export const RouterLink = {}, ElAlert = {}, ElButton = {}, ElInput = {}; export function onBeforeRouteLeave() {}',
+)
 // 控制读取和 Worker 回调的先后，不靠机器速度碰巧点击到取消；真实算法另由 Worker 基准验收。
 const fixtures = url(`
 export const document = { createElement: () => ({ webkitdirectory: true }) };
@@ -47,6 +49,7 @@ const { default: component } = await import(
       'element-plus': controls,
       '../core/polyReplaceBatch': batch,
       '../components/RuleLibraryPanel.vue': url('export default {}'),
+      '../components/ReplaceDraftPanel.vue': url('export default {}'),
     },
   )
 )

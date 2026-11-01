@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, onBeforeRouteLeave } from 'vue-router'
 import { ElAlert, ElButton, ElInput } from 'element-plus'
 import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
+import ReplaceDraftPanel from '../components/ReplaceDraftPanel.vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
@@ -20,6 +21,8 @@ const selectedMode = ref<ReplaceMode>('files')
 const inputEncoding = ref<InputEncoding>('utf-8')
 const directorySupported = 'webkitdirectory' in document.createElement('input')
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
+const draftPanel = ref<InstanceType<typeof ReplaceDraftPanel>>()
+onBeforeRouteLeave(async () => (await draftPanel.value?.prepareLeave()) ?? true)
 const result = ref<BatchDownload | null>(null)
 const previewIndex = ref(0)
 const message = ref('')
@@ -229,6 +232,7 @@ function download(): void {
         <h2>2. 设置替换规则</h2>
         <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
         <RuleLibraryPanel :rules="rules" @load="rules = $event" />
+        <ReplaceDraftPanel ref="draftPanel" :rules="rules" @load="rules = $event" />
         <div v-for="(rule, index) in rules" :key="index" class="rule">
           <label :for="`search-${index}`">查找 {{ index + 1 }}</label>
           <ElInput
