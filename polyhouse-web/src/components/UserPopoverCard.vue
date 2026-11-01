@@ -2,7 +2,7 @@
 import { RouterLink } from 'vue-router'
 import { computed } from 'vue'
 import { ElButton, ElIcon } from 'element-plus'
-import { ArrowRight, SwitchButton, User } from '@element-plus/icons-vue'
+import { ArrowRight, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import type { UserProfile } from '../api/auth'
 import { formatAccountNumber, userDisplayName, userRoleLabel } from '../utils/userPresentation'
 import UserAvatar from './UserAvatar.vue'
@@ -58,6 +58,18 @@ const stats = computed(() => growth.summary ?? props.profile)
         ><ElIcon><User /></ElIcon>个人中心</span
       ><ElIcon><ArrowRight /></ElIcon
     ></RouterLink>
+    <RouterLink
+      v-if="
+        (profile.role === 'OWNER' || profile.role === 'ADMIN') && !profile.passwordChangeRequired
+      "
+      class="profile-link"
+      to="/manage"
+      @click="emit('navigate')"
+      ><span
+        ><ElIcon aria-hidden="true"><Setting /></ElIcon
+        >{{ profile.role === 'OWNER' ? '屋主工作台' : '管理中心' }}</span
+      ><ElIcon><ArrowRight /></ElIcon
+    ></RouterLink>
     <p v-if="error" class="action-error" role="alert">{{ error }}</p>
     <ElButton class="logout-button" text :loading="busy" @click="emit('logout')"
       ><ElIcon><SwitchButton /></ElIcon>退出登录</ElButton
@@ -74,7 +86,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .card-cover {
   height: 64px;
-  background: #fdf7f9;
+  background: var(--ph-soft);
   border-radius: 8px 8px 0 0;
   overflow: hidden;
   position: relative;
@@ -86,7 +98,7 @@ const stats = computed(() => growth.summary ?? props.profile)
   position: absolute;
   width: 100px;
   height: 100px;
-  border: 1px solid #e6cad5;
+  border: 1px solid var(--ph-line);
   border-radius: 50%;
   right: -20px;
   top: -46px;
@@ -94,7 +106,7 @@ const stats = computed(() => growth.summary ?? props.profile)
 .card-cover span {
   font-size: 7px;
   letter-spacing: 1px;
-  color: #8d6a77;
+  color: var(--ph-muted);
 }
 .card-identity {
   padding: 0 18px;
@@ -109,8 +121,8 @@ const stats = computed(() => growth.summary ?? props.profile)
 }
 .role-badge {
   display: inline-block;
-  background: #fdf7f9;
-  color: #80485c;
+  background: var(--ph-soft);
+  color: var(--ph-ink);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -151,7 +163,7 @@ dd {
   padding: 15px 4px;
   display: flex;
   justify-content: space-between;
-  color: var(--ph-green);
+  color: var(--ph-brand);
   font-size: 13px;
 }
 .profile-link > span {

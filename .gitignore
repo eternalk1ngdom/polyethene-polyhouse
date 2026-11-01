@@ -49,6 +49,7 @@ Thumbs.db
 desktop.ini
 
 # Runtime output
+.local-backups/
 uploads/
 temp/
 *.tmp

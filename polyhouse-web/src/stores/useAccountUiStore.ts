@@ -7,13 +7,17 @@ import { useUserStore } from './useUserStore'
 export const useAccountUiStore = defineStore('account-ui', () => {
   const userStore = useUserStore()
   const authVisible = ref(false)
+  const passwordVisible = ref(false)
   const cancellationVisible = ref(false)
   const cancellationUsername = ref('')
   const pending = ref<'logout' | 'deregister' | null>(null)
   const actionError = ref('')
   const notice = ref('')
   // 页面只提供防误操作提示；最终资格仍由后端在用户行锁内检查数据库最新角色。
-  const canDeregister = computed(() => userStore.isLoggedIn && userStore.user?.role !== 'OWNER')
+  const canDeregister = computed(
+    () =>
+      userStore.isLoggedIn && !userStore.requiresPasswordChange && userStore.user?.role !== 'OWNER',
+  )
   let confirmationToken = ''
 
   /** 取消操作立即销毁确认对象；重新打开必须针对当前已验证身份重新确认。 */
@@ -42,7 +46,9 @@ export const useAccountUiStore = defineStore('account-ui', () => {
     }
     confirmationToken = userStore.token
     if (!canDeregister.value) {
-      actionError.value = '屋主账号不能直接注销，需先完成专门的移交或恢复流程。'
+      actionError.value = userStore.requiresPasswordChange
+        ? '请先修改初始密码。'
+        : '屋主账号不能直接注销，需先完成专门的移交或恢复流程。'
       confirmationToken = ''
       return
     }
@@ -149,6 +155,7 @@ export const useAccountUiStore = defineStore('account-ui', () => {
 
   return {
     authVisible,
+    passwordVisible,
     cancellationVisible,
     cancellationUsername,
     pending,

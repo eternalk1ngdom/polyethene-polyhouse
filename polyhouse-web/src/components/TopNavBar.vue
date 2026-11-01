@@ -3,9 +3,11 @@ import { RouterLink, useRoute } from 'vue-router'
 import { ref, watch } from 'vue'
 import { ElIcon, ElPopover } from 'element-plus'
 import { ArrowDown, User } from '@element-plus/icons-vue'
+import BrandLogo from './BrandLogo.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import AuthDialog from './AuthDialog.vue'
 import DeregisterDialog from './DeregisterDialog.vue'
+import PasswordChangeDialog from './PasswordChangeDialog.vue'
 import UserAvatar from './UserAvatar.vue'
 import UserPopoverCard from './UserPopoverCard.vue'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -40,8 +42,7 @@ watch(
   <header class="site-header" @keydown.esc="accountVisible = false">
     <div class="header-inner">
       <RouterLink to="/" class="brand" aria-label="聚妙屋首页">
-        <span class="brand-mark" aria-hidden="true"><span /></span>
-        <span class="brand-name">聚妙屋<span>Polyhouse</span></span>
+        <BrandLogo />
       </RouterLink>
       <nav class="primary-nav" aria-label="主导航">
         <RouterLink to="/" exact-active-class="is-active">首页</RouterLink>
@@ -66,7 +67,7 @@ watch(
           ><ElIcon><User /></ElIcon
         ></span>
         <span class="account-label">{{
-          userStore.status === 'checking' ? '正在恢复' : '登录 / 注册'
+          userStore.status === 'checking' ? '正在恢复' : '登录'
         }}</span>
       </button>
       <!-- 只有 /me 或登录响应确认的资料才显示为已登录，缓存用户资料不会进入此分支。 -->
@@ -79,7 +80,12 @@ watch(
         :teleported="false"
       >
         <template #reference>
-          <button class="account-trigger" type="button" aria-label="打开账号菜单">
+          <button
+            class="account-trigger"
+            type="button"
+            aria-label="打开账号菜单"
+            :aria-expanded="accountVisible"
+          >
             <UserAvatar
               v-if="userStore.user"
               :name="userDisplayName(userStore.user)"
@@ -131,243 +137,165 @@ watch(
     </div>
     <AuthDialog v-model="accountUi.authVisible" />
     <DeregisterDialog />
+    <PasswordChangeDialog v-model="accountUi.passwordVisible" />
   </header>
 </template>
 
 <style scoped>
 .site-header {
-  border-bottom: 1px solid var(--ph-line);
   background: var(--ph-surface);
 }
 .header-inner {
-  width: min(1200px, calc(100% - 96px));
-  min-height: 88px;
+  width: min(1440px, calc(100% - 80px));
+  min-height: 96px;
   margin: auto;
   display: flex;
   align-items: center;
-  gap: 60px;
+  gap: 42px;
 }
 .brand {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   flex-shrink: 0;
-}
-.brand-mark {
-  width: 36px;
-  height: 38px;
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-.brand-mark::before {
-  content: '';
-  width: 25px;
-  height: 25px;
-  position: absolute;
-  top: 6px;
-  border-radius: 5px;
-  background: #d9aaba;
-  transform: rotate(45deg);
-}
-.brand-mark span {
-  width: 31px;
-  height: 25px;
-  position: absolute;
-  bottom: 1px;
-  background: #d9aaba;
-  border-radius: 4px;
-}
-.brand-mark span::after {
-  content: '';
-  position: absolute;
-  width: 9px;
-  height: 13px;
-  bottom: 0;
-  left: 11px;
-  background: var(--ph-surface);
-  border-radius: 5px 5px 0 0;
-}
-.brand-name {
-  font-size: 20px;
-  font-weight: 750;
-  letter-spacing: 1px;
-}
-.brand-name > span {
-  display: block;
-  font-size: 10px;
-  line-height: 1.4;
-  letter-spacing: 1.8px;
-  font-weight: 500;
-  color: var(--ph-muted);
 }
 .primary-nav {
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 6px;
 }
 .primary-nav a {
-  padding: 33px 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 15px;
+  color: var(--ph-ink);
   font-size: 14px;
-  color: #80636d;
-  position: relative;
+  font-weight: 550;
   white-space: nowrap;
+  border-radius: 99px;
+  transition: background 0.2s;
 }
 .primary-nav a:hover,
 .primary-nav a.is-active {
-  color: var(--ph-green);
-}
-.primary-nav a.is-active::after {
-  content: '';
-  height: 3px;
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--ph-green);
-  border-radius: 3px 3px 0 0;
+  background: var(--ph-soft);
 }
 .nav-description {
   margin-left: 7px;
+  color: var(--ph-muted);
   font-size: 12px;
-  color: #836670;
+  font-weight: 400;
 }
 .account-trigger {
   display: flex;
   align-items: center;
   gap: 9px;
   margin-left: auto;
+  min-height: 46px;
   cursor: pointer;
   border: 0;
   background: transparent;
-  padding: 8px 0 8px 8px;
+  padding: 5px 8px;
   color: var(--ph-ink);
+  border-radius: 99px;
 }
 .account-trigger:disabled {
   cursor: wait;
   opacity: 0.65;
 }
 .account-label {
-  max-width: 140px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
 .login-trigger {
-  padding: 5px 12px 5px 5px;
-  background: #fdf7f9;
-  border: 1px solid #f0dde4;
-  border-radius: 28px;
+  background: var(--ph-ink);
+  color: white;
+  padding: 8px 20px;
 }
 .login-trigger:hover:not(:disabled) {
-  background: #f6e3ea;
+  background: #39384b;
 }
-.session-notice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  border-top: 1px solid #efdee4;
-  background: #faf1f4;
-  padding: 11px 24px;
-  color: #7e5765;
-  font-size: 12px;
-  line-height: 1.8;
+.account-avatar {
+  display: none;
 }
-.session-notice button {
-  flex-shrink: 0;
-  background: none;
-  border: 0;
-  border-bottom: 1px solid currentColor;
-  padding: 0;
-  color: var(--ph-green);
-  cursor: pointer;
-  font-size: 12px;
+.account-chevron {
+  font-size: 11px;
+  color: var(--ph-muted);
 }
+.session-notice,
 .account-notice {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 11px 20px;
-  background: #fdf7f9;
-  color: #7b3d53;
-  border-top: 1px solid #f0dbe3;
+  padding: 12px 24px;
+  background: var(--ph-cream);
+  color: var(--ph-ink);
   font-size: 12px;
   line-height: 1.8;
 }
+.account-notice {
+  background: var(--ph-pink-soft);
+}
+.session-notice button,
 .account-notice button {
-  flex-shrink: 0;
-  font-size: 11px;
   border: 0;
   background: none;
-  color: #7b3d53;
+  color: var(--ph-accent-strong);
   cursor: pointer;
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
+  flex-shrink: 0;
+  min-height: 32px;
 }
-.account-avatar {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  background: #f6e7ec;
-  border: 1px solid #eddae1;
-  border-radius: 50%;
-  font-size: 18px;
-}
-.account-label {
-  font-size: 13px;
-}
-.account-chevron {
-  color: var(--ph-muted);
-  font-size: 11px;
-}
-@media (max-width: 960px) {
+@media (max-width: 1000px) {
   .header-inner {
-    gap: 36px;
-  }
-  .primary-nav {
     gap: 24px;
   }
   .nav-description {
     display: none;
   }
+  .primary-nav a {
+    padding: 12px;
+  }
 }
 @media (max-width: 640px) {
   .header-inner {
     width: calc(100% - 40px);
-    min-height: 76px;
-    gap: 22px;
+    min-height: 82px;
+    gap: 12px;
     flex-wrap: wrap;
     padding-top: 16px;
-  }
-  .brand-name {
-    font-size: 18px;
+    padding-bottom: 10px;
   }
   .primary-nav {
     order: 3;
     flex-basis: 100%;
-    gap: 30px;
+    justify-content: center;
+    gap: 8px;
   }
   .primary-nav a {
-    padding: 12px 0 15px;
+    flex: 1;
+    justify-content: center;
+    padding: 10px;
+    font-size: 13px;
   }
   .account-label {
+    max-width: 95px;
     font-size: 12px;
-    max-width: 110px;
-  }
-  .account-trigger {
-    padding-left: 0;
   }
   .login-trigger {
-    padding-left: 4px;
-    padding-right: 10px;
+    padding: 10px 16px;
   }
-  .session-notice {
+  .session-notice,
+  .account-notice {
     justify-content: flex-start;
-    gap: 10px;
     flex-wrap: wrap;
+    gap: 8px;
     padding: 10px 20px;
   }
 }

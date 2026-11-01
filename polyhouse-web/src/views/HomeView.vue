@@ -1,675 +1,500 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
-import { ElIcon } from 'element-plus'
-import { ArrowDown, ArrowRight, Crop, Picture, Right, Switch } from '@element-plus/icons-vue'
+import { computed, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { ElButton, ElIcon, ElInput } from 'element-plus'
+import { ArrowDown, ArrowRight, Crop, Search, Switch } from '@element-plus/icons-vue'
 import { toolRegistry } from '../config/toolRegistry'
+import ToolArtwork from '../components/ToolArtwork.vue'
 
-// 字符串元数据在展示层转换成图标组件，注册表保持与 UI 解耦。
+/** 分类只筛选真实注册工具，不生成尚未交付的入口。 */
+interface Category {
+  /** all 不限制类别，其他值与注册表一致。 */
+  value: 'all' | 'text' | 'image'
+  /** 可见名称同时用于辅助阅读。 */
+  label: string
+}
+const categories: readonly Category[] = [
+  { value: 'all', label: '全部工具' },
+  { value: 'text', label: '文本处理' },
+  { value: 'image', label: '图片处理' },
+]
+const query = ref('')
+const category = ref<Category['value']>('all')
+const router = useRouter()
 const toolIcons = { Switch, Crop }
+// 搜索只匹配本地注册表，不上传关键词，也不依赖账号或后端。
+const visibleTools = computed(() => {
+  const needle = query.value.trim().toLocaleLowerCase()
+  return toolRegistry.filter(
+    (tool) =>
+      (category.value === 'all' || tool.category === category.value) &&
+      [tool.title, tool.subtitle, tool.tag, tool.description, ...tool.plannedFeatures]
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(needle),
+  )
+})
+function resetFilters(): void {
+  query.value = ''
+  category.value = 'all'
+}
+/** 搜索即时筛选；按 Enter 也把键盘用户带到结果区。 */
+async function showResults(): Promise<void> {
+  await router.push({ path: '/', hash: '#tools' })
+}
 </script>
 
 <template>
   <div class="home-page">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="eyebrow"><span />日常小事，也值得顺手一点</p>
-        <h1 id="hero-title">少一点繁琐，<br />多一点<span class="highlight">从容。</span></h1>
-        <p class="hero-description">把重复的工作交给工具，<br />把时间留给更喜欢的事。</p>
-        <div class="hero-actions">
-          <RouterLink class="primary-action" :to="{ path: '/', hash: '#tools' }"
-            >发现小工具<ElIcon><ArrowDown /></ElIcon
-          ></RouterLink>
-          <RouterLink class="secondary-action" :to="{ path: '/', hash: '#about' }"
-            >认识聚妙屋<ElIcon><ArrowRight /></ElIcon
-          ></RouterLink>
-        </div>
-        <p class="hero-note">
-          <span class="tiny-cross" aria-hidden="true">✳</span> 简单一点，刚刚好。
-        </p>
-      </div>
-
-      <!-- 装饰示意只表达工具用途；没有上传入口，也不模拟真实处理结果。 -->
-      <div class="hero-art" role="img" aria-label="文本替换与图片大小调整的工具概念插画">
-        <span class="art-grid" />
-        <span class="art-orbit" />
-        <span class="art-spark spark-one">✳</span>
-        <div class="demo-paper">
-          <div class="paper-top">
-            <span class="paper-dot" /><span class="paper-dot" /><span class="paper-dot" /><span
-              class="paper-label"
-              >一点小改变</span
-            >
-          </div>
-          <div class="paper-content">
-            <span class="demo-label">让重复，变轻松</span>
-            <div class="word-before">繁琐的日常</div>
-            <ElIcon class="paper-arrow"><Right /></ElIcon>
-            <div class="word-after">顺手的日常<span class="text-cursor" /></div>
-          </div>
-          <div class="paper-bottom"><span>PolyReplace</span><span>文本替换 · 概念示意</span></div>
-        </div>
-        <div class="size-chip">
-          <span class="chip-icon"
-            ><ElIcon><Picture /></ElIcon></span
-          ><span><strong>刚刚好的大小</strong><small>TargetKB · 图片处理</small></span
-          ><span class="chip-dots" aria-hidden="true">···</span>
-        </div>
-        <span class="art-caption">SMALL TOOLS. MORE POSSIBILITIES.</span>
-      </div>
-    </section>
-
-    <section id="tools" class="tools-section" aria-labelledby="tools-title">
-      <div class="section-heading">
-        <div>
-          <p class="section-kicker">THE TOOLBOX</p>
-          <h2 id="tools-title">你的日常工具箱<span>一点点，变好用。</span></h2>
-        </div>
-        <span class="section-aside">从小事出发，认真打磨</span>
-      </div>
-      <div class="tool-grid">
+      <p class="hero-label">给日常一点灵感，给繁琐一个解法。</p>
+      <h1 id="hero-title">好用的小工具，<br />让生活轻一点。</h1>
+      <p class="hero-description">
+        文字、图片，还有更多小小的可能。<br class="mobile-break" />在聚妙屋，找到你的顺手工具。
+      </p>
+      <form class="tool-search" role="search" @submit.prevent="showResults">
+        <ElInput v-model="query" aria-label="搜索工具" placeholder="你想解决什么小麻烦？" clearable
+          ><template #prefix
+            ><ElIcon><Search /></ElIcon></template
+        ></ElInput>
         <RouterLink
-          v-for="(tool, index) in toolRegistry"
-          :key="tool.code"
-          :to="tool.route"
-          class="tool-card"
-          :class="tool.accent"
-        >
-          <div class="card-top">
-            <span class="tool-icon"
+          :to="{ path: '/', hash: '#tools' }"
+          class="search-action"
+          aria-label="查看工具搜索结果"
+          ><ElIcon><ArrowRight /></ElIcon
+        ></RouterLink>
+      </form>
+      <div class="popular-searches">
+        <span>试试搜索</span><button type="button" @click="query = '文本'">文本替换</button
+        ><button type="button" @click="query = '文件夹'">文件夹处理</button
+        ><button type="button" @click="query = '图片'">图片处理</button>
+      </div>
+      <RouterLink class="discover-link" :to="{ path: '/', hash: '#tools' }"
+        >发现小工具<ElIcon><ArrowDown /></ElIcon
+      ></RouterLink>
+    </section>
+    <section id="tools" class="tools-section" aria-labelledby="tools-title">
+      <div class="gallery-toolbar">
+        <h2 id="tools-title">发现顺手的可能<span>THE TOOL COLLECTION</span></h2>
+        <div class="categories" role="group" aria-label="工具分类">
+          <button
+            v-for="item in categories"
+            :key="item.value"
+            type="button"
+            :class="{ selected: category === item.value }"
+            :aria-pressed="category === item.value"
+            @click="category = item.value"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </div>
+      <p class="results-count" role="status">
+        {{ query.trim() ? `“${query.trim()}” · ` : '' }}{{ visibleTools.length }} 个工具 ·
+        实际开放状态见卡片
+      </p>
+      <div v-if="visibleTools.length" class="tool-grid">
+        <article v-for="tool in visibleTools" :key="tool.code" class="tool-card">
+          <RouterLink
+            :to="tool.route"
+            class="artwork-link"
+            :aria-label="`${tool.status === 'available' ? '打开' : '了解'}${tool.title}`"
+            ><ToolArtwork :kind="tool.category" /><span class="artwork-cta"
+              >{{ tool.status === 'available' ? '开始使用' : '查看计划'
+              }}<ElIcon><ArrowRight /></ElIcon></span
+          ></RouterLink>
+          <div class="card-meta">
+            <span class="tool-icon" :class="tool.accent"
               ><ElIcon><component :is="toolIcons[tool.icon]" /></ElIcon></span
-            ><span class="tool-status">{{ tool.status === 'planned' ? '开发中' : '可使用' }}</span>
-          </div>
-          <div class="tool-title">
-            <h3>{{ tool.title }}</h3>
-            <span>{{ tool.subtitle }}</span>
+            ><RouterLink :to="tool.route" class="tool-title"
+              ><h3>{{ tool.title }}</h3>
+              <span>{{ tool.subtitle }}</span></RouterLink
+            ><span class="tool-status" :class="{ available: tool.status === 'available' }">{{
+              tool.status === 'available' ? '已开放' : '筹备中'
+            }}</span>
           </div>
           <p class="tool-description">{{ tool.description }}</p>
-          <div class="card-bottom">
-            <span class="tool-category"
-              ><span class="tool-number">0{{ index + 1 }}</span
-              >{{ tool.tag }}</span
-            ><span class="tool-open"
-              >{{ tool.status === 'planned' ? '了解工具' : '打开工具'
-              }}<ElIcon><ArrowRight /></ElIcon
-            ></span>
+          <div class="tool-tags">
+            <span>{{ tool.tag }}</span
+            ><span>{{ tool.status === 'available' ? '本地运行 · 无需登录' : '尚未开放处理' }}</span>
           </div>
-        </RouterLink>
+        </article>
+      </div>
+      <div v-else class="empty-search">
+        <ElIcon><Search /></ElIcon>
+        <h3>还没有找到这个工具</h3>
+        <p>换个关键词，或看看全部工具。</p>
+        <ElButton @click="resetFilters">查看全部工具</ElButton>
       </div>
     </section>
-
     <section id="about" class="about-section" aria-labelledby="about-title">
-      <div class="about-symbol" aria-hidden="true">✳</div>
-      <div>
-        <p class="section-kicker">A LITTLE HOUSE FOR USEFUL THINGS</p>
-        <h2 id="about-title">不必复杂，好用就好。</h2>
-        <p class="about-description">聚妙屋，收集日常里的小麻烦，慢慢做成顺手的小工具。</p>
-      </div>
-      <p class="about-note">从文字，到图片。<br />一间小屋，慢慢添置。</p>
+      <p class="about-kicker">SMALL TOOLS. MORE POSSIBILITIES.</p>
+      <h2 id="about-title">把时间，留给你喜欢的事。</h2>
+      <p>聚妙屋是一份持续生长的日常工具集。<br />从一个小需求出发，认真做好每一次处理。</p>
+      <RouterLink to="/account" class="about-action"
+        >去我的个人空间<ElIcon><ArrowRight /></ElIcon></RouterLink
+      ><span class="about-signature" aria-hidden="true">a little more possibility.</span>
     </section>
   </div>
 </template>
 
 <style scoped>
 .home-page {
-  width: min(1200px, calc(100% - 96px));
+  width: min(1320px, calc(100% - 96px));
   margin: auto;
 }
 .hero {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  align-items: center;
-  gap: 28px;
-  min-height: 560px;
-  padding: 64px 0 54px;
+  text-align: center;
+  padding: 68px 16px 52px;
 }
-.eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 0 26px;
-  color: #7e5765;
+.hero-label {
+  display: inline-block;
+  background: var(--ph-cream);
+  border-radius: 99px;
+  padding: 10px 18px;
   font-size: 13px;
-  letter-spacing: 1px;
-}
-.eyebrow > span {
-  width: 7px;
-  height: 7px;
-  background: #ab788a;
-  border-radius: 50%;
+  margin: 0 0 26px;
 }
 h1 {
-  font-size: clamp(42px, 4.5vw, 64px);
+  font-size: clamp(40px, 4.8vw, 68px);
+  font-weight: 650;
   line-height: 1.3;
   letter-spacing: -2px;
   margin: 0;
-  font-weight: 750;
-}
-.highlight {
-  position: relative;
-  z-index: 0;
-  white-space: nowrap;
-}
-.highlight::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  background: #faedf2;
-  height: 17px;
-  left: 0;
-  right: 7px;
-  bottom: 6px;
-  border-radius: 2px;
-  transform: rotate(-2deg);
 }
 .hero-description {
+  color: var(--ph-muted);
   font-size: 16px;
-  line-height: 1.95;
-  color: var(--ph-muted);
-  margin: 22px 0 28px;
+  line-height: 1.9;
+  margin: 24px 0 26px;
 }
-.hero-actions {
+.mobile-break {
+  display: none;
+}
+.tool-search {
   display: flex;
   align-items: center;
-  gap: 26px;
-}
-.primary-action,
-.secondary-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 22px;
-  font-size: 14px;
-}
-.primary-action {
-  padding: 15px 21px;
-  background: #f7e8ee;
-  color: #613e4d;
-  border: 1px solid #eed9e2;
-  border-radius: 9px;
-  transition: background 0.18s;
-}
-.primary-action:hover {
-  background: #f0dbe4;
-}
-.secondary-action {
-  color: #775662;
-  gap: 9px;
-  padding: 12px 0;
-}
-.secondary-action:hover {
-  color: var(--ph-green);
-  text-decoration: underline;
-  text-underline-offset: 5px;
-}
-.hero-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #80636d;
-  margin: 28px 0 0;
-}
-.tiny-cross {
-  font-size: 20px;
-  color: #9e7b87;
-}
-.hero-art {
-  height: 390px;
-  position: relative;
-  display: grid;
-  place-items: center;
-  isolation: isolate;
-}
-.art-grid {
-  position: absolute;
-  z-index: -2;
-  inset: 20px 0 32px;
-  background-image: radial-gradient(#e6cbd5 1px, transparent 1px);
-  background-size: 19px 19px;
-  mask-image: radial-gradient(ellipse, black 35%, transparent 72%);
-}
-.art-orbit {
-  position: absolute;
-  z-index: -1;
-  width: 300px;
-  height: 300px;
-  top: 25px;
-  right: 35px;
-  background: #fcf4f8;
-  border-radius: 50%;
-}
-.demo-paper {
-  width: 350px;
-  background: #ffffff;
-  border: 1px solid #e6cfd7;
-  border-radius: 14px;
-  transform: rotate(-6deg) translate(-8px, -8px);
-  box-shadow: 8px 12px 0 #f2dee5;
-}
-.paper-top {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 17px 18px;
-  border-bottom: 1px solid #f0e3e8;
-}
-.paper-dot {
-  width: 6px;
-  height: 6px;
-  border: 1px solid #dac2cb;
-  border-radius: 50%;
-}
-.paper-label {
-  font-size: 10px;
-  color: #8e6c78;
-  margin-left: auto;
-}
-.paper-content {
-  padding: 26px 30px 30px;
-}
-.demo-label {
-  font-size: 11px;
-  color: #8e6c78;
-}
-.word-before {
-  font-size: 25px;
-  color: #ae949d;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  margin-top: 18px;
-}
-.paper-arrow {
-  margin: 12px 0 8px;
-  font-size: 23px;
-  color: #a17484;
-}
-.word-after {
-  font-size: 29px;
-  font-weight: 650;
-  color: #80546d;
-  white-space: nowrap;
-}
-.text-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 25px;
-  background: #9a6a7b;
-  margin-left: 6px;
-  vertical-align: -2px;
-}
-.paper-bottom {
-  padding: 12px 18px;
-  border-top: 1px solid #f0e3e8;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #8e6c78;
-  font-size: 9px;
-}
-.size-chip {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  right: 2px;
-  bottom: 24px;
-  width: 255px;
-  padding: 18px;
-  border: 1px solid #e8e2f1;
-  background: #f8f5fc;
-  border-radius: 12px;
-  transform: rotate(5deg);
-  box-shadow: 0 6px 18px #55446b10;
-}
-.chip-icon {
-  width: 38px;
-  height: 42px;
-  background: #faf8ff;
-  border: 1px solid #eee9f6;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  color: #776989;
-  font-size: 21px;
-}
-.size-chip strong {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #504858;
-}
-.size-chip small {
-  display: block;
-  margin-top: 6px;
-  font-size: 9px;
-  color: #756b7e;
-}
-.chip-dots {
-  margin-left: auto;
-  align-self: flex-start;
-  color: #756b7e;
-}
-.art-spark {
-  position: absolute;
-  font-size: 62px;
-  color: #80546d;
-}
-.spark-one {
-  top: 2px;
-  right: 7px;
-  transform: rotate(14deg);
-}
-.art-caption {
-  position: absolute;
-  bottom: -10px;
-  left: 22px;
-  font-size: 8px;
-  letter-spacing: 2px;
-  color: #91707c;
-}
-.tools-section {
-  padding-top: 24px;
-  scroll-margin-top: 24px;
-}
-.section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 26px;
-  gap: 20px;
-}
-.section-kicker {
-  font-size: 9px;
-  letter-spacing: 2px;
-  font-weight: 600;
-  color: #8b6874;
-  margin: 0 0 12px;
-}
-.section-heading h2 {
-  margin: 0;
-  font-size: 26px;
-  letter-spacing: -0.6px;
-}
-.section-heading h2 > span {
-  font-size: 12px;
-  margin-left: 18px;
-  color: var(--ph-muted);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-.section-aside {
-  font-size: 11px;
-  color: var(--ph-muted);
-  padding-bottom: 3px;
-}
-.tool-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-}
-.tool-card {
-  display: flex;
-  flex-direction: column;
+  width: min(620px, 100%);
+  margin: auto;
+  padding: 7px 8px 7px 18px;
+  background: var(--ph-soft);
   border: 1px solid var(--ph-line);
-  background: #fff;
-  padding: 30px;
-  border-radius: 15px;
-  transition:
-    border-color 0.2s,
-    transform 0.2s,
-    box-shadow 0.2s;
+  border-radius: 99px;
 }
-.tool-card:hover {
-  border-color: #dab0bf;
-  transform: translateY(-3px);
-  box-shadow: 0 10px 24px #3e2e3808;
+.tool-search:focus-within {
+  border-color: var(--ph-accent);
+  box-shadow: 0 0 0 4px var(--ph-pink-soft);
 }
-.card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.tool-search :deep(.el-input__wrapper) {
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0;
 }
-.tool-icon {
+.tool-search :deep(.el-input__inner) {
+  height: 40px;
+  font-size: 15px;
+  outline: none;
+}
+.tool-search :deep(.el-input__prefix) {
+  margin-right: 10px;
+  font-size: 20px;
+  color: var(--ph-muted);
+}
+.search-action {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 46px;
   height: 46px;
-  border-radius: 12px;
-  background: #fdf7f9;
-  color: #8f4a63;
-  font-size: 24px;
+  background: var(--ph-ink);
+  color: white;
+  border-radius: 50%;
+  font-size: 22px;
 }
-.apricot .tool-icon {
-  background: #f8f5fc;
-  color: #776989;
-}
-.tool-status {
-  background: #f7f0f2;
-  color: #846470;
+.popular-searches {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
   font-size: 12px;
-  border-radius: 5px;
-  padding: 5px 9px;
+  color: var(--ph-muted);
+}
+.popular-searches button {
+  background: white;
+  border: 1px solid var(--ph-line);
+  border-radius: 99px;
+  padding: 8px 14px;
+  min-height: 44px;
+  color: var(--ph-ink);
+  cursor: pointer;
+}
+.popular-searches button:hover {
+  background: var(--ph-soft);
+}
+.discover-link {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 24px;
+  padding: 8px;
+  font-size: 13px;
+  color: var(--ph-muted);
+}
+.gallery-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding-top: 12px;
+}
+h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+}
+.gallery-toolbar h2 span {
+  display: block;
+  margin-top: 9px;
+  color: var(--ph-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+}
+.categories {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.categories button {
+  min-height: 44px;
+  padding: 10px 19px;
+  background: white;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ph-muted);
+}
+.categories button.selected {
+  background: var(--ph-soft);
+  color: var(--ph-ink);
+  border-color: var(--ph-line);
+  font-weight: 600;
+}
+.categories button:hover {
+  color: var(--ph-ink);
+}
+.results-count {
+  font-size: 12px;
+  color: var(--ph-muted);
+  margin: 24px 0 16px;
+  overflow-wrap: anywhere;
+}
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 34px;
+}
+.tool-card {
+  min-width: 0;
+}
+.artwork-link {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 18px;
+}
+.artwork-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  padding: 11px 17px;
+  border-radius: 99px;
+  background: var(--ph-ink);
+  color: white;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+.artwork-link:hover .artwork-cta {
+  background: var(--ph-accent-strong);
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0 0;
+}
+.tool-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 18px;
+  color: var(--ph-ink);
+}
+.lilac {
+  background: var(--ph-lilac);
+}
+.peach {
+  background: var(--ph-peach);
 }
 .tool-title {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 10px;
+  min-width: 0;
 }
-.tool-title h3 {
+h3 {
   margin: 0;
-  font-size: 25px;
+  font-size: 18px;
   font-weight: 650;
 }
 .tool-title > span {
   font-size: 12px;
-  color: #8b6874;
+  color: var(--ph-muted);
+}
+.tool-status {
+  margin-left: auto;
+  font-size: 11px;
+  border: 1px solid var(--ph-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  color: var(--ph-muted);
+}
+.tool-status.available {
+  background: var(--ph-cream);
+  border-color: var(--ph-cream);
+  color: var(--ph-ink);
 }
 .tool-description {
+  font-size: 14px;
+  color: var(--ph-muted);
+  line-height: 1.8;
+  margin: 12px 0;
+}
+.tool-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ph-muted);
+  font-size: 11px;
+}
+.tool-tags span {
+  padding: 5px 9px;
+  background: var(--ph-soft);
+  border-radius: 5px;
+}
+.empty-search {
+  text-align: center;
+  padding: 64px 20px;
+  background: var(--ph-soft);
+  border-radius: 18px;
+}
+.empty-search > .el-icon {
+  font-size: 32px;
+  color: var(--ph-muted);
+}
+.empty-search h3 {
+  margin-top: 16px;
+}
+.empty-search p {
   color: var(--ph-muted);
   font-size: 14px;
-  line-height: 1.9;
-  margin: 12px 0 26px;
-  max-width: 360px;
-}
-.card-bottom {
-  margin-top: auto;
-  border-top: 1px solid #f4ebee;
-  padding-top: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.tool-category {
-  font-size: 12px;
-  color: #8b6874;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.tool-number {
-  color: #80636d;
-  font-size: 12px;
-}
-.tool-open {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--ph-green);
 }
 .about-section {
-  border-top: 1px solid var(--ph-line);
-  margin-top: 58px;
-  padding-top: 34px;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  scroll-margin-top: 24px;
+  text-align: center;
+  background: var(--ph-cream);
+  margin-top: 90px;
+  padding: 58px 24px 42px;
+  border-radius: 22px;
 }
-.about-symbol {
-  font-size: 54px;
-  color: #9a7683;
-}
-.about-section .section-kicker {
-  font-size: 8px;
-  margin-bottom: 9px;
+.about-kicker {
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin: 0 0 22px;
 }
 .about-section h2 {
-  margin: 0;
-  font-size: 21px;
-  font-weight: 600;
+  font-size: clamp(27px, 3vw, 40px);
+  letter-spacing: -1px;
 }
-.about-description {
+.about-section > p:not(.about-kicker) {
   color: var(--ph-muted);
-  font-size: 12px;
-  line-height: 1.8;
-  margin-bottom: 0;
-}
-.about-note {
-  color: #8b6874;
-  font-size: 11px;
   line-height: 1.9;
-  margin-left: auto;
-  flex-shrink: 0;
+  font-size: 15px;
+  margin: 20px 0 22px;
 }
-@media (max-width: 960px) {
-  .hero {
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    min-height: 510px;
-  }
-  h1 {
-    font-size: 44px;
-  }
-  .hero-art {
-    transform: scale(0.88);
-    transform-origin: center;
-  }
-  .demo-paper {
-    width: 300px;
-  }
-  .hero-actions {
-    gap: 18px;
-  }
-  .section-aside {
-    display: none;
-  }
-  .tool-card {
-    padding: 24px;
-  }
+.about-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  background: var(--ph-ink);
+  color: white;
+  border-radius: 99px;
+  font-size: 14px;
 }
-@media (max-width: 700px) {
-  .hero {
-    grid-template-columns: 1fr;
-    padding-top: 44px;
-    gap: 16px;
-  }
-  h1 {
-    font-size: clamp(40px, 8.5vw, 56px);
-  }
-  .hero-art {
-    width: min(100%, 420px);
-    height: 355px;
-    justify-self: center;
-    transform: none;
-  }
-  .hero-note {
-    margin-top: 20px;
-  }
-  .tool-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .section-heading h2 > span {
-    display: block;
-    margin: 10px 0 0;
-  }
-  .about-note {
-    display: none;
-  }
+.about-signature {
+  display: block;
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-size: 22px;
+  margin-top: 34px;
 }
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .home-page {
     width: calc(100% - 40px);
   }
-  .eyebrow {
-    font-size: 11px;
+  .hero {
+    padding: 44px 0 34px;
   }
   .hero-description {
     font-size: 14px;
   }
-  .hero-art {
-    height: 330px;
+  .mobile-break {
+    display: initial;
   }
-  .demo-paper {
-    width: min(290px, calc(100% - 20px));
+  .gallery-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
   }
-  .paper-content {
-    padding: 20px 24px;
+  .tool-grid {
+    gap: 30px;
+    grid-template-columns: 1fr;
   }
-  .word-after {
-    font-size: 25px;
+  .categories {
+    width: 100%;
   }
-  .art-orbit {
-    width: 250px;
-    height: 250px;
-    right: 15px;
-  }
-  .art-spark {
-    font-size: 42px;
-  }
-  .size-chip {
-    width: 224px;
-    padding: 13px;
-    right: 0;
-    bottom: 13px;
-  }
-  .art-caption {
-    left: 0;
-    bottom: -14px;
-    font-size: 7px;
-    letter-spacing: 1.4px;
-  }
-  .hero-actions {
-    gap: 20px;
-  }
-  .primary-action {
-    padding: 14px 18px;
-    gap: 14px;
-  }
-  .secondary-action {
-    font-size: 12px;
-  }
-  .tools-section {
-    padding-top: 18px;
-  }
-  .section-heading h2 {
-    font-size: 24px;
+  .categories button {
+    flex: 1;
+    padding: 10px;
   }
   .about-section {
-    gap: 16px;
-    margin-top: 40px;
+    margin-top: 56px;
   }
-  .about-symbol {
-    font-size: 36px;
+  .tool-search {
+    padding-left: 14px;
   }
-  .about-section .section-kicker {
-    letter-spacing: 1px;
-    font-size: 7px;
+  .popular-searches {
+    gap: 6px;
   }
-  .about-section h2 {
-    font-size: 19px;
+  .popular-searches button {
+    padding: 8px 10px;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tool-card,
-  .primary-action {
-    transition: none;
+  .tool-title {
+    flex-wrap: wrap;
+    gap: 4px 8px;
   }
-  .tool-card:hover {
-    transform: none;
+  .artwork-cta {
+    right: 14px;
+    bottom: 14px;
   }
 }
-
 </style>

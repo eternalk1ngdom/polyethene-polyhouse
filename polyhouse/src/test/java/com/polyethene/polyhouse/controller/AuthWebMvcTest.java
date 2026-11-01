@@ -86,15 +86,11 @@ class AuthWebMvcTest {
     }
 
     @Test
-    void shouldExposeRegistrationWithoutBearerAndOnlyReturnSafeProfile() throws Exception {
-        when(service.register(any())).thenReturn(profile(UserRoleEnum.USER));
+    void shouldClosePublicRegistrationEvenWithForgedRole() throws Exception {
         mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"alice\",\"password\":\"fixture-credentials\",\"nickname\":\"居民\",\"role\":\"OWNER\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value("42"))
-                .andExpect(jsonPath("$.data.role").value("USER"))
-                .andExpect(jsonPath("$.data.passwordHash").doesNotExist())
-                .andExpect(jsonPath("$.data.password").doesNotExist());
-        verify(service).register(new RegisterDTO("alice", "fixture-credentials", "居民"));
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40300));
+        verifyNoInteractions(service);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.polyethene.polyhouse.interceptor;
 
 import com.polyethene.polyhouse.common.annotation.RequireRole;
+import com.polyethene.polyhouse.common.annotation.AllowInitialPassword;
 import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.context.UserContext;
@@ -45,6 +46,9 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
         }
         try {
             UserProfileVO user = authService.getCurrentUser(arguments.requireSession(request).token());
+            if (user.passwordChangeRequired() && !method.hasMethodAnnotation(AllowInitialPassword.class)) {
+                throw new BusinessException(ErrorCode.PASSWORD_CHANGE_REQUIRED);
+            }
             // 两处要求同时满足，方法上的低角色不能意外放松控制器声明的高权限门槛。
             if ((classRole != null && !user.role().hasPermission(classRole.value()))
                     || (methodRole != null && !user.role().hasPermission(methodRole.value()))) {

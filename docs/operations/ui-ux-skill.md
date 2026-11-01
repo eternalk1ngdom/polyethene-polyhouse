@@ -77,6 +77,14 @@ Rename-Item -LiteralPath '.agents/skills/ui-ux-pro-max/SKILL.md.disabled' -NewNa
 
 另逐项验证暂存区内的 73 个技能文件与 SHA-256 清单一致，确认 Git 换行处理没有改变已审核字节。自有脚本/文档的差异空白检查通过；上游原有 46 处尾随空白按固定来源原样保留，未为了格式化改写第三方代码或数据。新增行数主要来自离线目录与来源元数据，不是网站业务代码变化。
 
+## GitHub 语言统计修正（2026-10-29）
+
+用户发现 Python 占比偏高；本地核对 15 个 Git 跟踪的 Python 文件、约 282 KiB，均来自本技能的检索脚本和上游测试。根目录 `.gitattributes` 现为 `.agents/skills/ui-ux-pro-max/**` 设置 `linguist-vendored`，将该第三方目录排除在语言统计之外；不删除技能、不修改上游文件或散列清单，也不改变网站运行行为。
+
+规则仅作用于此固定技能目录，保留其内部 `* -text` 的原字节换行策略；不把整个 `.agents` 或项目自有代码标作第三方。撤回时移除根目录这条属性及说明即可，技能安装/停用无需变化。属性含义见 [Linguist 官方说明](https://github.com/github-linguist/linguist/blob/main/docs/overrides.md)。
+
+本轮后端 `mvn -q compile -DskipTests`、前端 `npm run build` 均通过，技能 73 个文件完整性通过；Git 属性检查确认规则生效且自有 Java/TS 文件未被排除。未重复业务测试；仅本地提交配置与日志，不推送或合并远端。GitHub 统计需等变更进入远端默认分支后重新计算，不能把本地属性检查当作远端占比已更新，见 [GitHub 文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-repository-languages)。
+
 ## 默认分支语言统计补齐（2026-10-31）
 
 GitHub 首页只统计默认分支。核对默认分支为 main，其根 `.gitattributes` 尚无技能排除规则；开发分支已有规则且 `git check-attr` 正确，因此此前推送开发分支不会改变首页 Python 31.5%。修复前公开语言 API 返回 Python 289083 字节，15 个跟踪 Python 文件均来自固定技能目录。
@@ -84,3 +92,5 @@ GitHub 首页只统计默认分支。核对默认分支为 main，其根 `.gitat
 本次使用基于远端 main 的独立工作区，仅补 `.agents/skills/ui-ux-pro-max/** linguist-vendored` 和说明记录；不合入其他业务提交，不修改默认分支设置，不伪装 Python 为其他语言，也不隐藏整个项目的 Python。保留技能及其内部换行策略、许可和散列清单。撤回这条根属性即可恢复统计，开发功能不受影响。
 
 属性/完整性检查确认配置范围；推送后等待 GitHub 重算，以公开 `/repos/eternalk1ngdom/polyethene-polyhouse/languages` 不再包含 Python 为远端验收标准，最终结果见当轮汇报。依据：[GitHub 语言统计](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-repository-languages)、[Linguist 第三方文件属性](https://github.com/github-linguist/linguist/blob/main/docs/overrides.md)。
+
+本轮远端复核已通过：main 的独立补丁为 `45faa2b`，推送后语言 API 已不再返回 Python。当前开发分支只同步本说明和当前日志，不更改原本正确的排除属性，也不提前合入业务代码。

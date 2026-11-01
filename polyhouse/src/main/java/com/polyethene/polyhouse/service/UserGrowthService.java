@@ -12,6 +12,12 @@ public interface UserGrowthService {
      */
     User rewardDailyLogin(long userId);
 
+    /** Token 认证在同一用户锁内先核对凭据版本再结算，旧 Token 不能先触发奖励后才被拒绝。 */
+    User rewardDailyLogin(long userId, long credentialVersion);
+
     /** 读取同一用户锁下的成长及当日流水快照；此方法自身不插入流水或发放奖励。 */
     UserGrowthVO getStatus(long userId);
+
+    /** 在成长快照锁内核对 Token 版本和首次改密限制，避免并发改密后继续读受保护资料。 */
+    UserGrowthVO getStatus(long userId, long credentialVersion);
 }

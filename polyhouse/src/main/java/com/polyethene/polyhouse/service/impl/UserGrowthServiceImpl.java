@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.constant.UserGrowthRules;
 import com.polyethene.polyhouse.common.exception.BusinessException;
+import com.polyethene.polyhouse.common.security.SessionSecurity;
 import com.polyethene.polyhouse.mapper.UserGrowthMapper;
 import com.polyethene.polyhouse.mapper.UserMapper;
 import com.polyethene.polyhouse.model.entity.User;
@@ -44,6 +45,17 @@ public class UserGrowthServiceImpl implements UserGrowthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public User rewardDailyLogin(long userId) {
+        return rewardLocked(userId, null);
+    }
+
+    /** 与认证版本核对共用同一次锁定读，不增加每请求的完整认证或数据库查询。 */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public User rewardDailyLogin(long userId, long credentialVersion) {
+        return rewardLocked(userId, credentialVersion);
+    }
+
+    private User rewardLocked(long userId, Long credentialVersion) {
         if (userId <= 0) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER);
         }
@@ -54,6 +66,10 @@ public class UserGrowthServiceImpl implements UserGrowthService {
                     || user.getRole() == null) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
             }
+            SessionSecurity.requireCurrent(user, credentialVersion == null
+                    ? Objects.requireNonNullElse(user.getCredentialVersion(), -1L) : credentialVersion);
+            // 临时凭据尚未完成正式登录，不发放成长奖励，也不读取无关流水；本人资料仍可用于改密。
+            if (Boolean.TRUE.equals(user.getPasswordChangeRequired())) return user;
             LocalDate rewardDate = LocalDate.ofInstant(clock.instant(), UserGrowthRules.REWARD_ZONE);
             if (rewards.findRewardForUpdate(userId, UserGrowthRules.DAILY_LOGIN_ACTION, rewardDate) != null) {
                 return user;
@@ -93,6 +109,17 @@ public class UserGrowthServiceImpl implements UserGrowthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public UserGrowthVO getStatus(long userId) {
+        return readStatusLocked(userId, null);
+    }
+
+    /** 受保护 HTTP 查询不能绕过凭据版本及首次改密闸门。 */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public UserGrowthVO getStatus(long userId, long credentialVersion) {
+        return readStatusLocked(userId, credentialVersion);
+    }
+
+    private UserGrowthVO readStatusLocked(long userId, Long credentialVersion) {
         if (userId <= 0) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER);
         }
@@ -102,6 +129,9 @@ public class UserGrowthServiceImpl implements UserGrowthService {
                     || user.getRole() == null) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
             }
+            SessionSecurity.requireCurrent(user, credentialVersion == null
+                    ? Objects.requireNonNullElse(user.getCredentialVersion(), -1L) : credentialVersion);
+            SessionSecurity.requireFullAccess(user);
             if (user.getExperience() == null || user.getExperience() < 0 || user.getCoins() == null || user.getCoins() < 0) {
                 throw unavailable();
             }

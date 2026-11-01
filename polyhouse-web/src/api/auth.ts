@@ -11,7 +11,9 @@ export interface UserProfile {
   /** 服务端管理的头像路径；展示组件仅加载本项目受控图片。 */
   avatar: string | null
   /** 展示角色，实际权限始终由后端决定。 */
-  role: 'USER' | 'INSIDER' | 'OWNER'
+  role: 'USER' | 'ADMIN' | 'INSIDER' | 'OWNER'
+  /** 临时凭据的限制由服务端给出，前端据此引导改密，不能自行解除。 */
+  passwordChangeRequired: boolean
   /** 后端结算的累计经验，不由浏览器自行增加。 */
   experience: string
   /** 等级独立于角色权限。 */
@@ -28,10 +30,12 @@ export interface LoginRequest {
   password: string
 }
 
-/** 注册资料不包含角色、成长或账号状态等服务端管理字段。 */
-export interface RegisterRequest extends LoginRequest {
-  /** 昵称与登录账号分离。 */
-  nickname: string
+/** 只修改当前会话本人密码，不接受账号编号、角色或凭据版本。 */
+export interface PasswordChangeRequest {
+  /** 重新确认当前凭据，原样发送，不保存。 */
+  currentPassword: string
+  /** 新密码仅存在于当前表单与请求内存。 */
+  newPassword: string
 }
 
 /** 登录契约只向会话管理交付经过校验的 Token 与安全用户资料。 */
@@ -84,7 +88,8 @@ export function decodeUserProfile(value: unknown): UserProfile {
     !(typeof value.nickname === 'string' || value.nickname === null) ||
     !(typeof value.avatar === 'string' || value.avatar === null) ||
     typeof value.role !== 'string' ||
-    !['USER', 'INSIDER', 'OWNER'].includes(value.role) ||
+    !['USER', 'ADMIN', 'INSIDER', 'OWNER'].includes(value.role) ||
+    typeof value.passwordChangeRequired !== 'boolean' ||
     !decimal(value.experience) ||
     !decimal(value.coins) ||
     typeof value.level !== 'number' ||
@@ -99,6 +104,7 @@ export function decodeUserProfile(value: unknown): UserProfile {
     nickname: value.nickname,
     avatar: value.avatar,
     role: value.role as UserProfile['role'],
+    passwordChangeRequired: value.passwordChangeRequired,
     experience: value.experience,
     level: value.level,
     coins: value.coins,
@@ -126,21 +132,6 @@ function decodeLogin(value: unknown): LoginResponse {
   }
 }
 
-/** 注册成功不等于登录，不自动建立会话或重复提交密码。 */
-export async function register(request: RegisterRequest): Promise<UserProfile> {
-  try {
-    return await apiRequest(
-      { method: 'POST', url: '/auth/register', data: request },
-      decodeUserProfile,
-    )
-  } catch (error: unknown) {
-    if (error instanceof ApiError && error.status === 409) {
-      throw new ApiError('账号已存在，请更换账号或直接登录', 409, error.code)
-    }
-    throw error
-  }
-}
-
 /** 浏览器统一使用 PC 会话，屏幕尺寸变化不切换服务端终端编号。 */
 export async function login(request: LoginRequest): Promise<LoginResponse> {
   try {
@@ -160,36 +151,73 @@ export function getCurrentUser(token: string): Promise<UserProfile> {
   return apiRequest({ method: 'GET', url: '/auth/me' }, decodeUserProfile, token)
 }
 
-/** 上传只修改头像，避免返回整份旧资料覆盖并发成长状态。 */
-export interface AvatarChange {
-  /** 随机版本路径使缓存自然失效。 */
-  avatar: string
-  /** 成功后由后端返回当日剩余次数。 */
-  remainingToday: number
+/** 改密不是可自动重试的查询；成功返回空结果，调用方需清理本次会话并重新登录。 */
+export function changePassword(request: PasswordChangeRequest, token: string): Promise<void> {
+  return apiRequest(
+    { method: 'POST', url: '/auth/password/change', data: request },
+    (value) => {
+      if (value !== null) throw new ApiError('改密结果不完整，请重新登录核对', 502)
+    },
+    token,
+  )
 }
 
-/** 只允许本项目的版本化头像路径，拒绝第三方跟踪地址和可执行协议。 */
+/** 上传只产生审核申请，不能用响应把待审头像写入公共资料。 */
+export interface AvatarChange {
+  /** 服务端申请编号。 */
+  submissionId: string
+  /** 核对提交结果的防重编号。 */
+  requestId: string
+  /** 重试可返回被替代/已决定的历史申请。 */
+  status: string
+  /** 今日剩余提交额度。 */
+  remainingToday: number
+}
+/** 公开头像地址仅允许本项目版本化资源。 */
 export function isAvatarPath(value: unknown): value is string {
   return typeof value === 'string' && /^\/api\/media\/avatars\/[a-f0-9]{32}\.jpg$/.test(value)
 }
-
-/** 浏览器只上传裁剪后的小图，不把原图、路径、角色或用户编号发给后端。 */
-export function uploadAvatar(file: Blob, token: string): Promise<AvatarChange> {
+/** UUID 由浏览器安全随机源产生，支持普通 IP 的开发上下文。 */
+export function newProfileRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  // 固定 UUID v4 的版本与变体位，其余位保留安全随机值。
+  bytes[6] = (bytes[6]! & 15) | 64
+  bytes[8] = (bytes[8]! & 63) | 128
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+/** 同一图像意图沿用请求号；旧响应没有申请字段时拒绝，不能误报已发布。 */
+export function uploadAvatar(
+  file: Blob,
+  token: string,
+  requestId = newProfileRequestId(),
+): Promise<AvatarChange> {
   const data = new FormData()
   data.append('file', file, 'avatar.jpg')
+  data.append('requestId', requestId)
   return apiRequest(
-    { method: 'POST', url: '/auth/avatar', data },
+    { method: 'POST', url: '/auth/avatar/submissions', data },
     (value) => {
       if (
         !isRecord(value) ||
-        !isAvatarPath(value.avatar) ||
-        typeof value.remainingToday !== 'number' ||
+        typeof value.id !== 'string' ||
+        !/^[1-9]\d*$/.test(value.id) ||
+        value.requestId !== requestId ||
+        value.kind !== 'AVATAR' ||
+        !['PENDING', 'APPROVED', 'REJECTED', 'SUPERSEDED', 'EXPIRED', 'INVALIDATED'].includes(
+          String(value.status),
+        ) ||
         !Number.isInteger(value.remainingToday) ||
-        value.remainingToday < 0 ||
-        value.remainingToday > 4
+        Number(value.remainingToday) < 0 ||
+        Number(value.remainingToday) > 5
       )
-        throw new ApiError('头像响应不完整，请刷新资料确认保存结果', 502)
-      return { avatar: value.avatar, remainingToday: value.remainingToday }
+        throw new ApiError('头像申请响应不完整，请刷新申请状态核对', 502)
+      return {
+        submissionId: value.id,
+        requestId,
+        status: String(value.status),
+        remainingToday: Number(value.remainingToday),
+      }
     },
     token,
   )

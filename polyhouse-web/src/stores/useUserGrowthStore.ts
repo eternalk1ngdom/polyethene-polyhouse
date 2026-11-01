@@ -13,6 +13,7 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
   const errorMessage = ref('')
   const summary = computed(() =>
     userStore.isLoggedIn &&
+    !userStore.requiresPasswordChange &&
     loadedToken.value === userStore.token &&
     data.value?.userId === userStore.user?.id
       ? data.value
@@ -40,7 +41,7 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
 
   /** 同一身份的并发刷新去重；退出、换号和旧失败响应不能污染新账号。 */
   function refresh(): Promise<void> {
-    if (!userStore.isLoggedIn || !userStore.user) {
+    if (!userStore.isLoggedIn || !userStore.user || userStore.requiresPasswordChange) {
       reset()
       return Promise.resolve()
     }
@@ -56,6 +57,7 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
     const current = (): boolean =>
       generation === submittedGeneration &&
       userStore.isLoggedIn &&
+      !userStore.requiresPasswordChange &&
       userStore.token === token &&
       userStore.user?.id === userId
     const promise = (async () => {
@@ -94,10 +96,15 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
   }
 
   watch(
-    [() => userStore.token, () => userStore.user?.id, () => userStore.isLoggedIn],
+    [
+      () => userStore.token,
+      () => userStore.user?.id,
+      () => userStore.isLoggedIn,
+      () => userStore.requiresPasswordChange,
+    ],
     () => {
       reset()
-      if (userStore.isLoggedIn) void refresh()
+      if (userStore.isLoggedIn && !userStore.requiresPasswordChange) void refresh()
     },
     { immediate: true },
   )

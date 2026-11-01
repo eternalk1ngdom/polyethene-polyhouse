@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>聚妙屋 · 开门小屋</title>
+  <!-- 白底在页面上融入背景，也让深色浏览器标签中的墨色轮廓保持清楚。 -->
+  <rect width="64" height="64" rx="14" fill="#fff" />
+  <!-- 三块粗几何组成屋檐和门柱；入口保持敞开，小尺寸也不依赖微小细节。 -->
+  <g fill="#0d0c22">
+    <path d="M8 29 29 11a4.6 4.6 0 0 1 6 0l21 18-6 7-18-16-18 16Z" />
+    <rect x="16" y="36" width="10" height="18" rx="2" />
+    <rect x="38" y="36" width="10" height="18" rx="2" />
+  </g>
+</svg>

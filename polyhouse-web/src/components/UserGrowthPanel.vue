@@ -21,7 +21,7 @@ const growth = useUserGrowthStore()
           <p v-if="!compact" class="eyebrow">A LITTLE GROWTH, EVERY DAY</p>
           <h2>
             <ElIcon v-if="!compact"><Trophy /></ElIcon
-            >{{ compact ? '成长进度' : '在小屋，慢慢成长' }}
+            >{{ compact ? '成长进度' : '每一天，都有一点新成长' }}
           </h2>
         </div>
         <span class="level-badge"
@@ -43,7 +43,7 @@ const growth = useUserGrowthStore()
         :percentage="growth.summary.progressPercent"
         :show-text="false"
         :stroke-width="compact ? 5 : 8"
-        :color="growth.summary.maxLevelReached ? '#b478a4' : '#956073'"
+        :color="growth.summary.maxLevelReached ? 'var(--ph-accent-strong)' : 'var(--ph-brand)'"
         :aria-label="`成长进度 ${growth.summary.progressPercent}%`"
       />
       <p class="next-level">
@@ -118,7 +118,7 @@ const growth = useUserGrowthStore()
 }
 .eyebrow {
   font-size: 8px;
-  color: #8e6a77;
+  color: var(--ph-muted);
   letter-spacing: 1.3px;
   margin: 0 0 8px;
 }
@@ -131,11 +131,11 @@ h2 {
   font-weight: 600;
 }
 h2 .el-icon {
-  color: #a07283;
+  color: var(--ph-muted);
 }
 .level-badge {
-  background: #fdf7f9;
-  color: #83485d;
+  background: var(--ph-soft);
+  color: var(--ph-ink);
   padding: 7px 11px;
   border-radius: 7px;
   font-size: 14px;
@@ -145,7 +145,7 @@ h2 .el-icon {
 .level-badge > span {
   font-size: 11px;
   font-weight: 400;
-  color: #8e6a77;
+  color: var(--ph-muted);
 }
 .progress-copy {
   display: flex;
@@ -153,10 +153,10 @@ h2 .el-icon {
   gap: 12px;
   margin-bottom: 12px;
   font-size: 13px;
-  color: #8b6874;
+  color: var(--ph-muted);
 }
 .progress-copy strong {
-  color: var(--ph-green);
+  color: var(--ph-brand);
 }
 .next-level {
   font-size: 12px;
@@ -177,26 +177,26 @@ h2 .el-icon {
   margin-top: 24px;
   padding: 18px 20px;
   border-radius: 10px;
-  border: 1px solid #efe2e7;
+  border: 1px solid var(--ph-line);
   background: #ffffff;
 }
 .daily-reward.claimed {
   background: #ffffff;
-  border-color: #f3dfe6;
+  border-color: var(--ph-line);
 }
 .reward-title {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  color: #824e61;
+  color: var(--ph-ink);
 }
 .reward-title strong {
   font-weight: 500;
 }
 .daily-reward p {
   font-size: 15px;
-  color: #7a3c52;
+  color: var(--ph-ink);
   margin: 13px 0 10px;
 }
 .daily-reward p > span {
@@ -204,7 +204,7 @@ h2 .el-icon {
 }
 .daily-reward small {
   font-size: 10px;
-  color: #8d6c78;
+  color: var(--ph-muted);
 }
 .growth-note {
   color: var(--ph-muted);
@@ -213,7 +213,7 @@ h2 .el-icon {
   margin: 18px 0 0;
 }
 .refresh-growth {
-  color: var(--ph-green);
+  color: var(--ph-brand);
   font-size: 12px;
   margin: 12px 0 -6px;
 }

@@ -30,7 +30,9 @@ class UserProfileVOTest {
         JsonNode response = objectMapper.readTree(objectMapper.writeValueAsString(Result.success(UserProfileVO.from(user))));
         JsonNode profile = response.get("data");
         assertThat(profile.properties()).extracting(Map.Entry::getKey)
-                .containsExactlyInAnyOrder("id", "username", "nickname", "avatar", "role", "experience", "level", "coins");
+                .containsExactlyInAnyOrder("id", "username", "nickname", "avatar", "role", "experience", "level", "coins", "passwordChangeRequired");
+        assertThat(profile.get("passwordChangeRequired").asBoolean()).isFalse();
+        assertThat(profile.has("credentialVersion")).isFalse();
         assertThat(profile.get("id").isTextual()).isTrue();
         assertThat(profile.get("id").asText()).isEqualTo("9223372036854775807");
         assertThat(profile.get("role").asText()).isEqualTo("INSIDER");

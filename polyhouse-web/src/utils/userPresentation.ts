@@ -9,6 +9,7 @@ export function userDisplayName(profile: UserProfile): string {
 export function userRoleLabel(role: UserProfile['role']): string {
   const labels: Record<UserProfile['role'], string> = {
     USER: '普通居民',
+    ADMIN: '管理员',
     INSIDER: '特邀熟人',
     OWNER: '聚妙屋屋主',
   }

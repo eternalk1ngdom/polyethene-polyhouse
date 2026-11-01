@@ -14,6 +14,8 @@ public enum ErrorCode {
     UNAUTHORIZED(40100, "请先登录", HttpStatus.UNAUTHORIZED),
     /** 已有身份但达不到资源的角色要求。 */
     FORBIDDEN(40300, "权限不足", HttpStatus.FORBIDDEN),
+    /** 临时凭据仍有效但只能改密，不能按 401 清理掉完成改密所需的会话。 */
+    PASSWORD_CHANGE_REQUIRED(40301, "请先修改初始密码", HttpStatus.FORBIDDEN),
     /** 请求目标不存在，不向客户端披露内部资源路径。 */
     NOT_FOUND(40400, "请求资源不存在", HttpStatus.NOT_FOUND),
     /** 请求方法与接口声明不一致，同时保留框架的 Allow 响应头。 */

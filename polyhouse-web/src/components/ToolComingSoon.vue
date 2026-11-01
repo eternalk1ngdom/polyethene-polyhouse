@@ -61,7 +61,7 @@ const toolIcons = { Switch, Crop }
   padding: 8px 0;
 }
 .back-link:hover {
-  color: var(--ph-green);
+  color: var(--ph-brand);
 }
 .tool-panel {
   background: white;
@@ -76,13 +76,13 @@ const toolIcons = { Switch, Crop }
   display: grid;
   place-items: center;
   border-radius: 15px;
-  background: #fdf7f9;
-  color: #8f4a63;
+  background: var(--ph-soft);
+  color: var(--ph-ink);
   font-size: 30px;
 }
-.apricot .tool-icon {
-  background: #f8f5fc;
-  color: #776989;
+.peach .tool-icon {
+  background: var(--ph-peach);
+  color: var(--ph-muted);
 }
 .tool-subtitle {
   font-size: 11px;
@@ -104,11 +104,11 @@ h1 {
   align-items: center;
   gap: 10px;
   background: #ffffff;
-  border: 1px solid #f1dce3;
+  border: 1px solid var(--ph-line);
   border-radius: 8px;
   padding: 15px 18px;
   font-size: 13px;
-  color: #7e5866;
+  color: var(--ph-muted);
 }
 .feature-list {
   margin-top: 32px;
@@ -133,7 +133,7 @@ li {
 }
 li > span {
   margin-right: 10px;
-  color: #997683;
+  color: var(--ph-muted);
 }
 .availability-note {
   font-size: 12px;
@@ -146,13 +146,13 @@ li > span {
   gap: 20px;
   padding: 13px 18px;
   margin-top: 16px;
-  color: #613e4d;
-  background: var(--ph-green);
+  color: white;
+  background: var(--ph-brand);
   border-radius: 8px;
   font-size: 13px;
 }
 .home-action:hover {
-  background: #f7e8ee;
+  background: var(--ph-accent-strong);
 }
 @media (max-width: 640px) {
   .tool-page {

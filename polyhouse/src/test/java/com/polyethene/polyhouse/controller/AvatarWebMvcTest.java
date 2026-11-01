@@ -2,7 +2,9 @@ package com.polyethene.polyhouse.controller;
 
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.config.WebMvcConfig;
-import com.polyethene.polyhouse.model.vo.AvatarVO;
+import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
+import com.polyethene.polyhouse.common.constant.*;
+import java.time.LocalDateTime;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
 import com.polyethene.polyhouse.service.AvatarService;
@@ -46,19 +48,19 @@ class AvatarWebMvcTest {
     @Test
     void ordinaryUserCanUploadOwnFileWithoutAcceptingUserId() throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42", "fixture", "居民", null, UserRoleEnum.USER, "10", 1, "1"));
-        when(avatars.upload(any(), eq("fixture"))).thenReturn(new AvatarVO("/api/media/avatars/" + NAME, 4));
-        mvc.perform(multipart("/api/auth/avatar").file(new MockMultipartFile("file", new byte[]{1}))
-                        .param("userId", "99").header("Authorization", "Bearer fixture"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.remainingToday").value(4));
+        when(avatars.upload(any(), eq("fixture"))).thenReturn(new ProfileSubmissionVO("123","42","fixture",ProfileField.AVATAR,ProfileReviewStatus.PENDING,"1","aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",null,null,LocalDateTime.now(),LocalDateTime.now().plusDays(7),4));
+        mvc.perform(multipart("/api/auth/avatar/submissions").file(new MockMultipartFile("file", new byte[]{1}))
+                        .param("userId", "99").param("requestId","aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee").header("Authorization", "Bearer fixture"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.status").value("PENDING")).andExpect(jsonPath("$.data.avatar").doesNotExist()).andExpect(jsonPath("$.data.remainingToday").value(4));
         verify(avatars).upload(any(), eq("fixture"));
     }
 
     @Test
     void anonymousCannotUploadAndMissingFileIsBadRequest() throws Exception {
-        mvc.perform(multipart("/api/auth/avatar").file(new MockMultipartFile("file", new byte[]{1})))
+        mvc.perform(multipart("/api/auth/avatar/submissions").file(new MockMultipartFile("file", new byte[]{1})))
                 .andExpect(status().isUnauthorized());
         when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42", "fixture", "居民", null, UserRoleEnum.USER, "10", 1, "1"));
-        mvc.perform(multipart("/api/auth/avatar").header("Authorization", "Bearer fixture"))
+        mvc.perform(multipart("/api/auth/avatar/submissions").header("Authorization", "Bearer fixture"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(avatars);
     }
@@ -73,5 +75,12 @@ class AvatarWebMvcTest {
         mvc.perform(get("/api/media/avatars/private.txt")).andExpect(status().isNotFound());
         mvc.perform(get("/api/media/avatars/.cleanup/" + NAME)).andExpect(status().isNotFound());
         verifyNoInteractions(auth, avatars);
+    }
+    @Test
+    void legacyImmediateUploadPathIsClosedEvenWithValidIdentity() throws Exception {
+        when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42","fixture","居民",null,UserRoleEnum.USER,"0",1,"0"));
+        mvc.perform(multipart("/api/auth/avatar").file(new MockMultipartFile("file",new byte[]{1})).header("Authorization","Bearer fixture"))
+            .andExpect(status().isConflict());
+        verifyNoInteractions(avatars);
     }
 }

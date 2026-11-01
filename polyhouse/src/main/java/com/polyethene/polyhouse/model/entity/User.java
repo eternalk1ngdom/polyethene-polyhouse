@@ -27,6 +27,14 @@ public class User {
     @JsonIgnore
     private String passwordHash;
 
+    /** 数据库凭据版本与 JWT 对照；通用实体更新不能降低版本或意外恢复旧会话。 */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Long credentialVersion = 0L;
+
+    /** 只对新发放/重置的临时凭据启用，历史账号迁移默认 false。 */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Boolean passwordChangeRequired = false;
+
     private String nickname;
 
     private String avatar;
@@ -95,6 +103,20 @@ public class User {
     /** 仅接收哈希结果；明文密码应停留在请求处理边界。 */
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    /** 返回凭据版本供服务端会话核验，不向普通资料响应暴露。 */
+    public Long getCredentialVersion() { return credentialVersion; }
+
+    /** 接收数据库或受控安全事务的版本快照，不允许通用更新覆盖。 */
+    public void setCredentialVersion(Long credentialVersion) { this.credentialVersion = credentialVersion; }
+
+    /** 返回当前账号是否仅可进行首次改密等必要操作。 */
+    public Boolean getPasswordChangeRequired() { return passwordChangeRequired; }
+
+    /** 接收数据库的临时凭据状态，实际写入由安全业务定向执行。 */
+    public void setPasswordChangeRequired(Boolean passwordChangeRequired) {
+        this.passwordChangeRequired = passwordChangeRequired;
     }
 
     /** 返回面向界面展示的昵称。 */

@@ -16,6 +16,7 @@ interface UnauthorizedHandler {
 /** 复用连接配置和有限等待时间；实例独立于页面，不从用户缓存推断身份。 */
 export const apiClient = axios.create({ baseURL: '/api', timeout: 12000 })
 let unauthorizedHandler: UnauthorizedHandler | undefined
+let passwordChangeRequiredHandler: UnauthorizedHandler | undefined
 
 /** 只传播安全状态和固定提示，不附带可能含密码或 Token 的 Axios 请求、响应或 cause。 */
 export class ApiError extends Error {
@@ -41,12 +42,18 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
   unauthorizedHandler = handler
 }
 
+/** 临时凭据被业务拒绝时仍保留改密所需会话；回调只能影响发出请求时的同一身份。 */
+export function setPasswordChangeRequiredHandler(handler: UnauthorizedHandler): void {
+  passwordChangeRequiredHandler = handler
+}
+
 /** JSON 对象的最小类型收窄，数组和 null 都不是合法响应外壳。 */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function safeError(status: number, code: number | null = null): ApiError {
+  if (code === 40301) return new ApiError('请先修改初始密码', 403, code)
   if (status === 401 || code === 40100) return new ApiError('登录状态已失效，请重新登录', 401, code)
   if (status === 403 || code === 40300)
     return new ApiError('当前账号没有执行此操作的权限', 403, code)
@@ -94,6 +101,47 @@ export async function apiRequest<T>(
             )
           : new ApiError('服务返回的数据不完整，请稍后重试', 502)
     if (safe.sessionExpired && submittedToken) unauthorizedHandler?.(submittedToken)
+    if (safe.code === 40301 && submittedToken) passwordChangeRequiredHandler?.(submittedToken)
+    throw safe
+  }
+}
+
+/** 私有审核图沿用统一会话失效处理；媒体字节不强行套 JSON Result 外壳。 */
+export async function apiImage(path: string, submittedToken: string): Promise<Blob> {
+  try {
+    const response = await apiClient.request<Blob>({
+      method: 'GET',
+      url: path,
+      responseType: 'blob',
+      headers: { Authorization: `Bearer ${submittedToken}`, 'Cache-Control': 'no-store' },
+    })
+    if (
+      !(response.data instanceof Blob) ||
+      response.data.type !== 'image/jpeg' ||
+      response.data.size === 0 ||
+      response.data.size > 256 * 1024
+    )
+      throw new ApiError('待审图片响应不完整，请重试', 502)
+    return response.data
+  } catch (failure: unknown) {
+    let safe: ApiError
+    if (failure instanceof ApiError) safe = failure
+    else if (axios.isAxiosError(failure)) {
+      let code: number | null = null
+      const raw: unknown = failure.response?.data
+      // Blob 错误仍只读有界 Result 的业务码，不传播原始响应或 Axios 请求对象。
+      if (raw instanceof Blob && raw.size < 8192) {
+        try {
+          const body: unknown = JSON.parse(await raw.text())
+          if (isRecord(body) && typeof body.code === 'number') code = body.code
+        } catch {
+          code = null
+        }
+      }
+      safe = safeError(failure.response?.status ?? 0, code)
+    } else safe = new ApiError('待审图片暂时无法读取', 502)
+    if (safe.sessionExpired) unauthorizedHandler?.(submittedToken)
+    if (safe.code === 40301) passwordChangeRequiredHandler?.(submittedToken)
     throw safe
   }
 }
