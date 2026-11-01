@@ -125,6 +125,18 @@ export function parseRuleLibrary(serialized: string): RuleLibrary {
   return validateRuleLibrary(value)
 }
 
+/** 文件按实际字节限额且严格解码，避免乱码被静默替换后成为另一份有效词库。 */
+export function parseRuleLibraryBytes(bytes: Uint8Array): RuleLibrary {
+  if (bytes.byteLength > RULE_LIBRARY_MAX_BYTES) throw new Error('备份文件超过 256 KiB')
+  let serialized: string
+  try {
+    serialized = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('备份文件必须为有效的 UTF-8 JSON')
+  }
+  return parseRuleLibrary(serialized)
+}
+
 /** 输出唯一的固定字段格式，不执行脚本、不生成文件也不读写存储。 */
 export function serializeRuleLibrary(value: unknown): string {
   return JSON.stringify(validateRuleLibrary(value))

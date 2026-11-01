@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import {
   ElButton,
   ElCheckbox,
@@ -10,8 +10,8 @@ import {
   type InputInstance,
 } from 'element-plus'
 import type { ReplaceRule } from '../core/acReplacer'
-import type { RuleSet } from '../utils/ruleLibrary'
-import { useRuleLibraryManager } from '../composables/useRuleLibraryManager'
+import { RULE_LIBRARY_MAX_BYTES, type RuleSet } from '../utils/ruleLibrary'
+import { useRuleLibraryManager, type RuleLibraryImport } from '../composables/useRuleLibraryManager'
 
 /** 编辑规则由父页面持有；词库只在用户明确载入时发出替换副本。 */
 interface Props {
@@ -28,12 +28,21 @@ const { state, selectedId, pending, hasUnsaved, issue } = manager
 const expanded = ref(false)
 const host = ref<HTMLElement>()
 const nameInput = ref<InputInstance>()
+const importInput = ref<HTMLInputElement>()
+const importReading = ref(false)
+const importPreview = shallowRef<RuleLibraryImport>()
+const importFilename = ref('')
+// 关闭、重新选择和卸载后，旧文件读取结果都必须失效。
+let importRevision = 0
+let disposed = false
 const selected = computed(() => state.value.data.sets.find((set) => set.id === selectedId.value))
 const dialogOpen = ref(false)
 // ElDialog 的旧关闭回调结束前不重开或再次提交，避免新弹窗被旧回调关掉。
 const closing = ref(false)
-const controlsDisabled = computed(() => pending.value || closing.value)
-const mode = ref<'save' | 'rename' | 'load' | 'delete' | 'clear' | 'reload' | 'export'>('save')
+const controlsDisabled = computed(() => pending.value || closing.value || importReading.value)
+const mode = ref<'save' | 'rename' | 'load' | 'delete' | 'clear' | 'reload' | 'export' | 'import'>(
+  'save',
+)
 const dialogTarget = shallowRef<RuleSet>()
 const name = ref('')
 const overwriteConfirmed = ref(false)
@@ -52,6 +61,7 @@ const title = computed(
       clear: '清除本机词库',
       reload: '重新读取本机词库',
       export: '导出未保存候选',
+      import: '导入并替换全部词库',
     })[mode.value],
 )
 const notice = computed(
@@ -61,6 +71,23 @@ const canRetry = computed(() => hasUnsaved.value && state.value.status !== 'conf
 watch(name, () => {
   overwriteConfirmed.value = false
   issue.value = ''
+})
+watch(
+  dialogOpen,
+  (isOpen) => {
+    if (!isOpen && mode.value === 'import') {
+      importRevision++
+      importReading.value = false
+      importPreview.value = undefined
+      manager.cancelImport()
+    }
+  },
+  { flush: 'sync' },
+)
+onBeforeUnmount(() => {
+  disposed = true
+  importRevision++
+  manager.cancelImport()
 })
 
 /** 每次打开固定操作目标，避免异步保存后选择变化导致误改另一组。 */
@@ -132,9 +159,53 @@ function downloadLibrary(allowUnsaved = false): boolean {
   }
 }
 
+/** 文件入口仅选择本机备份；同一文件可以再次选择，不上传或改动其他文件。 */
+function chooseImport(): void {
+  if (controlsDisabled.value || hasUnsaved.value || dialogOpen.value) return
+  if (importInput.value) {
+    importInput.value.value = ''
+    importInput.value.click()
+  }
+}
+
+async function onImportFileChange(event: Event): Promise<void> {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement)) return
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) await readImportFile(file)
+}
+
+/** 读取前限额、读取后校验；读期间允许取消，不让迟到结果打开弹窗或准备写入。 */
+async function readImportFile(file: File): Promise<void> {
+  if (disposed || controlsDisabled.value || hasUnsaved.value || dialogOpen.value) return
+  feedback.value = ''
+  issue.value = ''
+  if (file.size > RULE_LIBRARY_MAX_BYTES) {
+    issue.value = '备份文件超过 256 KiB，未读取或导入'
+    return
+  }
+  importPreview.value = undefined
+  importFilename.value = file.name
+  manager.cancelImport()
+  open('import')
+  const revision = ++importRevision
+  importReading.value = true
+  const current = () =>
+    !disposed && revision === importRevision && dialogOpen.value && mode.value === 'import'
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    if (current()) importPreview.value = manager.prepareImport(bytes)
+  } catch {
+    if (current()) issue.value = '无法读取备份文件，现有词库未改变，请重新选择文件'
+  } finally {
+    if (revision === importRevision) importReading.value = false
+  }
+}
+
 /** 管理修改须持久化成功才结束；导出只等待下载请求成功，不解除候选状态。 */
 async function confirm(): Promise<void> {
-  if (pending.value || closing.value || !dialogOpen.value) return
+  if (pending.value || closing.value || importReading.value || !dialogOpen.value) return
   feedback.value = ''
   let success = false
   if (mode.value === 'save') {
@@ -153,6 +224,11 @@ async function confirm(): Promise<void> {
   else if (mode.value === 'clear') success = await manager.clear()
   else if (mode.value === 'reload') success = manager.reload(true)
   else if (mode.value === 'export') success = downloadLibrary(true)
+  else if (mode.value === 'import' && importPreview.value) {
+    const count = importPreview.value.data.sets.length
+    success = await manager.importLibrary(importPreview.value)
+    if (success) feedback.value = `已从备份恢复 ${count} 组词库。当前编辑保持不变，词库需主动载入。`
+  }
   if (success) {
     dialogOpen.value = false
     expanded.value = true
@@ -176,19 +252,30 @@ function opened(): void {
 }
 async function closed(): Promise<void> {
   closing.value = false
-  if (mode.value === 'delete' || mode.value === 'clear') {
+  if (mode.value === 'delete' || mode.value === 'clear' || mode.value === 'import') {
     await nextTick()
     const save = host.value?.querySelector<HTMLButtonElement>('[data-library-save]:not(:disabled)')
     const fallback = host.value?.querySelector<HTMLButtonElement>(
       '[aria-controls="local-library-controls"]',
     )
-    ;(save ?? fallback)?.focus()
+    const importButton =
+      mode.value === 'import'
+        ? host.value?.querySelector<HTMLButtonElement>('[data-library-import]:not(:disabled)')
+        : undefined
+    ;(importButton ?? save ?? fallback)?.focus()
   }
 }
 </script>
 
 <template>
   <section ref="host" class="library" aria-labelledby="local-library-title">
+    <input
+      ref="importInput"
+      type="file"
+      accept=".json,application/json"
+      hidden
+      @change="onImportFileChange"
+    />
     <div class="library-heading">
       <h3 id="local-library-title">本机词库</h3>
       <ElButton data-library-save :disabled="controlsDisabled || hasUnsaved" @click="open('save')"
@@ -242,6 +329,12 @@ async function closed(): Promise<void> {
         <ElButton :disabled="controlsDisabled" @click="exportLibrary">{{
           hasUnsaved ? '导出未保存候选' : '导出全部词库'
         }}</ElButton>
+        <ElButton
+          data-library-import
+          :disabled="controlsDisabled || hasUnsaved"
+          @click="chooseImport"
+          >导入并替换全部</ElButton
+        >
         <ElButton text :disabled="controlsDisabled" @click="reload">重新读取本机词库</ElButton>
         <ElButton
           v-if="state.data.sets.length"
@@ -253,7 +346,8 @@ async function closed(): Promise<void> {
       </div>
       <p class="library-help">
         导出全部词库为本机明文
-        JSON，不含当前未存入词库的编辑、草稿或文件。建议定期备份；导入恢复尚未提供。
+        JSON，不含当前未存入词库的编辑、草稿或文件。导入将替换全部词库，建议先导出当前版本；备份文件最大
+        256 KiB。
       </p>
     </div>
     <p v-if="feedback" class="library-help" role="status">{{ feedback }}</p>
@@ -319,6 +413,26 @@ async function closed(): Promise<void> {
           将导出本页全部 {{ state.data.sets.length }}
           组词库的未保存候选，文件名带“未保存候选”标记；本机已保存的版本可能不同。导出不会完成保存或解决冲突，刷新或离开前仍请保管备份。
         </p>
+        <template v-else-if="mode === 'import'">
+          <p>备份文件：{{ importFilename }}</p>
+          <p v-if="importReading" role="status">正在读取和校验备份，可取消本次导入。</p>
+          <template v-if="importPreview">
+            <p>
+              将用备份的 {{ importPreview.data.sets.length }} 组词库替换本机全部
+              {{ importPreview.current.sets.length }}
+              组词库，不保留现有词库。建议先取消并导出当前版本。
+            </p>
+            <p v-if="!importPreview.data.sets.length" class="library-error" role="alert">
+              此备份为空，确认后将清空本机全部词库。
+            </p>
+            <ul v-else class="library-import-list" tabindex="0" aria-label="备份词库及规则条数">
+              <li v-for="set in importPreview.data.sets" :key="set.id">
+                {{ set.name }} · {{ set.rules.length }} 条规则
+              </li>
+            </ul>
+            <p>仅替换本机词库，当前编辑、草稿、文件与预览保持不变；导入后需主动载入词库。</p>
+          </template>
+        </template>
         <p v-else>
           重新读取会舍弃本页尚未保存的词库改动，读取其他页面已保存的版本。当前编辑的规则保留。
         </p>
@@ -342,16 +456,19 @@ async function closed(): Promise<void> {
           <ElButton
             v-if="!hasUnsaved || mode === 'reload' || mode === 'export'"
             type="primary"
-            :loading="pending"
+            :loading="pending || importReading"
+            :disabled="mode === 'import' && (!importPreview || importReading)"
             @click="confirm"
             >{{
-              mode === 'export'
-                ? '确认导出候选'
-                : mode === 'save' && collision
-                  ? '确认覆盖'
-                  : mode === 'save' || mode === 'rename'
-                    ? '保存'
-                    : '确认'
+              mode === 'import'
+                ? '确认替换全部'
+                : mode === 'export'
+                  ? '确认导出候选'
+                  : mode === 'save' && collision
+                    ? '确认覆盖'
+                    : mode === 'save' || mode === 'rename'
+                      ? '保存'
+                      : '确认'
             }}</ElButton
           >
         </div>
@@ -374,6 +491,17 @@ async function closed(): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+.library-import-list {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--ph-line);
+  border-radius: 8px;
+  padding: 8px 8px 8px 28px;
+  color: var(--ph-ink);
+  font-size: 13px;
+  line-height: 1.7;
 }
 .library-heading h3 {
   margin: 0;

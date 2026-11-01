@@ -2,6 +2,7 @@ import { ref, shallowRef } from 'vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import {
   normalizeRuleSetName,
+  parseRuleLibraryBytes,
   serializeRuleLibrary,
   validateRuleLibrary,
   type RuleLibrary,
@@ -34,6 +35,14 @@ export interface RuleLibraryExport {
   readonly unsaved: boolean
 }
 
+/** 确认页绑定本次备份和读取时的本机快照，不能确认后再静默换一份内容。 */
+export interface RuleLibraryImport {
+  /** 经过既有 v1 校验的完整备份，保留 ID、顺序、规则原文及时间。 */
+  readonly data: RuleLibrary
+  /** 用引用核对本页状态；其他页面的写入继续由 R1 锁内比较拦截。 */
+  readonly current: RuleLibrary
+}
+
 /** 将词库管理与文件/替换任务分离，保存失败仍保留 R1 的内存候选。 */
 export function useRuleLibraryManager(
   services: RuleLibraryManagerServices = {
@@ -47,6 +56,7 @@ export function useRuleLibraryManager(
   const pending = ref(false)
   const hasUnsaved = ref(false)
   const issue = ref('')
+  let preparedImport: RuleLibraryImport | undefined
 
   /** 同名覆盖必须由 UI 明确取得目标 ID，不能只凭同名自动替换。 */
   function findByName(name: string): RuleSet | undefined {
@@ -247,6 +257,48 @@ export function useRuleLibraryManager(
     }
   }
 
+  /** 先验证备份再重读本机，不将坏文件或读失败转化为待确认的空库。 */
+  function prepareImport(bytes: Uint8Array): RuleLibraryImport | undefined {
+    if (pending.value) return undefined
+    preparedImport = undefined
+    issue.value = ''
+    if (hasUnsaved.value) {
+      issue.value = '请先处理或导出未保存候选，再导入备份'
+      return undefined
+    }
+    try {
+      const data = parseRuleLibraryBytes(bytes)
+      if (!reload()) {
+        issue.value = '无法确认本机词库，未准备导入；请先处理读取错误'
+        return undefined
+      }
+      preparedImport = Object.freeze({ data, current: state.value.data })
+      return preparedImport
+    } catch (error: unknown) {
+      issue.value = error instanceof Error ? error.message : '无法读取词库备份，请检查文件'
+      return undefined
+    }
+  }
+
+  /** 取消或离页立即撤销确认资格，迟到读取与旧确认不能再次写入。 */
+  function cancelImport(): void {
+    preparedImport = undefined
+  }
+
+  /** 仅接受本次展示的整库替换；确认后不重新载入或合并，失败仍走候选保护。 */
+  function importLibrary(preview: RuleLibraryImport): Promise<boolean> {
+    const prepared = preparedImport
+    preparedImport = undefined
+    return change(
+      () => {
+        if (preview !== prepared || state.value.data !== preview.current)
+          throw new Error('导入确认已失效，请重新选择备份并核对替换范围')
+        return preview.data
+      },
+      () => preview.data.sets[0]?.id ?? '',
+    )
+  }
+
   return {
     state,
     selectedId,
@@ -262,5 +314,8 @@ export function useRuleLibraryManager(
     retry,
     reload,
     prepareExport,
+    prepareImport,
+    cancelImport,
+    importLibrary,
   }
 }

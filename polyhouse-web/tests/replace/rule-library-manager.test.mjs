@@ -36,6 +36,25 @@ const { createRuleLibraryStorage } = await import(storageUrl)
 const { useRuleLibraryManager } = await import(managerUrl)
 const { parseRuleLibrary, RULE_LIBRARY_MAX_BYTES } = await import(pureUrl)
 const rules = (replace = '小红') => [{ search: '小明', replace }]
+const importBytes = (data = { version: 1, sets: [] }) =>
+  new TextEncoder().encode(JSON.stringify(data))
+const importData = () => ({
+  version: 1,
+  sets: [
+    {
+      id: 'restored-id',
+      name: '备份😀',
+      rules: [
+        { search: ' 小明😀\n', replace: '' },
+        { search: 'constructor', replace: '__proto__ ' },
+      ],
+      createdAt: 20,
+      updatedAt: 30,
+    },
+  ],
+})
+const importFile = (data = importData()) =>
+  new File([JSON.stringify(data)], '备份😀.json', { type: 'application/json' })
 
 function fixture() {
   let raw = null
@@ -298,6 +317,154 @@ test('冲突候选可独立备份，不能覆盖另一页面的已保存版本',
   assert.equal(stale.prepareExport(true), undefined)
 })
 
+test('整库导入替换 30 组现有内容，保留备份 ID/时间/顺序/原文，往返逐字一致', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  for (let index = 0; index < 30; index++) await manager.saveRules(`原词库${index}`, rules())
+  const original = f.raw()
+  const writes = f.writes()
+  const data = importData()
+  data.sets.push({ ...data.sets[0], id: 'another-id', name: '第二组', rules: rules('第二组') })
+  const preview = manager.prepareImport(importBytes(data))
+  assert.equal(preview.current.sets.length, 30)
+  assert.equal(f.raw(), original)
+  assert.equal(f.writes(), writes)
+  data.sets[0].rules[0].replace = '读取后外部修改'
+  assert.equal(preview.data.sets[0].rules[0].replace, '')
+  assert.equal(await manager.importLibrary(preview), true)
+  assert.equal(f.writes(), writes + 1)
+  assert.deepEqual(parseRuleLibrary(f.raw()), preview.data)
+  assert.equal(manager.prepareExport().json, f.raw())
+  assert.equal(manager.selectedId.value, 'restored-id')
+  assert.equal(await manager.importLibrary(preview), false)
+  assert.equal(f.writes(), writes + 1)
+})
+
+test('有效空备份只在确认时一次清空，初始空存储也能恢复备份', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  assert.equal(await manager.importLibrary(manager.prepareImport(importBytes(importData()))), true)
+  const before = f.raw()
+  const preview = manager.prepareImport(importBytes())
+  assert.equal(f.raw(), before)
+  assert.equal(await manager.importLibrary(preview), true)
+  assert.deepEqual(parseRuleLibrary(f.raw()), { version: 1, sets: [] })
+  assert.equal(manager.selectedId.value, '')
+})
+
+test('非法备份整份拒绝，不改内存内容或持久化，不将内部重复自动合并/改名', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  await manager.saveRules('现有', rules())
+  const original = f.raw()
+  const candidate = manager.state.value.data
+  const repeatedId = importData()
+  repeatedId.sets.push({ ...repeatedId.sets[0], name: '另一个' })
+  const repeatedName = importData()
+  repeatedName.sets.push({ ...repeatedName.sets[0], id: 'other-id' })
+  const repeatedSearch = importData()
+  repeatedSearch.sets[0].rules.push({ ...repeatedSearch.sets[0].rules[0] })
+  const tooMany = {
+    version: 1,
+    sets: Array.from({ length: 31 }, (_, index) => ({
+      ...importData().sets[0],
+      id: `id${index}`,
+      name: `组${index}`,
+    })),
+  }
+  for (const bytes of [
+    new Uint8Array([0xff]),
+    importBytes({ version: 2, sets: [] }),
+    importBytes(repeatedId),
+    importBytes(repeatedName),
+    importBytes(repeatedSearch),
+    importBytes(tooMany),
+  ]) {
+    assert.equal(manager.prepareImport(bytes), undefined)
+    assert.equal(manager.state.value.data, candidate)
+    assert.equal(f.raw(), original)
+  }
+  assert.equal(f.writes(), 1)
+})
+
+test('未保存候选、取消和本页状态变化均不能沿用旧导入确认', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  const cancelled = manager.prepareImport(importBytes(importData()))
+  manager.cancelImport()
+  assert.equal(await manager.importLibrary(cancelled), false)
+  const stale = manager.prepareImport(importBytes(importData()))
+  manager.reload()
+  assert.equal(await manager.importLibrary(stale), false)
+  manager.pending.value = true
+  assert.equal(manager.prepareImport(importBytes(importData())), undefined)
+  manager.pending.value = false
+  f.failWrite(true)
+  await manager.saveRules('未保存候选', rules())
+  const candidate = manager.state.value.data
+  assert.equal(manager.prepareImport(importBytes(importData())), undefined)
+  assert.equal(manager.state.value.data, candidate)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(f.raw(), null)
+})
+
+test('导入确认后其他页已保存则冲突，不静默重读覆盖，导入候选可备份', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  const preview = manager.prepareImport(importBytes(importData()))
+  const other = f.manager()
+  await other.saveRules('其他页的新数据', rules())
+  const original = f.raw()
+  assert.equal(await manager.importLibrary(preview), false)
+  assert.equal(manager.state.value.status, 'conflict')
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(f.raw(), original)
+  assert.deepEqual(parseRuleLibrary(manager.prepareExport(true).json), preview.data)
+  assert.equal(await manager.retry(), false)
+  assert.equal(f.raw(), original)
+})
+
+test('导入写入故障保留完整候选，重试成功后恢复；无锁环境不冒充已保存', async () => {
+  const f = fixture()
+  const manager = f.manager()
+  const preview = manager.prepareImport(importBytes(importData()))
+  f.failWrite(true)
+  assert.equal(await manager.importLibrary(preview), false)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.deepEqual(manager.state.value.data, preview.data)
+  assert.equal(f.raw(), null)
+  f.failWrite(false)
+  assert.equal(await manager.retry(), true)
+  assert.deepEqual(parseRuleLibrary(f.raw()), preview.data)
+  let writes = 0
+  const noLock = useRuleLibraryManager({
+    repository: createRuleLibraryStorage({
+      storage: () => ({ getItem: () => null, setItem: () => writes++ }),
+    }),
+    createId: () => 'unused',
+    now: () => 100,
+  })
+  assert.equal(await noLock.importLibrary(noLock.prepareImport(importBytes(importData()))), false)
+  assert.equal(noLock.state.value.status, 'memory-only')
+  assert.equal(noLock.hasUnsaved.value, true)
+  assert.equal(writes, 0)
+})
+
+test('本机损坏/未知版本和读取失败均不能准备导入，不绕过坏存储保护', () => {
+  for (const raw of ['{', '{"version":2,"sets":[]}']) {
+    const f = fixture()
+    f.rawValue(raw)
+    const manager = f.manager()
+    assert.equal(manager.prepareImport(importBytes(importData())), undefined)
+    assert.equal(f.raw(), raw)
+    assert.equal(f.writes(), 0)
+  }
+  const f = fixture()
+  f.failRead(true)
+  assert.equal(f.manager().prepareImport(importBytes(importData())), undefined)
+  assert.equal(f.writes(), 0)
+})
+
 // 真实 SFC setup 的行为测试；DOM、鼠标和焦点另由真实浏览器验收。
 const managerFixtureUrl = url(
   'export let current; export const setCurrent = (value) => { current = value }; export const useRuleLibraryManager = () => current',
@@ -313,6 +480,7 @@ const { default: component } = await import(
   compile(compileScript(descriptor, { id: 'rule-library-panel-test' }).content, {
     vue: import.meta.resolve('vue'),
     'element-plus': controls,
+    '../utils/ruleLibrary': pureUrl,
     '../composables/useRuleLibraryManager': managerFixtureUrl,
   })
 )
@@ -346,6 +514,139 @@ function mount(manager, initialRules = rules('编辑中')) {
   app.mount({})
   return { page, current, emitted, unmount: () => app.unmount() }
 }
+
+test('读取备份只预览，取消不写；再次选择并重复确认只写一次，不载入编辑规则', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  await manager.saveRules('旧词库', rules())
+  const original = f.raw()
+  const view = mount(manager)
+  t.after(view.unmount)
+  await view.page.readImportFile(importFile())
+  assert.equal(view.page.mode.value, 'import')
+  assert.equal(view.page.dialogOpen.value, true)
+  assert.equal(view.page.importPreview.value.current.sets.length, 1)
+  assert.equal(f.raw(), original)
+  view.page.dialogOpen.value = false
+  await view.page.confirm()
+  assert.equal(f.raw(), original)
+  await view.page.readImportFile(importFile())
+  const first = view.page.confirm()
+  await view.page.confirm()
+  await first
+  assert.equal(f.writes(), 2)
+  assert.deepEqual(parseRuleLibrary(f.raw()), importData())
+  assert.equal(view.emitted.length, 0)
+  assert.deepEqual(view.current.value, rules('编辑中'))
+  assert.match(view.page.feedback.value, /已从备份恢复 1 组/u)
+})
+
+test('文件过大在读取前拒绝，不打开确认或调用 arrayBuffer', async (t) => {
+  const f = fixture()
+  const view = mount(f.manager())
+  t.after(view.unmount)
+  let reads = 0
+  await view.page.readImportFile({
+    name: 'large.json',
+    size: RULE_LIBRARY_MAX_BYTES + 1,
+    arrayBuffer: async () => {
+      reads++
+      return new ArrayBuffer(0)
+    },
+  })
+  assert.equal(reads, 0)
+  assert.equal(view.page.dialogOpen.value, false)
+  assert.match(view.page.issue.value, /256 KiB/u)
+  assert.equal(f.writes(), 0)
+})
+
+test('文件读取异常和非法 JSON 不生成确认候选，确认无写入', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  const view = mount(manager)
+  t.after(view.unmount)
+  await view.page.readImportFile({
+    name: 'failed.json',
+    size: 2,
+    arrayBuffer: async () => {
+      throw new Error('fixture read failure')
+    },
+  })
+  assert.match(manager.issue.value, /无法读取/u)
+  assert.equal(view.page.importPreview.value, undefined)
+  await view.page.confirm()
+  assert.equal(f.writes(), 0)
+  view.page.dialogOpen.value = false
+  await view.page.readImportFile(new File(['{'], 'bad.json'))
+  assert.equal(view.page.importPreview.value, undefined)
+  await view.page.confirm()
+  assert.equal(f.writes(), 0)
+  assert.equal(view.page.importReading.value, false)
+})
+
+test('读取期间取消后可选择新文件，旧读取迟到不能替换新预览或写入', async (t) => {
+  const f = fixture()
+  const view = mount(f.manager())
+  t.after(view.unmount)
+  let resolve
+  const reading = view.page.readImportFile({
+    name: 'old.json',
+    size: 1,
+    arrayBuffer: () =>
+      new Promise((done) => {
+        resolve = done
+      }),
+  })
+  assert.equal(view.page.importReading.value, true)
+  await view.page.confirm()
+  assert.equal(f.writes(), 0)
+  view.page.dialogOpen.value = false
+  assert.equal(view.page.importReading.value, false)
+  await view.page.readImportFile(importFile())
+  const preview = view.page.importPreview.value
+  resolve(importBytes().buffer)
+  await reading
+  assert.equal(view.page.importPreview.value, preview)
+  assert.equal(view.page.importFilename.value, '备份😀.json')
+  assert.equal(f.writes(), 0)
+})
+
+test('卸载使未完成的文件读取失效，不准备导入或写存储', async () => {
+  const f = fixture()
+  const view = mount(f.manager())
+  let resolve
+  const reading = view.page.readImportFile({
+    name: 'pending.json',
+    size: 1,
+    arrayBuffer: () =>
+      new Promise((done) => {
+        resolve = done
+      }),
+  })
+  view.unmount()
+  resolve(importBytes(importData()).buffer)
+  await reading
+  assert.equal(view.page.importPreview.value, undefined)
+  assert.equal(f.writes(), 0)
+})
+
+test('导入保存失败保持确认弹窗与候选，重试成功才关闭', async (t) => {
+  const f = fixture()
+  const manager = f.manager()
+  const view = mount(manager)
+  t.after(view.unmount)
+  await view.page.readImportFile(importFile())
+  f.failWrite(true)
+  await view.page.confirm()
+  assert.equal(view.page.dialogOpen.value, true)
+  assert.equal(manager.hasUnsaved.value, true)
+  assert.equal(view.page.feedback.value, '')
+  assert.deepEqual(manager.state.value.data, importData())
+  f.failWrite(false)
+  await view.page.retry()
+  assert.equal(view.page.dialogOpen.value, false)
+  assert.equal(manager.state.value.persisted, true)
+})
 
 // 只替换浏览器下载边界，组件 setup 与管理/校验层仍执行真实实现。
 function downloadFixture(t, fail = false) {

@@ -18,11 +18,64 @@ const libraryUrl = await moduleUrl('../../src/utils/ruleLibrary.ts')
 const storageUrl = await moduleUrl('../../src/stores/ruleLibraryStorage.ts', {
   '../utils/ruleLibrary': libraryUrl,
 })
-const { validateRuleLibrary, parseRuleLibrary, serializeRuleLibrary, RULE_LIBRARY_MAX_BYTES } =
-  await import(libraryUrl)
+const {
+  validateRuleLibrary,
+  parseRuleLibrary,
+  parseRuleLibraryBytes,
+  serializeRuleLibrary,
+  RULE_LIBRARY_MAX_BYTES,
+} = await import(libraryUrl)
 const { createRuleLibraryStorage, createBrowserRuleLibraryStorage, RULE_LIBRARY_STORAGE_KEY } =
   await import(storageUrl)
 const { createTextReplacer } = await import(await moduleUrl('../../src/core/acReplacer.ts'))
+
+test('备份文件严格按 UTF-8 解码，保留规则原文并支持 UTF-8 BOM', () => {
+  const value = library(group())
+  value.sets[0].rules = [
+    { search: ' 小明😀\n', replace: '' },
+    { search: 'constructor', replace: '__proto__ ' },
+  ]
+  const json = serializeRuleLibrary(value)
+  for (const raw of [json, `\ufeff${json}`])
+    assert.deepEqual(parseRuleLibraryBytes(new TextEncoder().encode(raw)), value)
+  for (const bytes of [
+    new Uint8Array([0xff]),
+    new Uint8Array([0xe4, 0xb8]),
+    new Uint8Array([0xc0, 0xaf]),
+  ])
+    assert.throws(() => parseRuleLibraryBytes(bytes), /UTF-8/u)
+})
+
+test('备份文件字节限额在解码前检查，恰达 256 KiB 可解析，超一字节拒绝', () => {
+  const compact = serializeRuleLibrary(library(group()))
+  const raw = compact.padEnd(
+    compact.length + RULE_LIBRARY_MAX_BYTES - Buffer.byteLength(compact, 'utf8'),
+    ' ',
+  )
+  assert.equal(new TextEncoder().encode(raw).byteLength, RULE_LIBRARY_MAX_BYTES)
+  assert.deepEqual(parseRuleLibraryBytes(new TextEncoder().encode(raw)), library(group()))
+  assert.throws(() => parseRuleLibraryBytes(new TextEncoder().encode(`${raw} `)), /256 KiB/u)
+  assert.throws(
+    () => parseRuleLibraryBytes(new Uint8Array(RULE_LIBRARY_MAX_BYTES + 1).fill(0xff)),
+    /256 KiB/u,
+  )
+})
+
+test('备份字节入口复用固定格式和容量保护，不接受脚本或非法结构', () => {
+  const invalid = [
+    '',
+    '{',
+    'alert(1)',
+    '{"version":2,"sets":[]}',
+    '{"version":1,"sets":[],"__proto__":{}}',
+  ]
+  for (const raw of invalid)
+    assert.throws(() => parseRuleLibraryBytes(new TextEncoder().encode(raw)))
+  assert.deepEqual(parseRuleLibraryBytes(new TextEncoder().encode('{"version":1,"sets":[]}')), {
+    version: 1,
+    sets: [],
+  })
+})
 
 function group(id = 'one', name = '常用规则') {
   return {
