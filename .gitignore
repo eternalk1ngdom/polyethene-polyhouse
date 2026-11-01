@@ -11,6 +11,8 @@ hs_err_pid*
 *.ipr
 *.iws
 .vscode/
+# VS Code 的代码统计插件（Code Counter）把历史结果写在这里，属于本机工具产物
+.VSCodeCounter/
 *.swp
 *.swo
 

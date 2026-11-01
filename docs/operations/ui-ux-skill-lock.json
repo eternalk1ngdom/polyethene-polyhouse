@@ -11,6 +11,7 @@
   "method": "OpenAI skill-installer validated/copy helper; pinned source archive; no npm installer executed",
   "adaptations": [
     "SKILL.md: replace Claude plugin path with project Codex path and document repository-root/absolute-path use.",
+    "SKILL.md (2026-11-01): replace every hardcoded .agents/skills/ui-ux-pro-max/scripts/search.py command with the <skill-dir>/scripts/search.py placeholder, since the skill may also be installed under a user-level skills directory or a plugin cache.",
     "SKILL.md: refer to the repository AGENTS.md; installation does not authorize UI changes or design-system persistence.",
     "Add upstream root LICENSE and a skill-local Python cache ignore file.",
     "Add skill-local .gitattributes to prevent Git line-ending conversion from invalidating byte-level integrity checks."
@@ -39,8 +40,8 @@
     },
     {
       "path": "SKILL.md",
-      "bytes": 16060,
-      "sha256": "e052a8295600e3e93d1396ffc53608f926c8ad555964058ea8400ca7dde579dd",
+      "bytes": 16026,
+      "sha256": "c5bf787267fa101e7069901291e23e4ce5eb5136c85084ed195d02d7e605b37b",
       "sourcePath": ".claude/skills/ui-ux-pro-max/SKILL.md",
       "sourceSha256": "ea087c341bfb5b23195c7302027268ede86da802554c18a5c4896a6017b439f9"
     },
