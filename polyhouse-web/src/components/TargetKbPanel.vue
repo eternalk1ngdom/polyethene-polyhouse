@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { zip } from 'fflate'
 import { ElAlert, ElButton, ElIcon, ElInput, ElProgress, ElSwitch } from 'element-plus'
-import { Download, Picture, Upload } from '@element-plus/icons-vue'
+import { Close, Download, Picture, Upload } from '@element-plus/icons-vue'
 import TargetKbBatchResult from './TargetKbBatchResult.vue'
 import {
   MAX_BATCH_BYTES,
@@ -12,7 +12,7 @@ import {
   validateBatch,
   zipEntryName,
 } from '../core/targetKbBatch'
-import type { TargetKbBatchRow } from '../core/targetKbBatch'
+import type { TargetKbBatchRow, TargetKbBatchStatus } from '../core/targetKbBatch'
 import { createTargetRange, parseTargetSize } from '../core/targetKbCompress'
 import type { TargetKbEncodeResult, TargetKbReply } from '../core/targetKbProtocol'
 import { inspectSource, inspectSourceSize } from '../core/targetKbSource'
@@ -25,10 +25,31 @@ const HEADER_BYTES = 256 * 1024
 /** 页面侧只做格式与范围提示，真正校验仍在内核与 Worker。 */
 const DPI_RANGE = '1～1200'
 
-const picked = ref<File[]>([])
-const sourceUrl = ref('')
-const sourceSize = ref<{ width: number; height: number } | null>(null)
-const rows = ref<TargetKbBatchRow[]>([])
+/**
+ * 选中的一张图：文件、缩略图地址与状态放在同一个对象里。
+ * 早先用"文件数组 + 状态数组"两个平行列表按索引对应，删掉中间一项就会整体错位；
+ * 这里改成稳定 id，输出字节也以 id 为键，删除后不需要重排任何东西。
+ */
+interface PickedEntry {
+  /** 稳定标识，只增不减，删除后不复用。 */
+  id: number
+  /** 用户选中的原始文件；字节从不改动，只读取。 */
+  file: File
+  /** 缩略图临时地址，移除或换图时必须撤销，否则 Blob 一直占着内存。 */
+  url: string
+  /** 单张时解析出的原始宽高；批量不解析文件头，保持 null。 */
+  width: number | null
+  height: number | null
+  /** 当前处理状态。 */
+  status: TargetKbBatchStatus
+  /** 成功后的输出字节数。 */
+  outputBytes?: number
+  /** 失败原因，直接展示。 */
+  message?: string
+}
+
+const entries = ref<PickedEntry[]>([])
+let nextEntryId = 1
 const targetInput = ref('')
 const minInput = ref('')
 const dpiInput = ref('')
@@ -43,6 +64,7 @@ const zipUrl = ref('')
 const zipBytes = ref(0)
 
 // 输出字节单独用普通 Map 存放：放进响应式数组会被代理包住，大数组的代理开销没必要。
+// 键是 entry.id，不是数组下标——删掉一张后下标会变，id 不会。
 const outputs = new Map<number, Uint8Array>()
 
 // 单线程复用：取消只作废当前 id，不重建 Worker；卸载时再终止。
@@ -52,22 +74,39 @@ let nextId = 1
 let pendingReply: ((reply: TargetKbReply) => void) | null = null
 
 /** 多选即批量；单张仍走原来的详细结果视图。 */
-const isBatch = computed(() => picked.value.length > 1)
+const isBatch = computed(() => entries.value.length > 1)
+/** 单张时才有大预览与详细结果；模板据此切换，不依赖非空断言。 */
+const singleEntry = computed(() => (entries.value.length === 1 ? (entries.value[0] ?? null) : null))
+/** 结果面板仍按"行"消费，这里把 entry 投影成只读行，组件无需知道 id。 */
+const rows = computed<TargetKbBatchRow[]>(() =>
+  entries.value.map((entry) => ({
+    name: entry.file.name,
+    size: entry.file.size,
+    status: entry.status,
+    outputBytes: entry.outputBytes,
+    message: entry.message,
+  })),
+)
 const batchSummary = computed(() => summarizeBatch(rows.value))
-/** 单张时才做预览与详细结果，模板里据此切换，不依赖非空断言。 */
-const singleFile = computed(() => (picked.value.length === 1 ? (picked.value[0] ?? null) : null))
 /** 提示文案用的整数 MB，避免在模板里做换算。 */
 const MAX_BATCH_MB = Math.round(MAX_BATCH_BYTES / 1024 / 1024)
 
-/** 释放所有临时地址，避免连续换图时旧 Blob 一直占着内存。 */
-function clearUrls(): void {
-  if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
+/**
+ * 只释放"输出侧"的临时地址。
+ * 输入缩略图不能在这里撤销：作废旧结果时用户选的文件还在，缩略图必须继续可见。
+ */
+function clearOutputUrls(): void {
   if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
   if (zipUrl.value) URL.revokeObjectURL(zipUrl.value)
-  sourceUrl.value = ''
   resultUrl.value = ''
   zipUrl.value = ''
   zipBytes.value = 0
+}
+
+/** 清空选中项并释放所有缩略图地址。 */
+function releaseEntries(): void {
+  for (const entry of entries.value) URL.revokeObjectURL(entry.url)
+  entries.value = []
 }
 
 /** 结果、进度与列表状态一起失效，避免用户改完参数后仍下载到旧文件。 */
@@ -81,11 +120,11 @@ function invalidate(): void {
   progress.value = null
   result.value = null
   outputs.clear()
-  clearUrls()
-  for (const row of rows.value) {
-    row.status = 'pending'
-    row.outputBytes = undefined
-    row.message = undefined
+  clearOutputUrls()
+  for (const entry of entries.value) {
+    entry.status = 'pending'
+    entry.outputBytes = undefined
+    entry.message = undefined
   }
   resolve?.({ id: 0, ok: false, reason: 'cancelled', message: '已取消' })
 }
@@ -94,9 +133,7 @@ function invalidate(): void {
 async function acceptFiles(list: File[]): Promise<void> {
   invalidate()
   message.value = ''
-  picked.value = []
-  rows.value = []
-  sourceSize.value = null
+  releaseEntries()
 
   const images = list.filter((file) => file.type.startsWith('image/'))
   if (images.length === 0) {
@@ -113,32 +150,56 @@ async function acceptFiles(list: File[]): Promise<void> {
     return
   }
 
-  picked.value = images
-  rows.value = images.map((file) => ({ name: file.name, size: file.size, status: 'pending' }))
+  entries.value = images.map((file) => ({
+    id: nextEntryId++,
+    file,
+    url: URL.createObjectURL(file),
+    width: null,
+    height: null,
+    status: 'pending',
+  }))
   // 多张时不逐张解析文件头：解析结果只用于单图预览，批量交给 Worker 逐张判断。
   if (images.length > 1) return
 
-  const only = images[0]!
-  const sizeCheck = inspectSourceSize(only.size)
+  const only = entries.value[0]!
+  const sizeCheck = inspectSourceSize(only.file.size)
   if (!sizeCheck.ok) {
     message.value = sizeCheck.message
-    picked.value = []
-    rows.value = []
+    releaseEntries()
     return
   }
-  const head = new Uint8Array(await only.slice(0, HEADER_BYTES).arrayBuffer())
+  const head = new Uint8Array(await only.file.slice(0, HEADER_BYTES).arrayBuffer())
   const inspection = inspectSource(head)
   if (!inspection.ok) {
     message.value = inspection.message
-    picked.value = []
-    rows.value = []
+    releaseEntries()
     return
   }
-  sourceUrl.value = URL.createObjectURL(only)
-  sourceSize.value =
-    inspection.width === null || inspection.height === null
-      ? null
-      : { width: inspection.width, height: inspection.height }
+  only.width = inspection.width
+  only.height = inspection.height
+}
+
+/**
+ * 从待选区移除一张。
+ * 删除会改变批量结果的含义（ZIP 少一项、合计体积变了），所以一并作废旧结果，
+ * 不让用户下载到与当前列表不符的文件。
+ */
+function removeEntry(id: number): void {
+  if (busy.value) return
+  const index = entries.value.findIndex((entry) => entry.id === id)
+  if (index < 0) return
+  const [removed] = entries.value.splice(index, 1)
+  if (removed) URL.revokeObjectURL(removed.url)
+  invalidate()
+  message.value = removed ? `已移除 ${removed.file.name}` : ''
+}
+
+/** 清空待选区，回到未选图的状态。 */
+function clearAll(): void {
+  if (busy.value) return
+  invalidate()
+  releaseEntries()
+  message.value = ''
 }
 
 /** 文件选择与拖放走同一个入口，避免两条路径行为不一致。 */
@@ -222,10 +283,10 @@ function sendEncode(
 }
 
 async function runSingle(target: TargetKbTarget, dpi: number | null): Promise<void> {
-  const file = picked.value[0]
-  if (!file) return
+  const entry = entries.value[0]
+  if (!entry) return
   try {
-    const bytes = await file.arrayBuffer()
+    const bytes = await entry.file.arrayBuffer()
     const reply = await sendEncode(bytes, target, dpi)
     if (reply.reason === 'cancelled') return
     if (reply.ok && reply.result) {
@@ -242,27 +303,26 @@ async function runSingle(target: TargetKbTarget, dpi: number | null): Promise<vo
 }
 
 async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<void> {
+  // 先拍一份快照：循环里要 await，直接遍历响应式数组等于在遍历过程中观察它。
+  const list = [...entries.value]
   try {
-    for (let index = 0; index < picked.value.length; index += 1) {
+    for (const entry of list) {
       if (!busy.value) return
-      const file = picked.value[index]
-      const row = rows.value[index]
-      if (!file || !row) continue
-      row.status = 'running'
+      entry.status = 'running'
       progress.value = null
-      const bytes = await file.arrayBuffer()
+      const bytes = await entry.file.arrayBuffer()
       const reply = await sendEncode(bytes, target, dpi)
       if (reply.reason === 'cancelled' || !busy.value) {
-        row.status = 'pending'
+        entry.status = 'pending'
         return
       }
       if (reply.ok && reply.result) {
-        row.status = 'done'
-        row.outputBytes = reply.result.bytes.byteLength
-        outputs.set(index, new Uint8Array(reply.result.bytes))
+        entry.status = 'done'
+        entry.outputBytes = reply.result.bytes.byteLength
+        outputs.set(entry.id, new Uint8Array(reply.result.bytes))
       } else {
-        row.status = 'failed'
-        row.message = reply.message ?? '处理失败'
+        entry.status = 'failed'
+        entry.message = reply.message ?? '处理失败'
       }
     }
     await packZip()
@@ -275,23 +335,25 @@ async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<voi
 
 /** 只打包成功项；有失败就单独列出，不把半成品混进 ZIP。 */
 async function packZip(): Promise<void> {
-  const done = rows.value
-    .map((row, index) => ({ row, index }))
-    .filter((item) => item.row.status === 'done')
+  const done = entries.value.filter((entry) => entry.status === 'done')
   if (done.length === 0) {
     message.value = '所有图片都未能压缩，未生成 ZIP。'
     return
   }
   packing.value = true
   try {
-    const entries: Record<string, Uint8Array> = {}
-    for (const { row, index } of done) {
-      const bytes = outputs.get(index)
-      if (bytes) entries[zipEntryName(index, row.name, bytes.byteLength)] = bytes
+    const archiveEntries: Record<string, Uint8Array> = {}
+    // 序号按"成功项在当前列表中的顺序"重新数，删掉中间一张后解压顺序仍与界面一致。
+    let order = 0
+    for (const entry of done) {
+      const bytes = outputs.get(entry.id)
+      if (!bytes) continue
+      archiveEntries[zipEntryName(order, entry.file.name, bytes.byteLength)] = bytes
+      order += 1
     }
     const archive = await new Promise<Uint8Array>((resolve, reject) => {
       // JPEG 已经压缩过，deflate 几乎不再变小；用 store 换取更短的等待。
-      zip(entries, { level: 0 }, (error, data) => (error ? reject(error) : resolve(data)))
+      zip(archiveEntries, { level: 0 }, (error, data) => (error ? reject(error) : resolve(data)))
     })
     zipUrl.value = URL.createObjectURL(new Blob([archive.slice()], { type: 'application/zip' }))
     zipBytes.value = archive.byteLength
@@ -303,7 +365,7 @@ async function packZip(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  if (!picked.value.length || busy.value) return
+  if (!entries.value.length || busy.value) return
   message.value = ''
 
   let target: TargetKbTarget
@@ -342,8 +404,8 @@ function cancel(): void {
 function download(): void {
   const out = result.value
   if (!out) return
-  const name = singleFile.value
-    ? outputFileName(singleFile.value.name, out.bytes.byteLength)
+  const name = singleEntry.value
+    ? outputFileName(singleEntry.value.file.name, out.bytes.byteLength)
     : '妙压.jpg'
   const url = URL.createObjectURL(new Blob([out.bytes], { type: 'image/jpeg' }))
   const link = document.createElement('a')
@@ -364,10 +426,10 @@ function downloadZip(): void {
 
 const summary = computed(() => {
   const out = result.value
-  const input = singleFile.value
+  const input = singleEntry.value
   if (!out || !input) return null
   const after = out.bytes.byteLength
-  const before = input.size
+  const before = input.file.size
   return {
     before: formatBytes(before),
     after: formatBytes(after),
@@ -407,9 +469,8 @@ onBeforeUnmount(() => {
   activeId = 0
   worker?.terminate()
   worker = undefined
-  if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
-  if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
-  if (zipUrl.value) URL.revokeObjectURL(zipUrl.value)
+  clearOutputUrls()
+  releaseEntries()
 })
 </script>
 
@@ -434,18 +495,48 @@ onBeforeUnmount(() => {
         <span class="drop-sub">可多选；JPEG / PNG / WebP / AVIF</span>
       </label>
 
-      <figure v-if="singleFile" class="source">
-        <img :src="sourceUrl" :alt="`待压缩的图片：${singleFile.name}`" />
+      <figure v-if="singleEntry" class="source">
+        <img :src="singleEntry.url" :alt="`待压缩的图片：${singleEntry.file.name}`" />
         <figcaption>
-          <strong>{{ singleFile.name }}</strong>
-          <span>{{ formatBytes(singleFile.size) }}</span>
-          <span v-if="sourceSize">{{ sourceSize.width }}×{{ sourceSize.height }}</span>
+          <strong>{{ singleEntry.file.name }}</strong>
+          <span>{{ formatBytes(singleEntry.file.size) }}</span>
+          <span v-if="singleEntry.width">{{ singleEntry.width }}×{{ singleEntry.height }}</span>
           <span v-else>尺寸待解码后确认</span>
+          <ElButton
+            class="pick-remove"
+            text
+            :disabled="busy"
+            aria-label="移除这张图片"
+            @click="removeEntry(singleEntry.id)"
+          >
+            <ElIcon><Close /></ElIcon>移除
+          </ElButton>
         </figcaption>
       </figure>
-      <p v-else-if="picked.length > 1" class="picked-count">
-        已选 {{ picked.length }} 张，合计 {{ formatBytes(batchSummary.inputBytes) }}。
-      </p>
+
+      <div v-else-if="entries.length > 1" class="picked">
+        <div class="picked-head">
+          <p class="picked-count">
+            已选 {{ entries.length }} 张，合计 {{ formatBytes(batchSummary.inputBytes) }}。
+          </p>
+          <ElButton text :disabled="busy" @click="clearAll">清空</ElButton>
+        </div>
+        <ul class="pick-list">
+          <li v-for="entry in entries" :key="entry.id" class="pick-row">
+            <img class="pick-thumb" :src="entry.url" alt="" />
+            <span class="pick-name" :title="entry.file.name">{{ entry.file.name }}</span>
+            <span class="pick-size">{{ formatBytes(entry.file.size) }}</span>
+            <ElButton
+              text
+              :disabled="busy"
+              :aria-label="`移除 ${entry.file.name}`"
+              @click="removeEntry(entry.id)"
+            >
+              <ElIcon><Close /></ElIcon>
+            </ElButton>
+          </li>
+        </ul>
+      </div>
 
       <h2>2. 设置目标</h2>
       <label for="target-size">目标体积上限</label>
@@ -493,7 +584,7 @@ onBeforeUnmount(() => {
       </p>
 
       <div class="actions">
-        <ElButton type="primary" :loading="busy" :disabled="!picked.length" @click="run">
+        <ElButton type="primary" :loading="busy" :disabled="!entries.length" @click="run">
           {{ busy ? '正在压缩' : '开始压缩' }}
         </ElButton>
         <ElButton v-if="busy" @click="cancel">取消</ElButton>
@@ -517,6 +608,7 @@ onBeforeUnmount(() => {
         v-if="isBatch"
         :rows="rows"
         :summary="batchSummary"
+        :running="busy"
         :packing="packing"
         :zip-ready="Boolean(zipUrl)"
         :zip-bytes="zipBytes"
@@ -673,9 +765,59 @@ label:not(.drop) {
   color: var(--ph-ink);
   font-weight: 500;
 }
+.pick-remove {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ph-muted);
+}
+.picked {
+  margin-top: 14px;
+}
+.picked-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .picked-count {
-  margin: 14px 0 0;
+  margin: 0;
   font-size: 13px;
+}
+.pick-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--ph-line);
+  border-radius: 8px;
+  background: var(--ph-soft);
+  font-size: 12px;
+  color: var(--ph-muted);
+}
+.pick-thumb {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 6px;
+  background: white;
+}
+.pick-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ph-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-size {
+  flex: none;
 }
 .switch-row {
   display: flex;

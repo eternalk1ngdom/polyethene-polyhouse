@@ -11,6 +11,8 @@ interface Props {
   rows: readonly TargetKbBatchRow[]
   /** 当前汇总。 */
   summary: TargetKbBatchSummary
+  /** 是否正在逐张处理；没有它就无法区分"等着开始"和"正在跑"。 */
+  running: boolean
   /** 是否正在打包 ZIP。 */
   packing: boolean
   /** ZIP 是否已就绪。 */
@@ -56,7 +58,10 @@ function stateText(row: TargetKbBatchRow): string {
 
 <template>
   <div class="batch">
-    <p v-if="summary.pending > 0" role="status" class="headline">
+    <p v-if="!running && summary.pending === summary.total" role="status" class="headline">
+      待处理 {{ summary.total }} 张，点「开始压缩」开始
+    </p>
+    <p v-else-if="summary.pending > 0" role="status" class="headline">
       正在处理第 {{ Math.min(activeOrder, summary.total) }} / {{ summary.total }} 张
     </p>
     <p v-else-if="packing" role="status" class="headline">正在打包 ZIP…</p>
@@ -67,7 +72,7 @@ function stateText(row: TargetKbBatchRow): string {
     </p>
 
     <ElProgress
-      v-if="summary.pending > 0 || packing"
+      v-if="(running && summary.pending > 0) || packing"
       :percentage="percent"
       :show-text="false"
       :stroke-width="8"
