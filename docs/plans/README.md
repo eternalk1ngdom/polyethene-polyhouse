@@ -7,8 +7,11 @@
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
 | [P5 前：个人中心与管理工作台整理](pre-p5-account-workspace-ui.md) | U0～U4 已收口；普通构建/测试与真实隔离页面组合验收通过；不代表 P5/部署完成 | [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
+| [妙压：图片体积卡位（TargetKB）](target-kb-compression.md) | T1 纯内核范围已批准、尚未实施；T2～T5 为候选，工具仍为占位页 | [v1.0-dev.11](../dev-log/v1.0-dev.11.md) |
 
 2026-10-31 决定：上线/部署相关计划整体搁置，后端依赖升级方案已被用户否定；当前只做本地开发，U4 已收口；本轮完成文档治理。接下来先讨论妙替深化待批准草案，上线准备继续搁置，恢复时重新评估。
+
+2026-11-01 双线开工：妙替深化在 `codex/replace-library`，妙压在本分支 `wb/targetkb`（独立工作树 `polyhouse-press`，基线 `efda7b6`）。两线共享 `DEV_LOG.md`、本索引与 `toolRegistry.ts` 三处文件，各自只写自己的行；合并顺序建议妙替 R2 → 妙压。
 
 本机未跟踪的妙替草案保留待批准，不自动纳入本轮文档提交。受控内测与 U1～U4 详案仅在相关维护/追溯时读取，不是默认当前详案。
 

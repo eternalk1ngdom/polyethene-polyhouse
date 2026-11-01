@@ -50,6 +50,9 @@ desktop.ini
 
 # Runtime output
 .local-backups/
+
+# 本地 AI 协作记忆目录，属于个人工作区状态，不进入版本库
+.workbuddy-ai/
 uploads/
 temp/
 *.tmp

@@ -2,9 +2,9 @@
 
 更新时间：2026-11-01（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
-- 当前：[v1.0-dev.9 文档与上下文工作流](docs/dev-log/v1.0-dev.9.md)，先读“当前摘要”，详情按任务需要读取。
-- Git：2026-11-01 已获授权将完成的开发分支合入 `main` 并同步 GitHub，日常工作区已切到 `main`；方案一备份分支保留。操作与边界见当前阶段日志，[Git 入门](docs/learning/git-basics.md)。
-- 当前批准计划：[文档、上下文与验证整理](docs/plans/context-efficiency.md)，已交付；[计划索引](docs/plans/README.md)。
+- 当前：[v1.0-dev.11 妙压开工准备](docs/dev-log/v1.0-dev.11.md)，先读“当前摘要”，详情按任务需要读取。妙替 R1/R2 在 `codex/replace-library`（dev.10），本分支不含。
+- Git：双工作树并行——妙替 `E:/project/java/polyethene-polyhouse`（`codex/replace-library`），妙压 `E:/project/java/polyhouse-press`（`wb/targetkb`，基线 `efda7b6`）；共享同一 `.git`，新功能只本地提交。[Git 入门](docs/learning/git-basics.md)。
+- 当前批准计划：[妙压体积卡位](docs/plans/target-kb-compression.md)（仅 T1 纯内核，未实施）；妙替深化在另一分支；[计划索引](docs/plans/README.md)。
 - 规则：[AGENTS.md](AGENTS.md)；配置/启动：[README.md](README.md)；[只读策划书索引](docs/design/blueprint-index.md)。不沿索引加载全部历史。
 
 ## 已实现与边界
@@ -18,15 +18,16 @@
 
 ## 最近验证与下一步
 
-- 最近完成文档治理与主线合并；合并后的业务/脚本/配置与 U4 基线一致，实际检查见 dev.9；**本次未重跑 Maven/npm**。
+- 本轮只交付妙压计划与协作约定，未写业务代码，无专项测试/构建结果；dev.9 记录的是文档治理与主线合并，历史结果不替代新改动验收。
 - 业务历史基线：`8d68bc9`，U4 于 2026-11-01 收口：普通后端 323 通过/103 实例跳过，前端 135 测试及构建/静态检查通过；四组隔离验收与页面组合验收详见 [dev.8 的 U4 记录](docs/dev-log/v1.0-dev.8.md#u4-局部综合回归收口2026-10-312026-11-01)。不代表新改动自动通过或已上线。
 - 当前只做本地开发；**P5/上线/服务器操作搁置，后端依赖升级已否决，不再提议或询问**。恢复部署时需重新评估网络入口、人工资料核对、备份/恢复与发布；非标端口/审核不构成合规豁免。
-- 用户已批准质量优先、按独立步骤推进；当前从 `51cb4a0` 新开 `codex/replace-library`，先整理规范，再只做妙替 R1（模型、纯校验、本地存储与测试），R2～R7 不在本轮实施。既有 Git 授权不延伸为新功能的自动推送、合并或发布。
+- 质量优先、按独立步骤推进：妙替 R2 在 `codex/replace-library` 实施中；妙压从 T1 纯内核开始，T2～T5 需另行批准。既有 Git 授权不延伸为新功能的自动推送、合并或发布。
 
 ## 历史索引（按需）
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.9](docs/dev-log/v1.0-dev.9.md) | 文档治理、主线整合、质量优先与规范去重 |
 | [dev.8](docs/dev-log/v1.0-dev.8.md) | P4 资料审核、U1～U4 整理与验收，已收口 |
 | [dev.7](docs/dev-log/v1.0-dev.7.md) | P0～P3 账号安全/开户/管理 |
 | [dev.6](docs/dev-log/v1.0-dev.6.md) | 方案二与品牌、备份回滚 |
