@@ -238,6 +238,55 @@ class ProfileModerationIntegrationTest {
   if(!child.waitFor(150,TimeUnit.SECONDS)){child.destroyForcibly();throw new IllegalStateException("Browser verification timed out");}
   assertThat(child.exitValue()).as("See masked target/p4-browser-result.log").isZero();
  }
+ /** U4 只在显式选中本方法和开关时保留隔离 HTTP 服务，供受控浏览器实际操作。 */
+ @Test @EnabledIfSystemProperty(named="polyhouse.workspace.browser",matches="true")
+ void interactiveWorkspaceRegression()throws Exception{
+  long first=create("p4_first",UserRoleEnum.USER);
+  jdbc.update("UPDATE sys_user SET password_change_required=1 WHERE id=?",first);
+  Map<String,Object> sessions=new LinkedHashMap<>();
+  for(var entry:Map.of("OWNER","p4_owner","ADMIN","p4_admin","USER","p4_user","INSIDER","p4_other","FIRST","p4_first").entrySet()){
+   var session=auth.login(new LoginDTO(entry.getValue(),PASSWORD),null);
+   // 测试文件使用 ISO 文本，不要求独立 ObjectMapper 注册生产时间模块或调整依赖。
+   sessions.put(entry.getKey(),Map.of("accessToken",session.accessToken(),"user",session.user(),"tokenType",session.tokenType(),"expiresAt",session.expiresAt().toString()));
+  }
+  Path config=sandbox.root.resolve("workspace-browser.json"),complete=sandbox.root.resolve("workspace-complete.json");
+  Files.write(sandbox.root.resolve("u4-avatar.png"),image(UUID.randomUUID().toString(),1).file().getBytes());
+  Files.writeString(config,json.writeValueAsString(Map.of("backend","http://127.0.0.1:"+port,"sessions",sessions)));
+  ProcessBuilder builder=new ProcessBuilder("node.exe","scripts/workspace-regression-server.cjs")
+   .directory(Path.of("../polyhouse-web").toFile()).redirectErrorStream(true);
+  // 子进程只接收本次随机会话文件路径，不继承数据库密码或开发 JWT 密钥。
+  Map<String,String> inherited=new HashMap<>(builder.environment());builder.environment().clear();
+  for(String key:List.of("PATH","SystemRoot","TEMP","TMP","USERPROFILE","LOCALAPPDATA"))
+   inherited.entrySet().stream().filter(e->e.getKey().equalsIgnoreCase(key)).findFirst().ifPresent(e->builder.environment().put(e.getKey(),e.getValue()));
+  builder.environment().put("POLYHOUSE_WORKSPACE_CONFIG",config.toString());
+  Process bridge=builder.redirectOutput(Path.of("target/u4-browser-bridge.log").toFile()).start();
+  try{
+   assertThat(bridge.waitFor(25,TimeUnit.MINUTES)).as("U4 browser verification must finish explicitly within its bounded session").isTrue();
+   assertThat(bridge.exitValue()).as("See safe target/u4-browser-bridge.log").isZero();
+   assertThat(json.readTree(Files.readString(complete)).path("passed").asBoolean()).isTrue();
+   // 浏览器完成标记不能代替真实库断言：申请/开户/管理动作必须确实发生并持久化。
+   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_profile_submission WHERE user_id=? AND status='APPROVED'",Long.class,user)).isGreaterThanOrEqualTo(2);
+   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_profile_submission WHERE user_id=? AND status='REJECTED'",Long.class,user)).isGreaterThanOrEqualTo(1);
+   assertThat(count("sys_account_creation")).isEqualTo(1);
+   assertThat(jdbc.queryForObject("SELECT status FROM sys_user WHERE id=?",Integer.class,user)).isEqualTo(1);
+   assertThat(count("sys_account_management_operation")).isEqualTo(2);
+   // 数据库防重之外还核对传输事实，防止模拟断线被浏览器透明重放而掩盖未知结果分支。
+   var requests=json.readTree(Files.readString(sandbox.root.resolve("workspace-requests.json")));
+   int bans=0,unbans=0,confirmations=0;
+   for(var request:requests){
+    String method=request.path("method").asText(),path=request.path("path").asText();
+    if(method.equals("POST")&&path.equals("/api/manage/accounts/"+user+"/ban"))bans++;
+    if(method.equals("POST")&&path.equals("/api/manage/accounts/"+user+"/unban"))unbans++;
+    if(method.equals("GET")&&path.equals("/api/manage/accounts/operations/confirmation"))confirmations++;
+   }
+   assertThat(bans).isEqualTo(1);assertThat(unbans).isEqualTo(1);assertThat(confirmations).isGreaterThanOrEqualTo(1);
+   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user WHERE role=?",Long.class,UserRoleEnum.OWNER.getCode())).isEqualTo(1);
+  }finally{
+   if(bridge.isAlive())bridge.destroyForcibly();
+   Files.deleteIfExists(config);
+   Files.deleteIfExists(Path.of("../polyhouse-web/temp/u4-entry.ts"));
+  }
+ }
  private long create(String name,UserRoleEnum role){long id=Long.parseLong(auth.register(new RegisterDTO(name,PASSWORD,"旧昵称")).id());jdbc.update("UPDATE sys_user SET role=?,avatar=null WHERE id=?",role.getCode(),id);return id;}
  private String login(String name){return auth.login(new LoginDTO(name,PASSWORD),null).accessToken();}
  private ProfileSubmissionVO nickname(String text,String token){return profiles.submitNickname(new NicknameSubmissionDTO(UUID.randomUUID().toString(),text),token);}

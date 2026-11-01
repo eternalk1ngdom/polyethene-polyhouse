@@ -64,3 +64,20 @@
 该选项与其他三个专项隔离选项互斥。仅在随机 `polyhouse_profile_*` 库迁移 001～008，在本次 target/p4-* 目录保存测试图片；不会用真实 OWNER 或头像做夹具。结束精确清理会话/库/本次图片目录。
 
 可选真实浏览器：前端 `127.0.0.1:5173` 在线、已安装 Edge，设置 `POLYHOUSE_PROFILE_BROWSER=true`；Playwright 位于非标准路径时使用 `POLYHOUSE_PLAYWRIGHT_MODULE` 指向已有模块，不自动安装依赖。独立无头 Edge 只代理根 `/api/` 到随机后端，不继承真实数据库/JWT 凭据，不操作个人浏览器。截图、安全摘要仅保存在忽略的 target。
+
+## U4 当前页面组合验收（受控浏览器）
+
+现有自动化脚本入口保留；使用 CUA 时采用下列专用入口，不需要脚本自行启动或控制浏览器。在一个终端从 `polyhouse-web/` 执行 `npm run dev -- --host 127.0.0.1 --port 5175 --strictPort`，另一个终端从仓库根目录执行：
+
+```powershell
+.\polyhouse\scripts\Ensure-LocalRedis.ps1
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify -ProfileModerationOnly -WorkspaceBrowser
+```
+
+仅选中 `ProfileModerationIntegrationTest#interactiveWorkspaceRegression`。随机隔离库、独立 JWT 与测试媒体目录仍由原 Sandbox 管理；临时桥接只监听本机 5190，把实际前端请求转发到本次随机 Spring Boot 端口，禁止指向 8080，不模拟业务响应、不接入开发库。入口将真实测试登录响应交给隔离来源页面，令牌不显示在界面、日志或 URL；凭据文件只在忽略的 `target/p4-*` 内短暂存在，子进程不继承数据库密码或开发密钥。生产 `main.ts` 不导入该测试入口。
+
+启动后用受控浏览器访问 `http://localhost:5190/account`。顶部测试控件可切换本次 OWNER/ADMIN/USER/INSIDER/首次改密会话，并模拟离线、恢复延迟或“真实写入已处理但响应传输不完整”；统计仅含方法、路径、状态，不含请求体或令牌。桥接拒绝陌生 Host/Origin。依次检查个人分类/草稿、昵称头像先审后发、屋主审核/历史处置、开户与凭据离页清理、管理员封禁/屋主解封及未知结果核对。真实密码重置/本人改密的 HTTP 与撤销行为由原隔离测试验证；浏览器只检查相关表单和再验密入口，遵守新凭据输入交接要求。
+
+完成后点击“结束隔离验收”；Java 再核对已批准/驳回申请、恰好一次开户/两笔管理事实、用户最终状态与唯一屋主，并核对恰好一次封禁 POST、一次解封 POST 和原请求 GET 确认，不能仅凭浏览器结束按钮算通过。故障模拟先发送响应头再截断实体，避免直接 reset 空连接被浏览器透明重放，从而漏验“结果未知”分支；应用写请求和数据库幂等仍各自承担原职责。
+
+测试最多保留 25 分钟，正常结束或测试失败均清理桥接/临时入口、会话、库和图片；另行关闭本次 5175 Vite。测试入口删除会触发开发热更新，宜先完成截图和页面检查；关闭失效测试标签即可。若进程被外部强制终止，先只读核对本次随机前缀残留，再定向恢复清理，禁止清空开发库或批量删除其他夹具。

@@ -82,6 +82,8 @@ MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开�
 
 按顺序执行后端编译、普通测试、前端只检查不修复的 ESLint、`npm test`、类型检查及生产构建；任何阶段失败立即停止，并恢复终端工作目录。不读取 IDEA 私有凭据、不自动安装/迁移/授权/部署，也不自动打开真实实例测试。真实 MySQL/Redis 验收仍通过 `Invoke-LocalAuth.ps1 -Action Verify` 显式执行；默认普通验收中被关闭的实例测试会报告跳过，不能把它当作真实连接验收成功。
 
+U4 页面组合验收可显式使用 `Invoke-LocalAuth.ps1 -Action Verify -ProfileModerationOnly -WorkspaceBrowser`；配合独立 5175 Vite 和本机 5190 桥接，由受控浏览器操作当前界面/真实隔离接口，结束后核对数据库事实并清理，步骤与边界见[资料审核的 U4 验收入口](docs/operations/profile-moderation.md#u4-当前页面组合验收受控浏览器)。
+
 有限负载与故障恢复可单独执行 `.\polyhouse\scripts\Test-CapacityRecovery.ps1`：复用 Git 忽略的私有预设，仅选择隔离验收类，需要本机 MySQL 创建临时库权限及 Ubuntu WSL Redis。它创建并清理随机临时库和 `target` 头像目录，只断开测试专用转发连接，不停止数据库/Redis，不运行 OWNER 夹具或修改开发库。普通验收不启用此测试。妙替完整本地流水线基准在 `polyhouse-web/` 执行 `node benchmarks/poly-replace-pipeline.mjs`，结果写入忽略的 `polyhouse/target/polyreplace-pipeline-results.json`；它测量 Node Worker 进程而非浏览器峰值内存。方法、实测和限制见[容量与恢复验收](docs/operations/capacity-recovery-2026-10-28.md)。
 
 使用 JDK 21，在 `polyhouse/` 中执行：
