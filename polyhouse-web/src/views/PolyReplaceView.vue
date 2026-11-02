@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, onBeforeRouteLeave } from 'vue-router'
-import { ElAlert, ElButton, ElInput } from 'element-plus'
+import { ElAlert, ElButton, ElInput, ElOption, ElSelect } from 'element-plus'
 import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
 import ReplaceDraftPanel from '../components/ReplaceDraftPanel.vue'
 import type { ReplaceRule } from '../core/acReplacer'
@@ -34,6 +34,11 @@ const activePreview = computed(() => result.value?.files[previewIndex.value])
 const totalCount = computed(
   () => result.value?.files.reduce((total, file) => total + file.count, 0) ?? 0,
 )
+
+/** ElSelect 未将描述属性透传到内部输入，显式保留原编码说明的读屏关联。 */
+function vEncodingHelp(element: HTMLElement): void {
+  element.querySelector('[role="combobox"]')?.setAttribute('aria-describedby', 'encoding-help')
+}
 
 /** 文件或规则变化时停止旧任务，保留选中文件以供重新处理。 */
 function invalidate(): void {
@@ -231,10 +236,17 @@ function download(): void {
           </li>
         </ul>
         <label for="input-encoding">文件原本的编码</label>
-        <select id="input-encoding" v-model="inputEncoding" aria-describedby="encoding-help">
-          <option value="utf-8">UTF-8（默认）</option>
-          <option value="gb18030">GBK / GB18030</option>
-        </select>
+        <ElSelect
+          id="input-encoding"
+          v-encoding-help
+          v-model="inputEncoding"
+          class="business-select"
+          aria-label="文件原本的编码"
+          fit-input-width
+        >
+          <ElOption label="UTF-8（默认）" value="utf-8" />
+          <ElOption label="GBK / GB18030" value="gb18030" />
+        </ElSelect>
         <p id="encoding-help">
           请选择所有文件共同使用的编码；无法自动判断，请检查预览。导出统一为 UTF-8，GBK
           文件不会保留原编码；Python、HTML、XML 等文件中的编码声明不会自动修改。
@@ -281,11 +293,20 @@ function download(): void {
           <p role="status">完成 {{ result.files.length }} 个文件，共替换 {{ totalCount }} 处。</p>
           <p>结果文件编码：UTF-8。下载前请检查预览是否正确。</p>
           <label for="preview-file">选择预览文件</label>
-          <select id="preview-file" v-model="previewIndex">
-            <option v-for="(file, index) in result.files" :key="index" :value="index">
-              {{ file.name }} · {{ file.count }} 处
-            </option>
-          </select>
+          <ElSelect
+            id="preview-file"
+            v-model="previewIndex"
+            class="business-select"
+            aria-label="选择预览文件"
+            fit-input-width
+          >
+            <ElOption
+              v-for="(file, index) in result.files"
+              :key="index"
+              :label="`${file.name} · ${file.count} 处`"
+              :value="index"
+            />
+          </ElSelect>
           <p v-if="activePreview?.truncated">预览仅显示前 10000 个字符，下载包含完整结果。</p>
           <label for="result-preview">替换结果预览</label>
           <textarea id="result-preview" :value="activePreview?.preview ?? ''" readonly rows="14" />
@@ -416,13 +437,14 @@ label:not(.file-button) {
   min-height: 44px;
   flex-shrink: 0;
 }
-select {
+.business-select {
   width: 100%;
-  padding: 10px;
-  border: 1px solid var(--ph-line);
+}
+.business-select :deep(.el-select__wrapper) {
+  min-height: 44px;
+  padding: 10px 12px;
   border-radius: 8px;
-  background: white;
-  color: var(--ph-ink);
+  font-size: 16px;
 }
 textarea {
   width: 100%;
@@ -434,8 +456,7 @@ textarea {
   font-size: 13px;
   line-height: 1.6;
 }
-/* 原生业务控件也用原边框提示鼠标/键盘聚焦，不叠加外圈；规则 ElInput 保持原样。 */
-select:focus,
+/* 预览文本域沿用原框提示；下拉框由 ElSelect 外框统一绘制焦点及展开层。 */
 textarea:focus {
   border-color: var(--ph-ink);
   outline: 1px solid var(--ph-ink);

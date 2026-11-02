@@ -15,13 +15,15 @@ function compile(source, replacements = {}) {
   }
   return url(code)
 }
-const core = compile(await readFile(new URL('../../src/core/acReplacer.ts', import.meta.url), 'utf8'))
+const core = compile(
+  await readFile(new URL('../../src/core/acReplacer.ts', import.meta.url), 'utf8'),
+)
 const batch = compile(
   await readFile(new URL('../../src/core/polyReplaceBatch.ts', import.meta.url), 'utf8'),
   { './acReplacer': core },
 )
 const controls = url(
-  'export const RouterLink = {}, ElAlert = {}, ElButton = {}, ElInput = {}; export function onBeforeRouteLeave() {}',
+  'export const RouterLink = {}, ElAlert = {}, ElButton = {}, ElInput = {}, ElOption = {}, ElSelect = {}; export function onBeforeRouteLeave() {}',
 )
 // 控制读取和 Worker 回调的先后，不靠机器速度碰巧点击到取消；真实算法另由 Worker 基准验收。
 const fixtures = url(`
