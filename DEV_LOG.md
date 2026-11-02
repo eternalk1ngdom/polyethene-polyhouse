@@ -3,7 +3,7 @@
 更新时间：2026-11-03（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.12 上线前质量收敛](docs/dev-log/v1.0-dev.12.md)，先读“当前摘要”；[Q0～Q5 计划与新窗口提示词](docs/plans/prelaunch-quality-hardening.md)。不批量加载历史。
-- 基线：main/origin/main `3357a5f` 已收口妙替/妙压；规划 `e1c4f31` 已完整纳入新建本地 dev；当前 `codex/fix-tool-layout` 从 dev 开始，尚未推送/合 main。远端保护/CI 未配置。
+- 基线：main/origin/main `3357a5f` 已收口妙替/妙压；规划 `e1c4f31` 已完整纳入新建本地 dev；`codex/fix-tool-layout` 承载实施提交；dev/任务分支已推送 GitHub，未合 main/dev。远端保护/CI 未配置。
 - Q0 与 Q1 首个工具布局闭环本地完成：两工具统一 1320px/900px 断点及介绍区尺度，修复妙压长文件名撑宽；保留首页粉色光晕。两个原目录、隔离工作树与其他修改保留；远端/主线/部署另按授权。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
 
