@@ -15,6 +15,8 @@ import {
   zipEntryName,
 } from '../core/targetKbBatch'
 import type { TargetKbBatchRow, TargetKbBatchStatus } from '../core/targetKbBatch'
+import { describeCapabilityGap } from '../core/targetKbCapability'
+import type { TargetKbCapability } from '../core/targetKbCapability'
 import { createTargetRange, parseTargetSize } from '../core/targetKbCompress'
 import type { TargetKbEncodeResult, TargetKbReply } from '../core/targetKbProtocol'
 import { inspectSource, inspectSourceSize } from '../core/targetKbSource'
@@ -26,6 +28,24 @@ const HEADER_BYTES = 256 * 1024
 
 /** 页面侧只做格式与范围提示，真正校验仍在内核与 Worker。 */
 const DPI_RANGE = '1～1200'
+
+/**
+ * 探测本地编码能力。放在组件里而不是 core：铁律 7 不允许 core/workers 引用浏览器全局对象。
+ * `convertToBlob` 必须单独判——Safari 16.4 之前有 `OffscreenCanvas` 构造器却没有这个方法。
+ */
+function detectCapability(): TargetKbCapability {
+  const hasOffscreenCanvas = typeof OffscreenCanvas !== 'undefined'
+  return {
+    worker: typeof Worker !== 'undefined',
+    createImageBitmap: typeof createImageBitmap === 'function',
+    offscreenCanvas: hasOffscreenCanvas,
+    convertToBlob:
+      hasOffscreenCanvas && typeof OffscreenCanvas.prototype.convertToBlob === 'function',
+  }
+}
+
+/** 能力由浏览器版本决定，页面生命周期内不会变，算一次即可。 */
+const capabilityGap = describeCapabilityGap(detectCapability())
 
 /**
  * 选中的一张图：文件、缩略图地址与状态放在同一个对象里。
@@ -283,7 +303,10 @@ function ensureWorker(): Worker {
   instance.onmessage = (event: MessageEvent<TargetKbReply>) => handleReply(event.data)
   instance.onerror = () => {
     invalidate()
-    message.value = '本地编码线程出错，请重试'
+    // 能力检测已挡住已知的旧浏览器，但 Worker 内报错也可能来自 OOM 等运行时原因，
+    // 所以两种可能都提一句，别让用户对着"请重试"无限重试。
+    message.value =
+      '本地编码线程出错，请重试；若反复出现，请改用 Chrome、Edge 或 Safari 16.4 及以上版本。'
   }
   worker = instance
   return instance
@@ -541,6 +564,17 @@ onBeforeUnmount(() => {
         {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。原图已经在目标体积内会原样返回、不做任何
         转码；需要压缩时才转成 JPEG，这时 PNG 的透明区域会变成白底（JPEG 不支持透明）。
       </p>
+      <ElAlert
+        v-if="capabilityGap"
+        class="notice"
+        :title="capabilityGap"
+        description="图片不会被上传，但本地编码跑不起来；换成受支持的浏览器后即可正常使用。"
+        type="error"
+        :closable="false"
+        show-icon
+        role="alert"
+      />
+
       <label class="drop" @dragover="onDragOver" @drop="onDrop">
         <input
           type="file"
@@ -643,7 +677,12 @@ onBeforeUnmount(() => {
       </p>
 
       <div class="actions">
-        <ElButton type="primary" :loading="busy" :disabled="!entries.length" @click="run">
+        <ElButton
+          type="primary"
+          :loading="busy"
+          :disabled="!entries.length || Boolean(capabilityGap)"
+          @click="run"
+        >
           {{ busy ? '正在压缩' : '开始压缩' }}
         </ElButton>
         <ElButton v-if="busy" @click="cancel">取消</ElButton>
