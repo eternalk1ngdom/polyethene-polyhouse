@@ -3,8 +3,8 @@
 更新时间：2026-11-03（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.11 妙压与隔离集成](docs/dev-log/v1.0-dev.11.md)，先读“当前摘要”，历史证据按需读。
-- Git：main 保持 `407a717`，原妙压 `wb/targetkb` 保持 `1c2a91c`；修复提交 `db8d909`。当前在 `codex/targetkb-integration`、隔离工作树 `polyhouse/target/targetkb-review` 试合双方，尚未正式合入 main/推送。
-- 用户只批准独立修复、隔离试合及验证；两个原工作树和已有修改保留，部署搁置。[本轮范围](docs/plans/target-kb-compression.md#02-合并前独立修复与隔离试合2026-11-03)。
+- Git：用户确认后，`407a717..ed074b6` 共 17 个提交已快进合入 main 并同步 GitHub；集成分支 `codex/targetkb-integration` 已推送。原妙压 `wb/targetkb` 保持 `1c2a91c`。另以纯文档提交记录同步事实，最新编号以 Git/最终汇报为准。
+- 两个原工作树、隔离工作树和已有修改均保留；本次授权覆盖集成分支推送与 main 合入/同步，不含部署或目录清理。[本轮范围](docs/plans/target-kb-compression.md#02-合并前独立修复与隔离试合2026-11-03)。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
 
 ## 已实现与边界
@@ -21,7 +21,7 @@
 - 独立修复 `db8d909`：210 项测试、ESLint/构建/类型及相关格式通过；真实 DPI/原样字节、部分失败 ZIP、取消重试与五档宽度通过。这是修复分支证据，不能冒充试合验收。
 - 隔离集成验收：全量前端 328 项、ESLint/构建/类型通过，技能 73 文件一致；校验器 13 通过/1 权限跳过。两工具实际下载、手选/定位、DPI/COM/部分失败 ZIP、鼠标/Tab 与八档宽度通过，详情及未验边界见 dev.11。
 - main 妙替 253 项与 U4 等均为历史基线，见对应阶段，不冒充本轮通过。无后端/SQL/依赖升级，不重跑无影响的 Maven、账号或全容量测试。
-- 下一步：隔离验证已完成，本地集成提交后交用户确认正式 main/GitHub；不自动发布、不清理两个原目录，不纳入其他任务修改。
+- 下一步：妙压集成与 Git 同步已收口，后续任务待选；不自动发布或清理目录，不纳入其他任务修改。新增 GitHub 写操作及部署仍按授权范围确认。
 
 ## 历史索引（按需）
 
