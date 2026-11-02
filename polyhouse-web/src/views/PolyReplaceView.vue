@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, onBeforeRouteLeave } from 'vue-router'
-import { ElAlert, ElButton, ElInput, ElOption, ElSelect } from 'element-plus'
+import { ElAlert, ElButton, ElCheckbox, ElInput, ElOption, ElSelect } from 'element-plus'
 import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
 import ReplaceDraftPanel from '../components/ReplaceDraftPanel.vue'
 import ReplaceResultPreview from '../components/ReplaceResultPreview.vue'
@@ -15,11 +15,33 @@ import type {
   WorkerReply,
 } from '../core/polyReplaceProtocol'
 
-const selectedFiles = ref<File[]>([])
+const MAX_CANDIDATE_FILES = 500
+const candidateFiles = ref<File[]>([])
+// 候选按浏览器顺序保留；只记录跳过的编号，选回不会丢失文件引用或改变 ZIP 顺序。
+const skippedFiles = ref(new Set<number>())
+const selectedFiles = computed(() =>
+  candidateFiles.value.filter((_, index) => !skippedFiles.value.has(index)),
+)
 const filePicker = ref<HTMLInputElement>()
 const directoryPicker = ref<HTMLInputElement>()
 const fileList = ref<HTMLUListElement>()
 const selectedMode = ref<ReplaceMode>('files')
+const selectionIssue = computed(() => {
+  if (!candidateFiles.value.length) return ''
+  if (!selectedFiles.value.length) return '请至少勾选 1 个参与处理的文件'
+  try {
+    validateBatch(
+      selectedFiles.value.map((file) => ({
+        relativePath: selectedMode.value === 'directory' ? file.webkitRelativePath : file.name,
+        size: file.size,
+      })),
+      selectedMode.value,
+    )
+    return ''
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : '文件选择不符合处理要求'
+  }
+})
 const inputEncoding = ref<InputEncoding>('utf-8')
 const directorySupported = 'webkitdirectory' in document.createElement('input')
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
@@ -69,42 +91,62 @@ watch(rules, invalidate, { deep: true, flush: 'sync' })
 watch(inputEncoding, invalidate, { flush: 'sync' })
 onBeforeUnmount(invalidate)
 
-/** 选择阶段只保存文件引用并检查大小，不与编辑规则争抢异步读取结果。 */
+/** 先限制候选数量，再保存引用；正文只在开始处理时读取，超限/取消保留原清单。 */
 function selectFile(event: Event, mode: ReplaceMode): void {
   const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  input.value = ''
-  if (!files.length) return
-  invalidate()
-  selectedFiles.value = []
-  try {
-    validateBatch(
-      files.map((file) => ({
-        relativePath: mode === 'directory' ? file.webkitRelativePath : file.name,
-        size: file.size,
-      })),
-      mode,
-    )
-    selectedMode.value = mode
-    selectedFiles.value = files
-  } catch (error: unknown) {
-    message.value = error instanceof Error ? error.message : '选择失败，请重试'
+  const incoming = input.files
+  if (!incoming?.length) return
+  if (incoming.length > MAX_CANDIDATE_FILES) {
+    input.value = ''
+    message.value = '候选文件最多 500 个，本次未载入；请缩小选择范围。原文件清单保持不变。'
+    return
   }
+  const files = Array.from(incoming)
+  input.value = ''
+  invalidate()
+  selectedMode.value = mode
+  skippedFiles.value = new Set()
+  candidateFiles.value = files
 }
 
-/** 移除仅影响本次选择；先终止旧任务并清空结果，避免下载包仍含用户已排除的文件。 */
-async function removeFile(index: number): Promise<void> {
-  if (index < 0 || index >= selectedFiles.value.length) return
+/** Checkbox 的通用值还可为字符串/数字，本页只接受布尔参与状态。 */
+function setFileParticipation(index: number, checked: unknown): void {
+  if (typeof checked !== 'boolean' || index < 0 || index >= candidateFiles.value.length) return
+  if (skippedFiles.value.has(index) === !checked) return
   const wasBusy = busy.value
   invalidate()
-  selectedFiles.value.splice(index, 1)
-  if (wasBusy) message.value = '已取消处理并移除文件，请重新开始替换。'
-  // 删除按钮会随清单移除，主动把键盘焦点交给相邻项，删空后回到文件选择入口。
+  if (checked) skippedFiles.value.delete(index)
+  else skippedFiles.value.add(index)
+  if (wasBusy) message.value = '参与文件已改变，已取消旧任务；请重新开始替换。'
+}
+
+/** 全部操作作用于整个候选清单，不默默排除目录、扩展名或超限文件。 */
+async function setAllParticipation(checked: boolean): Promise<void> {
+  if (
+    !candidateFiles.value.length ||
+    selectedFiles.value.length === (checked ? candidateFiles.value.length : 0)
+  )
+    return
+  const activatedButton = document.activeElement?.closest<HTMLButtonElement>(
+    '.file-selection-actions button',
+  )
+  const wasBusy = busy.value
+  invalidate()
+  skippedFiles.value = checked ? new Set() : new Set(candidateFiles.value.map((_, index) => index))
+  if (wasBusy) message.value = '参与文件已改变，已取消旧任务；请重新开始替换。'
+  // 批量动作使自身按钮禁用时，把焦点交给第一项，避免键盘位置落回 body。
   await nextTick()
-  const buttons = fileList.value?.querySelectorAll<HTMLButtonElement>('.remove-file')
-  const nextButton = buttons?.[Math.min(index, selectedFiles.value.length - 1)]
-  if (nextButton) nextButton.focus()
-  else filePicker.value?.focus()
+  if (activatedButton?.disabled)
+    fileList.value?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus()
+}
+
+/** 显示单文件大小帮助用户定位超限项，不需要读取正文。 */
+function fileSizeLabel(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`
+  const label = `${(size / (1024 * 1024)).toFixed(2)} MiB`
+  // 超限一个字节也要明确标出，不能因显示舍入成 2.00 MiB 而让人误以为合规。
+  return size > 2 * 1024 * 1024 ? `${label}（超过 2 MiB）` : label
 }
 
 /** 限制规则数量，控制任务工作量。 */
@@ -118,8 +160,12 @@ function removeRule(index: number): void {
 /** 在任务开始时固定输入快照，逐个读取文件以限制并发内存。 */
 async function runReplace(): Promise<void> {
   invalidate()
-  if (!selectedFiles.value.length) {
+  if (!candidateFiles.value.length) {
     message.value = '请先选择文本文件'
+    return
+  }
+  if (selectionIssue.value) {
+    message.value = selectionIssue.value
     return
   }
   if (rules.value.some((rule) => !rule.search)) {
@@ -199,13 +245,14 @@ function download(): void {
       <section class="panel" aria-labelledby="input-title">
         <h2 id="input-title">1. 选择文本文件</h2>
         <p>
-          文件仅在浏览器中处理，不会上传。最多 20 个文件，每个不超过 2 MiB，总计不超过 5
-          MiB。文件夹保留目录结构并打包为 ZIP，空文件夹不会包含在结果中；
-          任一文件无法处理则整批停止，请移除二进制文件或检查输入编码。
+          文件仅在浏览器中处理，不会上传。最多载入 500 个候选；勾选参与处理的文件最多 20
+          个，每个不超过 2 MiB，总计不超过 5 MiB。文件夹保留目录结构并打包为
+          ZIP，空文件夹不会包含在结果中；任一参与文件无法处理则整批停止，可取消该文件的勾选或检查输入编码。
         </p>
         <p>
           Python 等源码按全文替换，注释、字符串和代码中匹配的内容都会修改，不支持仅替换注释。
-          文件夹不会自动跳过 .git、.venv 等目录，请先准备需要处理的小型文本目录。
+          不自动跳过 .git、.venv
+          等目录，所有候选默认参与，请手动取消不需要的文件。浏览器枚举大目录可能耗时，请选择小型文本目录。
         </p>
         <ElButton class="file-button" @click="filePicker?.click()">选择文件</ElButton>
         <input
@@ -232,24 +279,47 @@ function download(): void {
           @change="selectFile($event, 'directory')"
         />
         <p v-else>当前浏览器不支持选择文件夹，可改为选择文件。</p>
-        <span class="file-name">{{
-          selectedFiles.length ? `已选 ${selectedFiles.length} 个文件` : '尚未选择文件'
-        }}</span>
-        <ul v-if="selectedFiles.length" ref="fileList" class="file-list">
-          <li v-for="(file, index) in selectedFiles" :key="index">
-            <span class="selected-path"
-              >{{ index + 1 }}.
-              {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}</span
-            >
+        <p v-if="!candidateFiles.length" class="file-name">尚未选择文件</p>
+        <section v-else class="file-selection" aria-labelledby="file-selection-title">
+          <h3 id="file-selection-title">参与处理的文件</h3>
+          <p id="file-selection-summary" role="status">
+            共 {{ candidateFiles.length }} 个，参与 {{ selectedFiles.length }} 个，跳过
+            {{ candidateFiles.length - selectedFiles.length }} 个
+          </p>
+          <div class="file-selection-actions">
             <ElButton
-              text
-              class="remove-file"
-              :aria-label="`移除 ${selectedMode === 'directory' ? file.webkitRelativePath : file.name}`"
-              @click="removeFile(index)"
-              >移除</ElButton
+              :disabled="selectedFiles.length === candidateFiles.length"
+              @click="setAllParticipation(true)"
+              >全部参与</ElButton
             >
-          </li>
-        </ul>
+            <ElButton :disabled="selectedFiles.length === 0" @click="setAllParticipation(false)"
+              >全部跳过</ElButton
+            >
+          </div>
+          <p id="file-selection-help">
+            勾选表示参与；取消后仍可选回，不删除原文件。只读取和导出参与文件。
+          </p>
+          <ul ref="fileList" class="file-list" aria-label="候选文件清单">
+            <li v-for="(file, index) in candidateFiles" :key="index">
+              <ElCheckbox
+                class="file-checkbox"
+                :model-value="!skippedFiles.has(index)"
+                :aria-label="`参与 ${selectedMode === 'directory' ? file.webkitRelativePath : file.name}`"
+                aria-describedby="file-selection-help"
+                @update:model-value="setFileParticipation(index, $event)"
+              >
+                <span class="selected-path"
+                  >{{ index + 1 }}.
+                  {{ selectedMode === 'directory' ? file.webkitRelativePath : file.name }}</span
+                >
+                <span class="file-size">{{ fileSizeLabel(file.size) }}</span>
+              </ElCheckbox>
+            </li>
+          </ul>
+          <p v-if="selectionIssue" class="selection-issue" role="status">
+            {{ selectionIssue }}，请调整勾选；清单会保留。
+          </p>
+        </section>
         <label for="input-encoding">文件原本的编码</label>
         <ElSelect
           id="input-encoding"
@@ -289,7 +359,12 @@ function download(): void {
         </div>
         <div class="actions">
           <ElButton :disabled="rules.length >= 20 || busy" @click="addRule">添加规则</ElButton
-          ><ElButton type="primary" :loading="busy" @click="runReplace">开始替换</ElButton
+          ><ElButton
+            type="primary"
+            :loading="busy"
+            :disabled="Boolean(selectionIssue)"
+            @click="runReplace"
+            >开始替换</ElButton
           ><ElButton v-if="busy" @click="invalidate">取消处理</ElButton>
         </div>
         <ElAlert
@@ -451,7 +526,6 @@ p {
 }
 .file-name {
   display: inline-block;
-  margin-left: 12px;
   color: var(--ph-muted);
   overflow-wrap: anywhere;
   font-size: 14px;
@@ -463,7 +537,7 @@ p {
   border: 1px solid var(--ph-line);
   border-radius: 10px;
 }
-label:not(.file-button) {
+label:not(.file-button):not(.file-checkbox) {
   display: block;
   margin: 10px 0 6px;
   font-size: 14px;
@@ -480,28 +554,64 @@ label:not(.file-button) {
 .notice {
   margin-top: 18px;
 }
+.file-selection {
+  margin-top: 16px;
+}
+.file-selection h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.file-selection p {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.file-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.file-selection-actions :deep(.el-button) {
+  margin-left: 0;
+  min-height: 44px;
+}
 .file-list {
   max-height: 140px;
   overflow: auto;
   padding: 0;
+  margin: 8px 0;
   list-style: none;
   overflow-wrap: anywhere;
   color: var(--ph-muted);
   font-size: 14px;
 }
-.file-list li {
+.file-checkbox {
   display: flex;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  margin-right: 0;
+  padding: 4px;
   align-items: center;
-  gap: 12px;
+}
+.file-checkbox :deep(.el-checkbox__label) {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.file-checkbox :deep(.el-checkbox__input) {
+  flex-shrink: 0;
 }
 .selected-path {
-  min-width: 0;
-  flex: 1;
+  overflow-wrap: anywhere;
 }
-.remove-file {
-  min-width: 44px;
-  min-height: 44px;
-  flex-shrink: 0;
+.file-size {
+  display: block;
+  font-size: 12px;
+  color: var(--ph-muted);
+}
+.selection-issue {
+  color: var(--ph-ink);
 }
 .business-select {
   width: 100%;
