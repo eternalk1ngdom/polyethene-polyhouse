@@ -6,6 +6,33 @@ export interface ReplaceRule {
   replace: string
 }
 
+/** 预览沿用 UTF-16 长度限制；截断时不拆开完整 emoji 的代理对。 */
+export const PREVIEW_LENGTH = 10000
+/** 每个文件最多保存前 500 个可见执行位置，密集删除也不会产生无限标记。 */
+export const PREVIEW_HIT_LIMIT = 500
+
+/** 替换后文本的执行位置；删除使用 start === end，顺序保留连续删除。 */
+export interface PreviewHit {
+  /** 输出文本中的起点，按 UTF-16 代码单元计算。 */
+  start: number
+  /** 输出文本中的终点（不包含），已裁剪到预览末尾。 */
+  end: number
+  /** 原始规则编号，与逐条计数的顺序相同。 */
+  ruleIndex: number
+}
+
+/** 只裁剪预览，不改变下载正文；避免末尾显示半个有效 Unicode 字符。 */
+export function getPreviewText(text: string): string {
+  let end = Math.min(text.length, PREVIEW_LENGTH)
+  if (
+    end < text.length &&
+    /[\uD800-\uDBFF]/u.test(text[end - 1]!) &&
+    /[\uDC00-\uDFFF]/u.test(text[end]!)
+  )
+    end--
+  return text.slice(0, end)
+}
+
 /** 返回完整结果及实际替换计数，统计不需要再次扫描结果文本。 */
 export interface ReplaceResult {
   /** 基于原始文本生成的新内容。 */
@@ -14,6 +41,8 @@ export interface ReplaceResult {
   count: number
   /** 按输入规则顺序逐条记录实际消费次数，未命中保留 0；每次调用独立分配。 */
   ruleCounts: number[]
+  /** 仅包含预览内的前 500 处执行位置；全文次数仍由 ruleCounts 提供。 */
+  previewHits: PreviewHit[]
 }
 
 /** 反向字典树节点；编号 0 是根节点。 */
@@ -97,6 +126,7 @@ export function createTextReplacer(
     let cursor = 0
     let count = 0
     const ruleCounts = Array<number>(snapshot.length).fill(0)
+    const previewHits: PreviewHit[] = []
     let pending = 0
     let outputLength = 0
     // 只按原文从左到右消费候选，跳过已替换的区间，不再次匹配替换结果。
@@ -108,7 +138,11 @@ export function createTextReplacer(
       }
       const rule = snapshot[candidate - 1]!
       const unchanged = input.slice(pending, cursor)
-      outputLength += unchanged.length + rule.replace.length
+      const start = outputLength + unchanged.length
+      outputLength = start + rule.replace.length
+      // 在输出拼装时记录坐标，不能用长度可能已变化的原文坐标定位。
+      if (start <= PREVIEW_LENGTH && previewHits.length < PREVIEW_HIT_LIMIT)
+        previewHits.push({ start, end: outputLength, ruleIndex: candidate - 1 })
       if (outputLength > 8 * 1024 * 1024)
         throw new Error('替换结果超过字符数量限制，请缩小文件或调整规则')
       parts.push(unchanged, rule.replace)
@@ -122,7 +156,18 @@ export function createTextReplacer(
     if (outputLength > 8 * 1024 * 1024)
       throw new Error('替换结果超过字符数量限制，请缩小文件或调整规则')
     parts.push(input.slice(pending))
-    return { text: parts.join(''), count, ruleCounts }
+    const text = parts.join('')
+    const previewLength = getPreviewText(text).length
+    return {
+      text,
+      count,
+      ruleCounts,
+      previewHits: previewHits
+        .filter((hit) =>
+          hit.start === hit.end ? hit.start <= previewLength : hit.start < previewLength,
+        )
+        .map((hit) => ({ ...hit, end: Math.min(hit.end, previewLength) })),
+    }
   }
 }
 

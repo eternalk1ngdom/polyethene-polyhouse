@@ -18,6 +18,8 @@ function directReplace(input, rules) {
     .sort((a, b) => b.search.length - a.search.length)
   const ruleCounts = Array(rules.length).fill(0)
   const parts = []
+  const previewHits = []
+  let outputLength = 0
   let cursor = 0,
     pending = 0,
     count = 0
@@ -27,6 +29,10 @@ function directReplace(input, rules) {
       cursor++
       continue
     }
+    const start = outputLength + cursor - pending
+    outputLength = start + rule.replace.length
+    if (start < 10000 && previewHits.length < 500)
+      previewHits.push({ start, end: Math.min(outputLength, 10000), ruleIndex: rule.index })
     parts.push(input.slice(pending, cursor), rule.replace)
     cursor += rule.search.length
     pending = cursor
@@ -34,7 +40,7 @@ function directReplace(input, rules) {
     ruleCounts[rule.index]++
   }
   parts.push(input.slice(pending))
-  return { text: parts.join(''), count, ruleCounts }
+  return { text: parts.join(''), count, ruleCounts, previewHits }
 }
 
 const cases = [

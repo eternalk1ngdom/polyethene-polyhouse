@@ -52,6 +52,7 @@ const { default: component } = await import(
       '../core/polyReplaceBatch': batch,
       '../components/RuleLibraryPanel.vue': url('export default {}'),
       '../components/ReplaceDraftPanel.vue': url('export default {}'),
+      '../components/ReplaceResultPreview.vue': url('export default {}'),
     },
   )
 )
@@ -93,7 +94,16 @@ const reply = (text) => ({
   data: {
     ok: true,
     result: {
-      files: [{ name: 'fixture.txt', preview: text, count: 1, ruleCounts: [1], truncated: false }],
+      files: [
+        {
+          name: 'fixture.txt',
+          preview: text,
+          count: 1,
+          ruleCounts: [1],
+          previewHits: [],
+          truncated: false,
+        },
+      ],
       bytes: new ArrayBuffer(1),
     },
   },
@@ -206,8 +216,30 @@ test('真实页面按当前文件和整批分别统计，规则/编码变化及�
       ok: true,
       result: {
         files: [
-          { name: 'first.txt', preview: 'BB', count: 3, ruleCounts: [2, 1, 0], truncated: false },
-          { name: 'second.txt', preview: 'B', count: 3, ruleCounts: [1, 2, 0], truncated: false },
+          {
+            name: 'first.txt',
+            preview: 'BB',
+            count: 3,
+            ruleCounts: [2, 1, 0],
+            previewHits: [
+              { start: 0, end: 1, ruleIndex: 0 },
+              { start: 1, end: 1, ruleIndex: 1 },
+              { start: 1, end: 2, ruleIndex: 0 },
+            ],
+            truncated: false,
+          },
+          {
+            name: 'second.txt',
+            preview: 'B',
+            count: 3,
+            ruleCounts: [1, 2, 0],
+            previewHits: [
+              { start: 0, end: 0, ruleIndex: 1 },
+              { start: 0, end: 0, ruleIndex: 1 },
+              { start: 0, end: 1, ruleIndex: 0 },
+            ],
+            truncated: false,
+          },
         ],
         bytes: new ArrayBuffer(0),
         name: 'fixture.zip',
@@ -220,19 +252,24 @@ test('真实页面按当前文件和整批分别统计，规则/编码变化及�
   assert.deepEqual(fixture.page.activePreview.value.ruleCounts, [2, 1, 0])
   assert.deepEqual(fixture.page.totalRuleCounts.value, [3, 3, 0])
   assert.equal(fixture.page.totalCount.value, 6)
+  assert.deepEqual(fixture.page.previewHitCounts.value, [2, 1, 0])
   fixture.page.previewIndex.value = 1
   assert.deepEqual(fixture.page.activePreview.value.ruleCounts, [1, 2, 0])
+  assert.deepEqual(fixture.page.previewHitCounts.value, [1, 2, 0])
   assert.deepEqual(fixture.page.totalRuleCounts.value, [3, 3, 0])
   fixture.page.rules.value[0].replace = 'C'
   assert.equal(fixture.page.result.value, null)
   assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  assert.deepEqual(fixture.page.previewHitCounts.value, [0, 0, 0])
   old.onmessage(completed())
   assert.equal(fixture.page.result.value, null)
   assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  assert.deepEqual(fixture.page.previewHitCounts.value, [0, 0, 0])
   await fixture.page.runReplace()
   Worker.instances[1].onmessage(completed())
   fixture.page.inputEncoding.value = 'gb18030'
   assert.equal(fixture.page.result.value, null)
   assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  assert.deepEqual(fixture.page.previewHitCounts.value, [0, 0, 0])
   assert.equal(fixture.page.selectedFiles.value.length, 2)
 })

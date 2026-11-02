@@ -166,6 +166,11 @@ test('空库合法，中文/emoji/换行/删除规则往返一致且兼容原替
     text: '🌸\n__proto__',
     count: 3,
     ruleCounts: [1, 1, 1],
+    previewHits: [
+      { start: 0, end: 0, ruleIndex: 0 },
+      { start: 0, end: 3, ruleIndex: 1 },
+      { start: 3, end: 12, ruleIndex: 2 },
+    ],
   })
 })
 

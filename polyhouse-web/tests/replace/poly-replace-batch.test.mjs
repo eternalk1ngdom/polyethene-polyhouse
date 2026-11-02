@@ -167,6 +167,10 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
     })
     await import(workerUrl)
     self.onmessage({ data: { files: [file('a.txt', 'A'), file('b.txt', 'B')], rules } })
+    assert.deepEqual(
+      replies[0].result.files.map((item) => item.previewHits),
+      [[{ start: 0, end: 1, ruleIndex: 0 }], [{ start: 0, end: 1, ruleIndex: 1 }]],
+    )
     const { unzipSync } = await import('fflate')
     assert.equal(replies[0].ok, true)
     assert.deepEqual(
@@ -279,4 +283,30 @@ test('算法入口也校验规则数量和长度，不依赖页面 maxlength', a
     /规则最多/,
   )
   assert.throws(() => replaceText('a', [{ search: 'a', replace: 'x'.repeat(201) }]), /规则最多/)
+})
+
+test('预览位置限制不改变下载字节：密集删除、窗口外执行、emoji 截断及空文件', () => {
+  const result = replaceBatch(
+    [
+      file('dense.txt', '广告'.repeat(600) + '小明'),
+      file('long.txt', '正文'.repeat(6000) + '小明'),
+      file('empty.txt', ''),
+      file('emoji.txt', 'x'.repeat(9999) + '😀尾'),
+    ],
+    [
+      { search: '广告', replace: '' },
+      { search: '小明', replace: '小蓝' },
+    ],
+  )
+  assert.equal(result[0].previewHits.length, 500)
+  assert.deepEqual(result[0].ruleCounts, [600, 1])
+  assert.equal(new TextDecoder().decode(result[0].content), '小蓝')
+  assert.deepEqual(result[1].previewHits, [])
+  assert.deepEqual(result[1].ruleCounts, [0, 1])
+  assert.equal(new TextDecoder().decode(result[1].content), '正文'.repeat(6000) + '小蓝')
+  assert.equal(result[2].preview, '')
+  assert.deepEqual(result[2].previewHits, [])
+  assert.equal(result[3].preview, 'x'.repeat(9999))
+  assert.equal(result[3].truncated, true)
+  assert.equal(new TextDecoder().decode(result[3].content), 'x'.repeat(9999) + '😀尾')
 })

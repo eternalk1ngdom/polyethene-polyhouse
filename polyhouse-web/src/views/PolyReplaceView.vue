@@ -4,6 +4,7 @@ import { RouterLink, onBeforeRouteLeave } from 'vue-router'
 import { ElAlert, ElButton, ElInput, ElOption, ElSelect } from 'element-plus'
 import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
 import ReplaceDraftPanel from '../components/ReplaceDraftPanel.vue'
+import ReplaceResultPreview from '../components/ReplaceResultPreview.vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
@@ -26,6 +27,13 @@ const draftPanel = ref<InstanceType<typeof ReplaceDraftPanel>>()
 onBeforeRouteLeave(async () => (await draftPanel.value?.prepareLeave()) ?? true)
 const result = ref<BatchDownload | null>(null)
 const previewIndex = ref(0)
+const previewPanel = ref<InstanceType<typeof ReplaceResultPreview>>()
+const previewHitCounts = computed(() =>
+  rules.value.map(
+    (_, index) =>
+      activePreview.value?.previewHits.filter((hit) => hit.ruleIndex === index).length ?? 0,
+  ),
+)
 const message = ref('')
 const busy = ref(false)
 let worker: Worker | undefined
@@ -342,16 +350,32 @@ function download(): void {
                         >替换为：{{ rule.replace === '' ? '（删除匹配内容）' : rule.replace }}</span
                       >
                     </th>
-                    <td>{{ activePreview?.ruleCounts[index] ?? 0 }}</td>
+                    <td>
+                      <span>{{ activePreview?.ruleCounts[index] ?? 0 }}</span>
+                      <ElButton
+                        v-if="previewHitCounts[index]"
+                        class="locate-rule"
+                        :aria-label="`定位规则 ${index + 1}`"
+                        aria-controls="result-preview"
+                        @click="previewPanel?.locateRule(index)"
+                        >定位</ElButton
+                      >
+                      <span v-else-if="activePreview?.ruleCounts[index]" class="unavailable-hit"
+                        >预览外或超过标记上限，无法定位</span
+                      >
+                    </td>
                     <td>{{ totalRuleCounts[index] ?? 0 }}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </section>
-          <p v-if="activePreview?.truncated">预览仅显示前 10000 个字符，下载包含完整结果。</p>
-          <label for="result-preview">替换结果预览</label>
-          <textarea id="result-preview" :value="activePreview?.preview ?? ''" readonly rows="14" />
+          <ReplaceResultPreview
+            v-if="activePreview"
+            :key="previewIndex"
+            ref="previewPanel"
+            :file="activePreview"
+          />
           <ElButton type="primary" class="download" @click="download">{{
             result.mime === 'application/zip' ? '下载 ZIP 结果包' : '下载结果文件'
           }}</ElButton>
@@ -488,24 +512,23 @@ label:not(.file-button) {
   border-radius: 8px;
   font-size: 16px;
 }
-textarea {
-  width: 100%;
-  resize: vertical;
-  border: 1px solid var(--ph-line);
-  border-radius: 8px;
-  padding: 12px;
-  font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-}
-/* 预览文本域沿用原框提示；下拉框由 ElSelect 外框统一绘制焦点及展开层。 */
-textarea:focus {
-  border-color: var(--ph-ink);
-  outline: 1px solid var(--ph-ink);
-  outline-offset: -1px;
-}
 .download {
   margin-top: 16px;
+}
+.locate-rule {
+  min-width: 44px;
+  display: block;
+  margin: 6px 0 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px;
+  font-size: 12px;
+}
+.unavailable-hit {
+  display: block;
+  margin-top: 6px;
+  color: var(--ph-muted);
+  white-space: normal;
 }
 .rule-counts {
   margin-top: 16px;

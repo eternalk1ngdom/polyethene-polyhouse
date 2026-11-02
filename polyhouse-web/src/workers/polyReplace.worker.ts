@@ -21,11 +21,12 @@ self.onmessage = (event: MessageEvent<ReplaceRequest>) => {
     const reply: WorkerReply = {
       ok: true,
       result: {
-        files: files.map(({ name, preview, count, ruleCounts, truncated }) => ({
+        files: files.map(({ name, preview, count, ruleCounts, previewHits, truncated }) => ({
           name,
           preview,
           count,
           ruleCounts,
+          previewHits,
           truncated,
         })),
         bytes: buffer,

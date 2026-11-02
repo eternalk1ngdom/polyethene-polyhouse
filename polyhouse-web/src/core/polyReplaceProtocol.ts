@@ -1,4 +1,4 @@
-import type { ReplaceRule } from './acReplacer'
+import type { PreviewHit, ReplaceRule } from './acReplacer'
 import type { VirtualFileEntry } from './types'
 
 /** 区分普通文件多选与需要保留相对路径的文件夹。 */
@@ -27,8 +27,10 @@ export interface FileSummary {
   preview: string
   /** 替换次数。 */
   count: number
-  /** 当前文件全文的逐条计数，供切换预览与整批求和；不包含定位数据。 */
+  /** 当前文件全文的逐条计数，供切换预览与整批求和。 */
   ruleCounts: number[]
+  /** 当前预览内最多 500 处位置；其余执行仅保留完整计数。 */
+  previewHits: PreviewHit[]
   /** 预览是否截断。 */
   truncated: boolean
 }

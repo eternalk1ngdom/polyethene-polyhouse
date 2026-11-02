@@ -6,9 +6,55 @@ const source = await readFile(new URL('../../src/core/acReplacer.ts', import.met
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { replaceText, createTextReplacer } = await import(
+const { replaceText: actualReplaceText, createTextReplacer: actualCreate } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
+function directPositions(input, rules) {
+  const ordered = rules
+    .map((rule, index) => ({ ...rule, index }))
+    .sort((a, b) => b.search.length - a.search.length)
+  let output = '',
+    cursor = 0
+  const hits = []
+  while (cursor < input.length) {
+    const rule = ordered.find((item) => input.startsWith(item.search, cursor))
+    if (!rule) {
+      output += input[cursor++]
+      continue
+    }
+    hits.push({
+      start: output.length,
+      end: output.length + rule.replace.length,
+      ruleIndex: rule.index,
+    })
+    output += rule.replace
+    cursor += rule.search.length
+  }
+  let end = Math.min(10000, output.length)
+  if (
+    end < output.length &&
+    /[\uD800-\uDBFF]/u.test(output[end - 1]) &&
+    /[\uDC00-\uDFFF]/u.test(output[end])
+  )
+    end--
+  return hits
+    .filter((hit) => (hit.start === hit.end ? hit.start <= end : hit.start < end))
+    .slice(0, 500)
+    .map((hit) => ({ ...hit, end: Math.min(hit.end, end) }))
+}
+function checkPositions(result, input, rules) {
+  assert.deepEqual(result.previewHits, directPositions(input, rules))
+  const { previewHits, ...unchanged } = result
+  return unchanged
+}
+function replaceText(input, rules) {
+  return checkPositions(actualReplaceText(input, rules), input, rules)
+}
+function createTextReplacer(rules) {
+  const snapshot = rules.map((rule) => ({ ...rule })),
+    apply = actualCreate(rules)
+  return (input) => checkPositions(apply(input), input, snapshot)
+}
 test('仅匹配原文，不发生二次串改', () =>
   assert.deepEqual(
     replaceText('A B A', [
@@ -160,4 +206,39 @@ test('同一编译器的不同文件各有计数副本，调用方修改结果�
   first.ruleCounts[0] = 99
   assert.deepEqual(apply('猫鸟'), { text: '狗', count: 2, ruleCounts: [1, 1] })
   assert.deepEqual(apply(''), { text: '', count: 0, ruleCounts: [0, 0] })
+})
+
+test('输出坐标、连续删除、500 处上限和全文计数独立', () => {
+  const rules = [
+    { search: 'a', replace: '长😀' },
+    { search: 'b', replace: '' },
+  ]
+  assert.deepEqual(actualReplaceText('abba', rules).previewHits, [
+    { start: 0, end: 3, ruleIndex: 0 },
+    { start: 3, end: 3, ruleIndex: 1 },
+    { start: 3, end: 3, ruleIndex: 1 },
+    { start: 3, end: 6, ruleIndex: 0 },
+  ])
+  const dense = actualReplaceText('b'.repeat(20000), rules)
+  assert.equal(dense.previewHits.length, 500)
+  assert.equal(dense.text, '')
+  assert.deepEqual(dense.ruleCounts, [0, 20000])
+  assert.ok(dense.previewHits.every((hit) => hit.start === 0 && hit.end === 0))
+  for (const n of [9999, 10000, 10001])
+    for (const suffix of ['a', 'b']) replaceText('x'.repeat(n) + suffix, rules)
+})
+
+test('预览截断不拆 emoji，位置与数组副本不污染后续文件', async () => {
+  const { getPreviewText } = await import(
+    `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
+  )
+  assert.equal(getPreviewText('x'.repeat(9999) + '😀尾'), 'x'.repeat(9999))
+  const apply = actualCreate([{ search: 'a', replace: '😀' }])
+  assert.deepEqual(apply('x'.repeat(9999) + 'a').previewHits, [])
+  assert.deepEqual(apply('x'.repeat(9998) + 'a').previewHits, [
+    { start: 9998, end: 10000, ruleIndex: 0 },
+  ])
+  const first = apply('a')
+  first.previewHits[0].start = 99
+  assert.deepEqual(apply('a').previewHits, [{ start: 0, end: 2, ruleIndex: 0 }])
 })
