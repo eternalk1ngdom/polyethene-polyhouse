@@ -57,6 +57,9 @@ const router = createRouter({
   scrollBehavior(to, _from, savedPosition) {
     // 浏览器后退优先恢复原位置，锚点等待已挂载的页面，普通切页回到顶部。
     if (savedPosition) return savedPosition
+    // 分享片段的载入/清理属于同页来源选择，保留正在阅读的规则与按钮位置。
+    if (to.name === 'poly-replace' && _from.name === 'poly-replace' && to.path === _from.path)
+      return false
     // 个人分类只替换头部下方内容，不像跨页导航那样把用户送回页面顶端。
     if (to.name === 'account' && _from.name === 'account') return false
     // 审核分区也是同页只读切换，保留当前位置；跨工作区仍正常回顶。

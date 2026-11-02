@@ -512,6 +512,7 @@ for (const [from, to] of Object.entries({
   '../utils/replaceDraft': pureUrl,
   '../stores/replaceDraftStorage': storageUrl,
   '../composables/useReplaceDraft': hostsUrl,
+  './RuleSharePanel.vue': url('export default {}'),
 }))
   componentCode = componentCode.replaceAll(`from '${from}'`, `from '${to}'`)
 const { default: component } = await import(url(componentCode))
@@ -596,6 +597,61 @@ test('真实面板恢复不同编辑先确认，取消不更改，确认后父�
   assert.equal(panel.props.rules[0].replace, '已关闭来源')
   assert.equal(panel.manager.dirty.value, false)
   panel.unmount()
+})
+test('链接来源选择走真实面板：载入保留旧历史，待决定时原草稿动作被阻止', async () => {
+  const f = fixture(),
+    old = await enabled(f)
+  await old.repo.save(draft('旧草稿不可丢'), old.generation, () => true)
+  old.repo.close()
+  const panel = await mountPanel(f, [{ search: '当前', replace: '编辑' }])
+  panel.page.sharePending.value = true
+  await panel.page.requestRestore()
+  assert.equal(panel.page.dialogOpen.value, false)
+  await panel.page.toggle(false)
+  assert.equal(panel.manager.enabled.value, true)
+  const before = f.raw
+  f.faults.write = true
+  assert.equal(panel.page.loadSharedRules([{ search: '链接', replace: '新规则' }]), true)
+  await nextTick()
+  assert.equal(await panel.manager.flush(), false)
+  assert.equal(f.raw, before)
+  assert.deepEqual(panel.props.rules, [{ search: '链接', replace: '新规则' }])
+  f.faults.write = false
+  await panel.manager.flush()
+  const stored = JSON.parse(f.raw).drafts
+  assert.ok(
+    stored.some(
+      (item) => item.id === old.repo.id && item.draft.rules[0].replace === '旧草稿不可丢',
+    ),
+  )
+  assert.ok(
+    stored.some((item) => item.id === panel.repo.id && item.draft.rules[0].search === '链接'),
+  )
+  assert.deepEqual(panel.props.rules, [{ search: '链接', replace: '新规则' }])
+  panel.unmount()
+})
+test('统一来源选择的暂不载入保留编辑和旧历史；恢复只接受仍待决的草稿 ID', async () => {
+  const f = fixture(),
+    old = await enabled(f)
+  await old.repo.save(draft('待恢复'), old.generation, () => true)
+  old.repo.close()
+  const panel = await mountPanel(f, [{ search: '当前', replace: '保留' }])
+  assert.equal(panel.page.restoreSharedDraft('missing'), false)
+  assert.deepEqual(panel.props.rules, [{ search: '当前', replace: '保留' }])
+  assert.equal(panel.page.keepSharedEditing(), true)
+  await panel.manager.flush()
+  assert.ok(JSON.parse(f.raw).drafts.some((item) => item.id === old.repo.id))
+  assert.equal(panel.manager.paused.value, false)
+  assert.deepEqual(panel.props.rules, [{ search: '当前', replace: '保留' }])
+  assert.equal(panel.page.restoreSharedDraft(old.repo.id), false)
+  panel.unmount()
+  const other = await mountPanel(f)
+  // 新面板默认定位最新历史；本断言明确选择原来的待恢复来源。
+  other.manager.selectedId.value = old.repo.id
+  assert.equal(other.page.restoreSharedDraft(old.repo.id), true)
+  await nextTick()
+  assert.equal(other.props.rules[0].replace, '待恢复')
+  other.unmount()
 })
 test('导航保存失败可返回或明确离开，关闭确认不会留下未决 Promise', async () => {
   const f = fixture(),

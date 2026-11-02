@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElButton, ElCheckbox, ElDialog, ElOption, ElSelect } from 'element-plus'
+import RuleSharePanel from './RuleSharePanel.vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import { useReplaceDraft } from '../composables/useReplaceDraft'
 import { REPLACE_DRAFT_STORAGE_KEY } from '../stores/replaceDraftStorage'
@@ -39,6 +40,8 @@ const action = ref<'restore' | 'delete' | 'clear' | 'disable' | 'leave'>('clear'
 const source = shallowRef<StoredReplaceDraft>()
 let decideLeave: ((leave: boolean) => void) | undefined
 const blocked = computed(() => !ready.value || pending.value || dialogOpen.value || closing.value)
+const sharePending = ref(false)
+const draftBlocked = computed(() => blocked.value || sharePending.value)
 const title = computed(
   () =>
     ({
@@ -72,7 +75,7 @@ watch(paused, (value) => {
 
 /** 弹窗关闭动画完成前不接受下一动作，避免旧回调关闭新确认。 */
 function ask(kind: typeof action.value, item?: StoredReplaceDraft): void {
-  if (blocked.value) return
+  if (blocked.value || (sharePending.value && kind !== 'leave')) return
   source.value = item
   action.value = kind
   dialogOpen.value = true
@@ -89,7 +92,7 @@ async function restore(item: StoredReplaceDraft): Promise<void> {
   await manager.flush()
 }
 async function requestRestore(): Promise<void> {
-  if (!selected.value || blocked.value) return
+  if (!selected.value || draftBlocked.value) return
   if (
     !isEmptyReplaceDraft(props.rules) &&
     JSON.stringify(props.rules) !== JSON.stringify(selected.value.draft.rules)
@@ -106,7 +109,7 @@ async function requestRestore(): Promise<void> {
 }
 /** 用户取消关闭不会修改开关；关闭失败仍提供专门的清理重试入口。 */
 async function toggle(value: string | number | boolean): Promise<void> {
-  if (blocked.value) return
+  if (draftBlocked.value) return
   // 原生 checkbox 已先切换 checked；重建控件恢复受控状态，取消确认也不能显示为已关闭。
   checkboxRevision.value++
   if (!value) {
@@ -159,6 +162,30 @@ async function prepareLeave(): Promise<boolean> {
 }
 defineExpose({ prepareLeave })
 
+/** 来源选择在同一处协调，链接载入走新槽位，不消费原来的待恢复历史。 */
+function loadSharedRules(rules: readonly Readonly<ReplaceRule>[]): boolean {
+  if (blocked.value) return false
+  manager.continueCurrent()
+  emit(
+    'load',
+    rules.map(({ search, replace }) => ({ search, replace })),
+  )
+  return true
+}
+/** 来源可能已被另一页清理，确认时重新核对当前待恢复 ID。 */
+function restoreSharedDraft(id: string): boolean {
+  if (blocked.value || !paused.value || selected.value?.id !== id) return false
+  emit('load', manager.restore(selected.value))
+  void manager.flush()
+  return true
+}
+/** 暂不载入也结束自动恢复的等待，但历史仍能从原入口手动查看。 */
+function keepSharedEditing(): boolean {
+  if (blocked.value) return false
+  if (paused.value) manager.continueCurrent()
+  return true
+}
+
 function storageChanged(event: StorageEvent): void {
   if (event.key === REPLACE_DRAFT_STORAGE_KEY || event.key === null) manager.refresh()
 }
@@ -190,18 +217,28 @@ function label(item: StoredReplaceDraft): string {
 </script>
 
 <template>
+  <RuleSharePanel
+    :rules="rules"
+    :ready="ready"
+    :busy="blocked"
+    :draft="paused && selected ? selected : null"
+    :load-rules="loadSharedRules"
+    :restore-draft="restoreSharedDraft"
+    :keep-current="keepSharedEditing"
+    @pending="sharePending = $event"
+  />
   <section class="draft-panel" aria-label="本机规则草稿">
     <div class="draft-toolbar">
       <ElCheckbox
         :key="checkboxRevision"
         :model-value="enabled"
-        :disabled="blocked"
+        :disabled="draftBlocked"
         @change="toggle"
         >自动保存规则草稿</ElCheckbox
       >
       <ElButton
         size="small"
-        :disabled="blocked"
+        :disabled="draftBlocked"
         :aria-expanded="expanded"
         @click="expanded = !expanded"
         >{{ expanded ? '收起历史' : `历史草稿（${history.length}）` }}</ElButton
@@ -214,29 +251,36 @@ function label(item: StoredReplaceDraft): string {
       {{ saving ? '正在保存草稿，请稍候…' : message }}
     </p>
     <p v-if="locationWarning" class="draft-warning">{{ locationWarning }}</p>
-    <p v-if="paused" class="draft-warning">
+    <p v-if="paused && !sharePending" class="draft-warning">
       检测到上次草稿，请选择恢复或保留当前编辑继续；决定前暂停自动保存。
     </p>
-    <div v-if="expanded" class="draft-history">
+    <div v-if="expanded && !sharePending" class="draft-history">
       <label for="replace-draft-history">选择历史草稿（最多 10 份）</label>
       <ElSelect
         id="replace-draft-history"
         v-model="selectedId"
         aria-label="选择历史草稿"
         :placeholder="history.length ? '请选择历史草稿' : '暂无历史草稿'"
-        :disabled="blocked || !history.length"
+        :disabled="draftBlocked || !history.length"
         fit-input-width
       >
         <ElOption v-for="item in history" :key="item.id" :value="item.id" :label="label(item)" />
       </ElSelect>
       <div class="draft-actions">
-        <ElButton size="small" :disabled="blocked || !selected" @click="requestRestore"
+        <ElButton size="small" :disabled="draftBlocked || !selected" @click="requestRestore"
           >恢复所选草稿</ElButton
         >
-        <ElButton size="small" :disabled="blocked || !selected" @click="ask('delete', selected)"
+        <ElButton
+          size="small"
+          :disabled="draftBlocked || !selected"
+          @click="ask('delete', selected)"
           >删除所选历史</ElButton
         >
-        <ElButton v-if="paused" size="small" :disabled="blocked" @click="manager.continueCurrent"
+        <ElButton
+          v-if="paused"
+          size="small"
+          :disabled="draftBlocked"
+          @click="manager.continueCurrent"
           >保留当前编辑继续</ElButton
         >
       </div>
@@ -248,14 +292,16 @@ function label(item: StoredReplaceDraft): string {
       <ElButton
         v-if="enabled && dirty && !paused"
         size="small"
-        :disabled="blocked || saving"
+        :disabled="draftBlocked || saving"
         @click="manager.flush"
         >立即保存 / 重试</ElButton
       >
-      <ElButton v-if="cleanupFailed" size="small" :disabled="blocked" @click="ask('disable')"
+      <ElButton v-if="cleanupFailed" size="small" :disabled="draftBlocked" @click="ask('disable')"
         >重试关闭清理</ElButton
       >
-      <ElButton size="small" :disabled="blocked" @click="ask('clear')">清空本页规则和草稿</ElButton>
+      <ElButton size="small" :disabled="draftBlocked" @click="ask('clear')"
+        >清空本页规则和草稿</ElButton
+      >
     </div>
     <p class="draft-help">
       正常离页会尝试补存；浏览器崩溃或强制关闭时，最后一次输入可能尚未保存。草稿与正式词库分别管理。
