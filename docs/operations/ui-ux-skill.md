@@ -9,7 +9,7 @@
 | 来源 | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
 | 版本 | [v2.15.0](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/releases/tag/v2.15.0) |
 | 固定提交 | `a38d04c3d5c298c851dbe5e6ee1965ee3de42cb5`，后续不自动追随 main/latest |
-| 范围 | 仅本仓库 `.agents/skills/ui-ux-pro-max/`，在 E 盘；未安装到用户全局目录 |
+| 范围 | 源在本仓库 `.agents/skills/ui-ux-pro-max/`（E 盘）。2026-11-01 另复制一份到用户级 `~/.workbuddy-ai/skills/ui-ux-pro-max`：WorkBuddy 只扫描内置/用户级/插件三类来源，项目级挂载点不会被发现，详见 [dev.11](../dev-log/v1.0-dev.11.md) |
 | 文件 | 73 个文件，约 3.4 MiB；全部内容及 SHA-256 见[固定清单](ui-ux-skill-lock.json) |
 | 运行环境 | 已有 Python 3.13.12；不安装 Python、npm 全局工具或网站运行依赖 |
 | 许可 | 目录中保留上游 MIT `LICENSE` |
@@ -18,6 +18,8 @@
 安装采用内置 `skill-installer` 的安全下载/解压、目录验证和复制辅助函数，按精确提交获取源码；未执行第三方 npm 安装器。GitHub 公共 API 限流后通过只读 `git ls-remote` 核对 tag，下载不转发私人 GitHub Token；暂存目录为 Git 忽略的 `polyhouse/target/ui-ux-install/`，不使用 C 盘 npm 缓存。
 
 只安装上游 `.claude/skills/ui-ux-pro-max` 的完整主技能目录，不带入其他配套技能或整套开发仓库。数据、检索代码、参考文件和上游测试均保持原字节；仅将 `SKILL.md` 的 Claude 插件路径改成 Codex 项目路径，补充从其他工作目录运行时应解析绝对路径及先读取仓库契约的说明。另加入许可、局部 Python 缓存忽略规则和保留原字节的 Git 换行设置；改动类别、原始与安装后散列均在清单中。
+
+2026-11-01 又改了 `SKILL.md` 一处：正文 11 处命令原先写死 `".agents/skills/ui-ux-pro-max/scripts/search.py"`，这与同一段"技能可能不在项目目录下、必须用绝对路径调用"的说明自相矛盾，且用户级副本照抄后路径是错的。现统一改为 `<skill-dir>/scripts/search.py`，并在段首定义 `<skill-dir>` 为本 SKILL.md 所在目录的绝对路径（即技能加载时报告的 `Base directory`）。清单中该文件的字节数与散列已同步更新。
 
 本次没有修改前后端业务代码、依赖版本、Vite 配置、运行密钥、数据库、Redis、头像目录或系统环境，也没有生成 `design-system/` 文件夹。
 
@@ -28,6 +30,8 @@ Codex 按[官方发现规则](https://learn.chatgpt.com/docs/build-skills)读取
 > 使用 ui-ux-pro-max 审查聚妙屋首页的图标、字体和间距，遵守 AGENTS.md，保留既有技术栈与已确定的视觉方向，先给建议，暂不改代码。
 
 文件安装与检索已验证；当前回合不能预先证明下一轮是否会自动选择该技能。如技能选择器未更新，重启 Codex 后再试。安装位置符合本项目及官方项目级发现路径，不依赖 Claude 的环境变量。
+
+在 WorkBuddy 里调用的是用户级副本，路径与上表不同：按技能加载时报告的 `Base directory` 定位 `scripts/search.py`，不要照抄下面的仓库相对路径。
 
 人工从仓库根目录查询可执行：
 

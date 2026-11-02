@@ -88,12 +88,12 @@ MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开�
 
 | 测试根目录 | 当前归类 |
 | --- | --- |
-| [前端 tests](polyhouse-web/tests/) | `user/`：认证、账号/管理工作台、资料与成长；`replace/`：妙替内核、批处理、词库与草稿 |
+| [前端 tests](polyhouse-web/tests/) | `user/`：认证、账号/管理工作台、资料与成长；`replace/`：妙替内核、批处理、词库与草稿；`target-kb/`：妙压内核、协议、文件与任务生命周期 |
 | [后端 Java 测试根](polyhouse/src/test/java/com/polyethene/polyhouse/) | `user/`：用户业务，内部沿用 controller/service 等分层；`common/`：公共契约；`system/`：应用启动、Redis 连接与跨模块容量恢复 |
 
 后端三个测试保留生产代码同包位置：`ops/OwnerBootstrapCommandTest` 测试包可见命令解析，`service/AvatarServiceTest` 调用包可见审核方法，`service/impl/AuthServiceImplTest` 使用包可见时钟构造器；不为目录归类扩大接口。校验夹具 `model/dto/ValidationProbeDTO`、`model/vo/ValidationProbeVO` 保留 DTO/VO 契约包，其他夹具随业务归类。
 
-前端 `npm test` 递归发现全部业务目录；在 `polyhouse-web/` 可定向执行 `node --test "tests/user/*.test.mjs"` 或 `node --test "tests/replace/*.test.mjs"`。后端仍按类名选择，例如在 `polyhouse/` 执行 `mvn -q '-Dtest=AuthControllerTest' test`；现有隔离脚本按类名定位，不因业务目录迁移改用未隔离的全量实例测试。重排测试包后须清理旧编译测试类，避免 Maven 把旧、新包都发现为测试。
+前端 `npm test` 递归发现全部业务目录；在 `polyhouse-web/` 可定向执行 `node --test "tests/user/*.test.mjs"` 、`node --test "tests/replace/*.test.mjs"` 或 `node --test "tests/target-kb/*.test.mjs"`。后端仍按类名选择，例如在 `polyhouse/` 执行 `mvn -q '-Dtest=AuthControllerTest' test`；现有隔离脚本按类名定位，不因业务目录迁移改用未隔离的全量实例测试。重排测试包后须清理旧编译测试类，避免 Maven 把旧、新包都发现为测试。
 
 U4 页面组合验收可显式使用 `Invoke-LocalAuth.ps1 -Action Verify -ProfileModerationOnly -WorkspaceBrowser`；配合独立 5175 Vite 和本机 5190 桥接，由受控浏览器操作当前界面/真实隔离接口，结束后核对数据库事实并清理，步骤与边界见[资料审核的 U4 验收入口](docs/operations/profile-moderation.md#u4-当前页面组合验收受控浏览器)。
 
@@ -158,3 +158,11 @@ npm run lint:check
 - [屋主初始化与隔离要求](docs/operations/owner-bootstrap.md)：已有正式 OWNER，不重放初始化或清空记录。
 - [账号安全](docs/operations/account-security.md)、[开户](docs/operations/account-provisioning.md)、[管理](docs/operations/account-management.md)、[资料审核](docs/operations/profile-moderation.md)：以对应追加迁移、接口和回退说明为准。
 - [只读策划书索引](docs/design/blueprint-index.md)、[计划索引](docs/plans/README.md)：规划、批准、实现与验收状态分别查证。
+
+## 妙压：本地图片体积卡位
+
+入口 `/targetkb`，只在浏览器处理、不上传。选择单图或追加多图，设置体积上限（必填）、下限/DPI（可选）后运行；批量共用设置，串行处理，只把成功项加入 ZIP，失败原因逐项显示。限制为 20 张、合计 60 MiB、单张 20 MiB/4000 万像素，不承诺任意容量或所有浏览器编解码支持。
+
+源文件在目标区间且无需格式转换时直接交付；未要求 DPI 时保持原字节，JPEG 指定 DPI 可只改元数据、不重新编码像素。需要压缩或格式转换时输出 JPEG，透明区域铺白底；体积下限可用 JPEG COM 补齐，不把超上限结果当成功。DPI 是文件密度信息，不增加像素或画质；按实际输出 MIME 命名后缀。
+
+取消、改参数、换图或离页后，旧读取/编码/打包回调不能生成结果或覆盖新任务；重试是新的任务。下载前核对实际效果；换底、PDF、云预设已否决，不包含在功能中。批准边界与浏览器未验项见[妙压计划](docs/plans/target-kb-compression.md)及 [dev.11](docs/dev-log/v1.0-dev.11.md)。

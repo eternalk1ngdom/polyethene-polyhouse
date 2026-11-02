@@ -11,6 +11,8 @@ hs_err_pid*
 *.ipr
 *.iws
 .vscode/
+# VS Code 的代码统计插件（Code Counter）把历史结果写在这里，属于本机工具产物
+.VSCodeCounter/
 *.swp
 *.swo
 
@@ -50,6 +52,9 @@ desktop.ini
 
 # Runtime output
 .local-backups/
+
+# 本地 AI 协作记忆目录，属于个人工作区状态，不进入版本库
+.workbuddy-ai/
 uploads/
 temp/
 *.tmp

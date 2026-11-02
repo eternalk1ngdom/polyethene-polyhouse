@@ -47,9 +47,9 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
     tag: '图片处理',
     subtitle: 'TargetKB',
     description: '为照片找到刚刚好的大小，让那些挑剔的文件限制简单一点。',
-    status: 'planned',
+    status: 'available',
     accent: 'peach',
     category: 'image',
-    plannedFeatures: ['按目标体积压缩', '小图片无损增重', '尺寸、DPI 与常用规格'],
+    plannedFeatures: ['按目标体积压缩', '小图片无损增重', '尺寸与 DPI 可选'],
   },
 ]
