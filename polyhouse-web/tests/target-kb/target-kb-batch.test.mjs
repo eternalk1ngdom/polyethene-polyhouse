@@ -11,7 +11,7 @@ function toModuleUrl(source) {
   return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
 }
 
-const source = await readFile(new URL('../src/core/targetKbBatch.ts', import.meta.url), 'utf8')
+const source = await readFile(new URL('../../src/core/targetKbBatch.ts', import.meta.url), 'utf8')
 const {
   MAX_BATCH_FILES,
   MAX_BATCH_BYTES,

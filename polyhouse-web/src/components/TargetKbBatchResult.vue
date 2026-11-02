@@ -24,7 +24,11 @@ interface Props {
 const props = defineProps<Props>()
 
 /** 下载交给面板，子组件不持有 Blob 地址；放弃结果同样由面板清理。 */
-const emit = defineEmits<{ download: []; discard: [] }>()
+interface Emits {
+  download: []
+  discard: []
+}
+const emit = defineEmits<Emits>()
 
 /** 进度按"已出结果（成功或失败）"计算，正在跑的那张不算完成。 */
 const percent = computed(() => {
@@ -94,7 +98,8 @@ function stateText(row: TargetKbBatchRow): string {
       <p>以下 {{ failedRows.length }} 张未包含在 ZIP 中：</p>
       <ul>
         <li v-for="row in failedRows" :key="row.name">
-          <strong>{{ row.name }}</strong>：{{ row.message }}
+          <strong>{{ row.name }}</strong
+          >：{{ row.message }}
         </li>
       </ul>
     </div>

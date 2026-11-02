@@ -1,6 +1,6 @@
 /**
  * 妙压的 Worker 消息协议。
- * 与妙替的差别：妙压一次任务要往返多次编码，所以每条消息都带递增 id，
+ * 一次用户任务从读文件到整批编码/打包共用 id；下一次任务分配更大的 id，
  * 由页面与 Worker 共同维护"当前有效 id"，用它丢弃已作废任务的迟到回调。
  */
 import { createTargetRange } from './targetKbCompress'
@@ -32,7 +32,7 @@ export interface TargetKbProbeRecord {
 
 /** 提交一次压缩任务。 */
 export interface TargetKbEncodeRequest {
-  /** 递增任务编号，由页面生成；Worker 用它判断回调是否已过期。 */
+  /** 页面生成的用户任务编号；同批串行编码复用，下一次任务递增，用于丢弃旧回复。 */
   id: number
   /** 请求类型。 */
   kind: 'encode'
@@ -81,7 +81,7 @@ export interface TargetKbEncodeResult {
   maxEdge: number | null
   /** 已降档次数。 */
   scaleStep: number
-  /** 是否一个字节都没改、直接返回了源文件。 */
+  /** 是否免重新编码；指定 DPI 的 JPEG 仍可能改写元数据，不能据此声称字节未变。 */
   passthrough: boolean
   /** 实际输出类型；原样交付时就是源文件的类型。 */
   mime: string
@@ -126,7 +126,9 @@ export interface TargetKbReply {
  * 0 表示"当前没有有效任务"（例如已取消），此时任何回复都应丢弃。
  */
 export function isCurrentReply(replyId: number, activeId: number): boolean {
-  return Number.isInteger(replyId) && Number.isInteger(activeId) && activeId > 0 && replyId === activeId
+  return (
+    Number.isInteger(replyId) && Number.isInteger(activeId) && activeId > 0 && replyId === activeId
+  )
 }
 
 /** 校验目标区间；直接复用内核规则，避免协议层另立一套上下限判断。 */
@@ -162,7 +164,12 @@ export function parseRequest(data: unknown): TargetKbRequest {
   const rawDpi = record.dpi
   let dpi: number | null = null
   if (rawDpi !== null && rawDpi !== undefined) {
-    if (typeof rawDpi !== 'number' || !Number.isInteger(rawDpi) || rawDpi < MIN_DPI || rawDpi > MAX_DPI)
+    if (
+      typeof rawDpi !== 'number' ||
+      !Number.isInteger(rawDpi) ||
+      rawDpi < MIN_DPI ||
+      rawDpi > MAX_DPI
+    )
       throw new Error(`DPI 必须是 ${MIN_DPI}～${MAX_DPI} 的整数`)
     dpi = rawDpi
   }

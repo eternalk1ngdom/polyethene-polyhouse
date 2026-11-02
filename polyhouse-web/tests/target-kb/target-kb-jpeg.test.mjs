@@ -11,7 +11,7 @@ function toModuleUrl(source) {
   return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
 }
 
-const source = await readFile(new URL('../src/core/jpegComInjector.ts', import.meta.url), 'utf8')
+const source = await readFile(new URL('../../src/core/jpegComInjector.ts', import.meta.url), 'utf8')
 const { readSegments, padWithComSegments, rewriteJfifDpi, readJfifDpi, prepareDelivery, MAX_COM_PAYLOAD } =
   await import(toModuleUrl(source))
 

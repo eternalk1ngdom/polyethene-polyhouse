@@ -18,7 +18,12 @@ import type { TargetKbBatchRow, TargetKbBatchStatus } from '../core/targetKbBatc
 import { describeCapabilityGap } from '../core/targetKbCapability'
 import type { TargetKbCapability } from '../core/targetKbCapability'
 import { createTargetRange, parseTargetSize } from '../core/targetKbCompress'
-import type { TargetKbEncodeResult, TargetKbReply } from '../core/targetKbProtocol'
+import { isCurrentReply } from '../core/targetKbProtocol'
+import type {
+  TargetKbEncodeResult,
+  TargetKbProgress,
+  TargetKbReply,
+} from '../core/targetKbProtocol'
 import { inspectSource, inspectSourceSize } from '../core/targetKbSource'
 import type { TargetKbTarget } from '../core/targetKbTypes'
 import { formatBytes } from '../utils/byteSize'
@@ -68,7 +73,7 @@ interface PickedEntry {
   outputBytes?: number
   /** 成功后的实际输出类型；决定下载与 ZIP 内文件的后缀。 */
   outputMime?: string
-  /** 是否原样返回（源文件已在目标区间内）。 */
+  /** 是否免重新编码，DPI 元数据仍可能改写。 */
   passthrough?: boolean
   /** 失败原因，直接展示。 */
   message?: string
@@ -83,7 +88,7 @@ const allowShrink = ref(true)
 const busy = ref(false)
 const packing = ref(false)
 const message = ref('')
-const progress = ref<{ attempts: number; quality: number; bytes: number } | null>(null)
+const progress = ref<TargetKbProgress | null>(null)
 const result = ref<TargetKbEncodeResult | null>(null)
 const resultUrl = ref('')
 const zipUrl = ref('')
@@ -97,6 +102,12 @@ const outputs = new Map<number, Uint8Array>()
 let worker: Worker | undefined
 let activeId = 0
 let nextId = 1
+let disposed = false
+
+/** 一个递增编号覆盖读文件、整批编码与打包，异步边界只认可仍有效的这次任务。 */
+function isCurrentTask(id: number): boolean {
+  return !disposed && isCurrentReply(id, activeId)
+}
 let pendingReply: ((reply: TargetKbReply) => void) | null = null
 
 /** 多选即批量；单张仍走原来的详细结果视图。 */
@@ -161,21 +172,34 @@ function invalidate(): void {
  * 解析失败或超限就整批退回：这张图后面也压不了，留着只会让用户白等。
  */
 async function inspectSingle(entry: PickedEntry): Promise<void> {
+  const stillSingle = () =>
+    !disposed && entries.value.length === 1 && entries.value[0]?.id === entry.id
+  const reject = (text: string) => {
+    if (!stillSingle()) return
+    invalidate()
+    releaseEntries()
+    message.value = text
+  }
+  if (!stillSingle()) return
   const sizeCheck = inspectSourceSize(entry.file.size)
   if (!sizeCheck.ok) {
-    message.value = sizeCheck.message
-    releaseEntries()
+    reject(sizeCheck.message)
     return
   }
-  const head = new Uint8Array(await entry.file.slice(0, HEADER_BYTES).arrayBuffer())
-  const inspection = inspectSource(head)
-  if (!inspection.ok) {
-    message.value = inspection.message
-    releaseEntries()
-    return
+  try {
+    const head = new Uint8Array(await entry.file.slice(0, HEADER_BYTES).arrayBuffer())
+    // 追加、移除或清空后，迟到检查不能清掉新列表；文件引用与稳定 id 一起限定来源。
+    if (!stillSingle()) return
+    const inspection = inspectSource(head)
+    if (!inspection.ok) {
+      reject(inspection.message)
+      return
+    }
+    entry.width = inspection.width
+    entry.height = inspection.height
+  } catch {
+    reject('读取图片信息失败，请重新选择图片。')
   }
-  entry.width = inspection.width
-  entry.height = inspection.height
 }
 
 /**
@@ -183,6 +207,7 @@ async function inspectSingle(entry: PickedEntry): Promise<void> {
  * 追加而不是替换——用户常常先拖一张试，再陆续把其余的补进来。
  */
 async function acceptFiles(list: File[]): Promise<void> {
+  if (disposed) return
   message.value = ''
 
   const { added, duplicates, notImages } = mergePicked(
@@ -231,7 +256,7 @@ async function acceptFiles(list: File[]): Promise<void> {
 
   // 多张时不逐张解析文件头：解析结果只用于单图预览，批量交给 Worker 逐张判断。
   if (entries.value.length === 1) await inspectSingle(entries.value[0]!)
-  if (notes.length) message.value = `${notes.join('，')}。`
+  if (!disposed && notes.length) message.value = `${notes.join('，')}。`
 }
 
 /**
@@ -302,6 +327,9 @@ function ensureWorker(): Worker {
   })
   instance.onmessage = (event: MessageEvent<TargetKbReply>) => handleReply(event.data)
   instance.onerror = () => {
+    if (worker !== instance || disposed) return
+    instance.terminate()
+    worker = undefined
     invalidate()
     // 能力检测已挡住已知的旧浏览器，但 Worker 内报错也可能来自 OOM 等运行时原因，
     // 所以两种可能都提一句，别让用户对着"请重试"无限重试。
@@ -314,14 +342,13 @@ function ensureWorker(): Worker {
 
 /** 只按 id 判断归属：换图或改参数会换 id，旧任务的迟到消息自然被丢弃。 */
 function handleReply(reply: TargetKbReply): void {
-  if (activeId === 0 || reply.id !== activeId) return
+  if (!isCurrentTask(reply.id)) return
   if (reply.progress) {
     progress.value = reply.progress
     return
   }
   const resolve = pendingReply
   pendingReply = null
-  activeId = 0
   progress.value = null
   resolve?.(reply)
 }
@@ -331,9 +358,10 @@ function sendEncode(
   bytes: ArrayBuffer,
   target: TargetKbTarget,
   dpi: number | null,
+  id: number,
 ): Promise<TargetKbReply> {
-  const id = nextId++
-  activeId = id
+  if (!isCurrentTask(id))
+    return Promise.resolve({ id, ok: false, reason: 'cancelled', message: '已取消' })
   return new Promise((resolve) => {
     pendingReply = resolve
     ensureWorker().postMessage(
@@ -343,40 +371,36 @@ function sendEncode(
   })
 }
 
-async function runSingle(target: TargetKbTarget, dpi: number | null): Promise<void> {
+async function runSingle(target: TargetKbTarget, dpi: number | null, id: number): Promise<void> {
   const entry = entries.value[0]
   if (!entry) return
   try {
     const bytes = await entry.file.arrayBuffer()
-    const reply = await sendEncode(bytes, target, dpi)
-    if (reply.reason === 'cancelled') return
+    if (!isCurrentTask(id)) return
+    const reply = await sendEncode(bytes, target, dpi, id)
+    if (!isCurrentTask(id) || reply.reason === 'cancelled') return
     if (reply.ok && reply.result) {
       result.value = reply.result
-      resultUrl.value = URL.createObjectURL(new Blob([reply.result.bytes], { type: reply.result.mime }))
-    } else {
-      message.value = reply.message ?? '处理失败，请重试'
-    }
+      resultUrl.value = URL.createObjectURL(
+        new Blob([reply.result.bytes], { type: reply.result.mime }),
+      )
+    } else message.value = reply.message ?? '处理失败，请重试'
   } catch {
-    message.value = '读取图片失败，请重试'
-  } finally {
-    busy.value = false
+    if (isCurrentTask(id)) message.value = '读取图片失败，请重试'
   }
 }
 
-async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<void> {
-  // 先拍一份快照：循环里要 await，直接遍历响应式数组等于在遍历过程中观察它。
+async function runBatch(target: TargetKbTarget, dpi: number | null, id: number): Promise<void> {
   const list = [...entries.value]
   try {
     for (const entry of list) {
-      if (!busy.value) return
+      if (!isCurrentTask(id)) return
       entry.status = 'running'
       progress.value = null
       const bytes = await entry.file.arrayBuffer()
-      const reply = await sendEncode(bytes, target, dpi)
-      if (reply.reason === 'cancelled' || !busy.value) {
-        entry.status = 'pending'
-        return
-      }
+      if (!isCurrentTask(id)) return
+      const reply = await sendEncode(bytes, target, dpi, id)
+      if (!isCurrentTask(id) || reply.reason === 'cancelled') return
       if (reply.ok && reply.result) {
         entry.status = 'done'
         entry.outputBytes = reply.result.bytes.byteLength
@@ -388,16 +412,15 @@ async function runBatch(target: TargetKbTarget, dpi: number | null): Promise<voi
         entry.message = reply.message ?? '处理失败'
       }
     }
-    await packZip()
+    await packZip(id)
   } catch {
-    message.value = '批量处理中断，请重试'
-  } finally {
-    busy.value = false
+    if (isCurrentTask(id)) message.value = '批量处理中断，请重试'
   }
 }
 
 /** 只打包成功项；有失败就单独列出，不把半成品混进 ZIP。 */
-async function packZip(): Promise<void> {
+async function packZip(id: number): Promise<void> {
+  if (!isCurrentTask(id)) return
   const done = entries.value.filter((entry) => entry.status === 'done')
   if (done.length === 0) {
     message.value = '所有图片都未能压缩，未生成 ZIP。'
@@ -420,17 +443,18 @@ async function packZip(): Promise<void> {
       // JPEG 已经压缩过，deflate 几乎不再变小；用 store 换取更短的等待。
       zip(archiveEntries, { level: 0 }, (error, data) => (error ? reject(error) : resolve(data)))
     })
+    if (!isCurrentTask(id)) return
     zipUrl.value = URL.createObjectURL(new Blob([archive.slice()], { type: 'application/zip' }))
     zipBytes.value = archive.byteLength
   } catch {
-    message.value = '打包 ZIP 失败，请重试'
+    if (isCurrentTask(id)) message.value = '打包 ZIP 失败，请重试'
   } finally {
-    packing.value = false
+    if (isCurrentTask(id)) packing.value = false
   }
 }
 
 async function run(): Promise<void> {
-  if (!entries.value.length || busy.value) return
+  if (disposed || !entries.value.length || busy.value) return
   message.value = ''
 
   let target: TargetKbTarget
@@ -444,9 +468,21 @@ async function run(): Promise<void> {
   }
 
   invalidate()
+  const id = nextId++
+  activeId = id
   busy.value = true
-  if (isBatch.value) await runBatch(target, dpi)
-  else await runSingle(target, dpi)
+  try {
+    if (isBatch.value) await runBatch(target, dpi, id)
+    else await runSingle(target, dpi, id)
+  } finally {
+    // 旧任务的 finally 也不能解除新任务的忙碌状态或清掉它的等待回调。
+    if (isCurrentTask(id)) {
+      activeId = 0
+      pendingReply = null
+      busy.value = false
+      packing.value = false
+    }
+  }
 }
 
 /** 取消只作废回调，线程留着给下一次用；真正释放内存靠卸载时终止。 */
@@ -513,7 +549,7 @@ const summary = computed(() => {
     change: before > 0 ? Math.round(((after - before) / before) * 100) : 0,
     passthrough: out.passthrough,
     dimension: out.passthrough
-      ? `${out.width}×${out.height}（原图未改动）`
+      ? `${out.width}×${out.height}（保持原尺寸，未重新编码）`
       : out.scaleStep > 0
         ? `${out.width}×${out.height}（缩小 ${out.scaleStep} 档）`
         : `${out.width}×${out.height}（保持原尺寸）`,
@@ -547,7 +583,8 @@ watch([targetInput, minInput, dpiInput, allowShrink], () => {
 })
 
 onBeforeUnmount(() => {
-  activeId = 0
+  disposed = true
+  invalidate()
   worker?.terminate()
   worker = undefined
   clearOutputUrls()
@@ -561,8 +598,9 @@ onBeforeUnmount(() => {
       <h2 id="pick-title">1. 选择图片</h2>
       <p id="pick-help">
         图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000 万像素；一次最多
-        {{ MAX_BATCH_FILES }} 张、合计不超过 {{ MAX_BATCH_MB }} MB。原图已经在目标体积内会原样返回、不做任何
-        转码；需要压缩时才转成 JPEG，这时 PNG 的透明区域会变成白底（JPEG 不支持透明）。
+        {{ MAX_BATCH_FILES }} 张、合计不超过
+        {{ MAX_BATCH_MB }} MB。源文件在目标区间内且无需转换格式时直接交付；JPEG 指定 DPI
+        时可只写元数据、不重新压缩像素。需要压缩或转换格式时输出 JPEG，透明区域会变成白底。
       </p>
       <ElAlert
         v-if="capabilityGap"
@@ -641,7 +679,8 @@ onBeforeUnmount(() => {
         aria-describedby="target-help"
       />
       <p id="target-help">
-        支持 KB、MB 与纯字节；留空无法开始。目标体积指输出文件的字节数，不是画质档位。多张共用同一组设置。
+        支持 KB、MB
+        与纯字节；留空无法开始。目标体积指输出文件的字节数，不是画质档位。多张共用同一组设置。
       </p>
 
       <label for="min-size">体积下限（可选）</label>
@@ -661,7 +700,8 @@ onBeforeUnmount(() => {
         <label for="allow-shrink">允许缩小尺寸</label>
       </div>
       <p id="shrink-help">
-        质量降到最低仍超限时，按 85% 逐档缩小最长边（最多 6 档）。关闭后只能靠降质量，压不下去会直接报失败。
+        质量降到最低仍超限时，按 85% 逐档缩小最长边（最多 6
+        档）。关闭后只能靠降质量，压不下去会直接报失败。
       </p>
 
       <label for="dpi">DPI（可选）</label>
@@ -716,7 +756,9 @@ onBeforeUnmount(() => {
 
       <template v-else-if="result && summary">
         <p v-if="summary.passthrough" role="status" class="headline untouched">
-          原图 {{ summary.before }} 已在目标体积内，无需压缩，一个字节都没改。
+          原图 {{ summary.before }} 已在目标体积内，<template v-if="summary.dpi"
+            >未重新压缩像素；已按设置写入 DPI 信息。</template
+          ><template v-else>无需压缩，一个字节都没改。</template>
         </p>
         <p v-else role="status" class="headline">
           {{ summary.before }} → {{ summary.after }}

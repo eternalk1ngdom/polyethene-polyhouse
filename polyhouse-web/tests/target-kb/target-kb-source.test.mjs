@@ -16,8 +16,8 @@ function toModuleUrl(source, replacements = {}) {
 }
 
 async function loadSource() {
-  const crop = await readFile(new URL('../src/core/avatarCrop.ts', import.meta.url), 'utf8')
-  const source = await readFile(new URL('../src/core/targetKbSource.ts', import.meta.url), 'utf8')
+  const crop = await readFile(new URL('../../src/core/avatarCrop.ts', import.meta.url), 'utf8')
+  const source = await readFile(new URL('../../src/core/targetKbSource.ts', import.meta.url), 'utf8')
   return import(toModuleUrl(source, { './avatarCrop': toModuleUrl(crop) }))
 }
 

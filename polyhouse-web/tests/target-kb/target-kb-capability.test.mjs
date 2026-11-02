@@ -13,7 +13,7 @@ function toModuleUrl(source) {
 
 async function loadCapability() {
   const source = await readFile(
-    new URL('../src/core/targetKbCapability.ts', import.meta.url),
+    new URL('../../src/core/targetKbCapability.ts', import.meta.url),
     'utf8',
   )
   return import(toModuleUrl(source))

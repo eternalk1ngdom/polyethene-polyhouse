@@ -22,7 +22,7 @@ export interface TargetKbBatchRow {
   status: TargetKbBatchStatus
   /** 成功后的输出字节数。 */
   outputBytes?: number
-  /** 是否原样返回（源文件已在目标区间内，未做压缩）。 */
+  /** 是否免重新编码；源文件符合区间时可能仅写 DPI 元数据。 */
   passthrough?: boolean
   /** 失败原因，直接展示给用户。 */
   message?: string
@@ -169,7 +169,9 @@ export function sanitizeName(name: string): string {
 
 /** 去掉扩展名后的基名；扩展名由调用方按实际输出类型决定。 */
 function baseName(name: string): string {
-  const base = sanitizeName(name).replace(/\.[^.]+$/, '').trim()
+  const base = sanitizeName(name)
+    .replace(/\.[^.]+$/, '')
+    .trim()
   return base || 'image'
 }
 

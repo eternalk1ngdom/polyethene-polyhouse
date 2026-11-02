@@ -16,7 +16,7 @@ function toModuleUrl(source, replacements = {}) {
 }
 
 async function loadProtocol() {
-  const read = (name) => readFile(new URL(`../src/core/${name}`, import.meta.url), 'utf8')
+  const read = (name) => readFile(new URL(`../../src/core/${name}`, import.meta.url), 'utf8')
   const types = toModuleUrl(await read('targetKbTypes.ts'))
   const compress = toModuleUrl(await read('targetKbCompress.ts'), { './targetKbTypes': types })
   const protocol = toModuleUrl(await read('targetKbProtocol.ts'), {

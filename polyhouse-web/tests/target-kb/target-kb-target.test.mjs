@@ -16,8 +16,8 @@ function toModuleUrl(source, replacements = {}) {
 }
 
 async function loadCompress() {
-  const types = await readFile(new URL('../src/core/targetKbTypes.ts', import.meta.url), 'utf8')
-  const source = await readFile(new URL('../src/core/targetKbCompress.ts', import.meta.url), 'utf8')
+  const types = await readFile(new URL('../../src/core/targetKbTypes.ts', import.meta.url), 'utf8')
+  const source = await readFile(new URL('../../src/core/targetKbCompress.ts', import.meta.url), 'utf8')
   return import(toModuleUrl(source, { './targetKbTypes': toModuleUrl(types) }))
 }
 
