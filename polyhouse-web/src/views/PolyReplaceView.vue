@@ -507,7 +507,7 @@ p {
 }
 .layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
@@ -701,19 +701,25 @@ label:not(.file-button):not(.file-checkbox) {
   border-radius: 12px;
   background: var(--ph-soft);
 }
+/* 规则编辑器和词库操作需要完整阅读宽度；与图片工作台同在窄桌面下转单栏。 */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 700px) {
   .replace-page {
     width: calc(100% - 40px);
     margin-top: 32px;
-  }
-  .layout {
-    grid-template-columns: 1fr;
   }
   .panel {
     padding: 20px;
   }
   header {
     padding: 24px 20px;
+  }
+  h1 {
+    font-size: 34px;
   }
 }
 </style>

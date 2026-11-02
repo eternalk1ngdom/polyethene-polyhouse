@@ -843,7 +843,7 @@ h2 {
   margin: 0 0 12px;
 }
 h2:not(:first-child) {
-  margin-top: 30px;
+  margin-top: 32px;
 }
 p {
   color: var(--ph-muted);
@@ -938,6 +938,8 @@ label:not(.drop) {
   margin: 8px 0 0;
   padding: 0;
   display: grid;
+  /* 默认 auto 轨道会按长文件名的最小内容撑宽，挤出右侧移除入口。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .pick-row {
