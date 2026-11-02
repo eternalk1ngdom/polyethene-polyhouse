@@ -320,6 +320,82 @@ test('刷新提示旧稿，未决定不自动写；恢复后旧来源转移且�
   assert.equal(next.manager.dirty.value, false)
 })
 
+test('待恢复旧稿未决时，临时输入再删空不能删除旧历史或解除来源选择', async () => {
+  const f = fixture()
+  const old = f.controller()
+  await old.manager.initialize()
+  await old.manager.enable()
+  old.manager.edit(rules('必须保留的旧稿'))
+  await old.manager.flush()
+  await old.manager.dispose()
+  const before = f.raw
+  const writes = f.writes
+  const next = f.controller(old.location.value)
+  await next.manager.initialize()
+  const sourceId = next.manager.selectedId.value
+  next.manager.edit(rules('临时输入'))
+  next.manager.edit(blank)
+  assert.equal(await next.manager.flush(), true)
+  assert.equal(next.manager.dirty.value, false)
+  assert.equal(f.raw, before)
+  assert.equal(f.writes, writes)
+  assert.equal(next.manager.paused.value, true)
+  assert.equal(next.manager.selectedId.value, sourceId)
+  assert.deepEqual(next.manager.selected.value.draft.rules, rules('必须保留的旧稿'))
+  await next.manager.dispose()
+})
+
+test('仅在历史下拉框选中记录，删空编辑或确认清空本页都保留未恢复历史', async () => {
+  for (const action of ['edit', 'clear']) {
+    const f = fixture(),
+      old = f.controller()
+    await old.manager.initialize()
+    old.manager.edit(rules('未恢复的历史'))
+    await old.manager.enable()
+    await old.manager.dispose()
+    const next = f.controller()
+    await next.manager.initialize()
+    next.manager.edit(rules('本页新编辑'))
+    next.manager.continueCurrent()
+    await next.manager.flush()
+    next.manager.selectedId.value = old.repo.id
+    if (action === 'edit') {
+      next.manager.edit(blank)
+      await next.manager.flush()
+    } else await next.manager.clearCurrent()
+    const saved = JSON.parse(f.raw).drafts
+    assert.deepEqual(
+      saved.map((item) => item.id),
+      [old.repo.id],
+      action,
+    )
+    assert.deepEqual(saved[0].draft.rules, rules('未恢复的历史'), action)
+    await next.manager.dispose()
+  }
+})
+
+test('明确确认清空待恢复来源仍可清理该来源，保留其他历史', async () => {
+  const f = fixture(),
+    old = f.controller()
+  await old.manager.initialize()
+  old.manager.edit(rules('待清空的来源'))
+  await old.manager.enable()
+  await old.manager.dispose()
+  const other = f.repository()
+  const opened = await other.open()
+  await other.save(draft('其他历史'), opened.book.generation, () => true)
+  other.close()
+  const next = f.controller(old.location.value)
+  await next.manager.initialize()
+  assert.equal(next.manager.paused.value, true)
+  await next.manager.clearCurrent()
+  assert.deepEqual(
+    JSON.parse(f.raw).drafts.map((item) => item.id),
+    [other.id],
+  )
+  await next.manager.dispose()
+})
+
 test('历史恢复失败仍取回文本并保留来源，手动重试成功', async () => {
   const f = fixture(),
     old = f.controller()

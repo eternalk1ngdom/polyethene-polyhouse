@@ -137,16 +137,22 @@ export function useReplaceDraft(
     dirty.value = true
     cancelTimer()
     if (!enabled.value) return
+    // 待恢复来源还未获用户处置决定；输入再删空也不能把旧历史当成本页草稿清理。
+    if (paused.value) {
+      dirty.value = !isEmptyReplaceDraft(current)
+      message.value = dirty.value
+        ? '当前编辑尚未保存，请先选择恢复或保留当前编辑继续'
+        : '当前编辑为空，历史草稿仍待选择恢复或保留当前编辑继续'
+      return
+    }
     if (isEmptyReplaceDraft(current)) {
-      retireId = selected.value?.id ?? retireId
+      // 只有 restore 已明确载入的来源才由 retireId 转移；下拉框选中不等于恢复。
       selectedId.value = ''
       paused.value = false
       point()
       void flush()
     } else {
-      message.value = paused.value
-        ? '当前编辑尚未保存，请先选择恢复或保留当前编辑继续'
-        : '有编辑尚未保存，正在等待自动保存'
+      message.value = '有编辑尚未保存，正在等待自动保存'
       queue()
     }
   }
@@ -276,7 +282,8 @@ export function useReplaceDraft(
   async function clearCurrent(): Promise<boolean> {
     revision++
     cancelTimer()
-    retireId = selected.value?.id ?? retireId
+    // 确认清空只覆盖本页和待恢复来源，不能删除仅在历史下拉框中选中但未恢复的记录。
+    retireId = (paused.value ? selected.value?.id : undefined) ?? retireId
     selectedId.value = ''
     paused.value = false
     current = [{ search: '', replace: '' }]
