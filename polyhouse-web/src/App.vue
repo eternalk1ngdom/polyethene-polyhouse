@@ -98,6 +98,19 @@ import BrandLogo from './components/BrandLogo.vue'
 :global(.el-button.is-text) {
   border-radius: 10px;
 }
+/* 业务按钮保留原类型/禁用语义和独立键盘焦点，只统一鼠标反馈，避免改动首页特色搜索。 */
+:global(.el-button--primary:not(.is-disabled):hover) {
+  --el-button-hover-bg-color: #000;
+  --el-button-hover-border-color: #000;
+  --el-button-active-bg-color: #000;
+}
+:global(.el-button:not(.is-disabled):active) {
+  border-color: var(--ph-ink);
+}
+:global(.el-button--danger:not(.is-disabled):hover) {
+  --el-button-hover-bg-color: var(--el-color-danger-dark-2);
+  --el-button-hover-border-color: var(--el-color-danger-dark-2);
+}
 :global(.el-dialog) {
   border-radius: 22px;
 }

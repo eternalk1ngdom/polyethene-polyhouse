@@ -16,6 +16,7 @@ import type {
 
 const selectedFiles = ref<File[]>([])
 const filePicker = ref<HTMLInputElement>()
+const directoryPicker = ref<HTMLInputElement>()
 const fileList = ref<HTMLUListElement>()
 const selectedMode = ref<ReplaceMode>('files')
 const inputEncoding = ref<InputEncoding>('utf-8')
@@ -186,21 +187,30 @@ function download(): void {
           Python 等源码按全文替换，注释、字符串和代码中匹配的内容都会修改，不支持仅替换注释。
           文件夹不会自动跳过 .git、.venv 等目录，请先准备需要处理的小型文本目录。
         </p>
-        <label class="file-button"
-          >选择文件<input
-            ref="filePicker"
-            type="file"
-            multiple
-            accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
-            @change="selectFile($event, 'files')"
-        /></label>
-        <label v-if="directorySupported" class="file-button directory-button"
-          >选择文件夹<input
-            type="file"
-            webkitdirectory
-            multiple
-            @change="selectFile($event, 'directory')"
-        /></label>
+        <ElButton class="file-button" @click="filePicker?.click()">选择文件</ElButton>
+        <input
+          ref="filePicker"
+          type="file"
+          hidden
+          multiple
+          accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
+          @change="selectFile($event, 'files')"
+        />
+        <ElButton
+          v-if="directorySupported"
+          class="file-button directory-button"
+          @click="directoryPicker?.click()"
+          >选择文件夹</ElButton
+        >
+        <input
+          v-if="directorySupported"
+          ref="directoryPicker"
+          type="file"
+          hidden
+          webkitdirectory
+          multiple
+          @change="selectFile($event, 'directory')"
+        />
         <p v-else>当前浏览器不支持选择文件夹，可改为选择文件。</p>
         <span class="file-name">{{
           selectedFiles.length ? `已选 ${selectedFiles.length} 个文件` : '尚未选择文件'
@@ -349,25 +359,8 @@ p {
 .panel h2:not(:first-child) {
   margin-top: 32px;
 }
-.file-button {
-  display: inline-block;
-  padding: 10px 18px;
-  border-radius: 99px;
-  border: 1px solid var(--ph-line);
-  cursor: pointer;
-}
-.file-button:focus-within {
-  outline: 3px solid var(--ph-brand);
-  outline-offset: 3px;
-}
 .directory-button {
   margin-left: 8px;
-}
-.file-button input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
 }
 .file-name {
   display: inline-block;
@@ -440,6 +433,13 @@ textarea {
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
+}
+/* 原生业务控件也用原边框提示鼠标/键盘聚焦，不叠加外圈；规则 ElInput 保持原样。 */
+select:focus,
+textarea:focus {
+  border-color: var(--ph-ink);
+  outline: 1px solid var(--ph-ink);
+  outline-offset: -1px;
 }
 .download {
   margin-top: 16px;

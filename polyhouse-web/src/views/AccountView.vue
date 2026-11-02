@@ -466,6 +466,10 @@ onMounted(() => {
   opacity: 0.6;
   cursor: wait;
 }
+.avatar-edit:not(:disabled):hover .avatar-edit-label,
+.avatar-edit:not(:disabled):active .avatar-edit-label {
+  background: var(--ph-ink);
+}
 .identity-copy {
   min-width: 0;
   padding-top: 48px;
