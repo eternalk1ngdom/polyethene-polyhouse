@@ -27,6 +27,8 @@ export interface FileSummary {
   preview: string
   /** 替换次数。 */
   count: number
+  /** 当前文件全文的逐条计数，供切换预览与整批求和；不包含定位数据。 */
+  ruleCounts: number[]
   /** 预览是否截断。 */
   truncated: boolean
 }

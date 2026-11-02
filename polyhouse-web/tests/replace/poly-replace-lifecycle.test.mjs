@@ -93,7 +93,7 @@ const reply = (text) => ({
   data: {
     ok: true,
     result: {
-      files: [{ name: 'fixture.txt', preview: text, count: 1 }],
+      files: [{ name: 'fixture.txt', preview: text, count: 1, ruleCounts: [1], truncated: false }],
       bytes: new ArrayBuffer(1),
     },
   },
@@ -189,4 +189,50 @@ test('读取失败和 Worker 失败后可以重试，不保留旧结果', async 
   Worker.instances[1].onmessage(reply('B'))
   await nextTick()
   assert.equal(fixture.page.activePreview.value.preview, 'B')
+})
+
+test('真实页面按当前文件和整批分别统计，规则/编码变化及迟到结果不复活旧计数', async (t) => {
+  const fixture = mount()
+  t.after(fixture.unmount)
+  fixture.page.rules.value = [
+    { search: 'A', replace: 'B' },
+    { search: 'B', replace: '' },
+    { search: 'Z', replace: 'X' },
+  ]
+  fixture.page.selectedFiles.value = [file(), { ...file(), name: 'second.txt' }]
+  await fixture.page.runReplace()
+  const completed = () => ({
+    data: {
+      ok: true,
+      result: {
+        files: [
+          { name: 'first.txt', preview: 'BB', count: 3, ruleCounts: [2, 1, 0], truncated: false },
+          { name: 'second.txt', preview: 'B', count: 3, ruleCounts: [1, 2, 0], truncated: false },
+        ],
+        bytes: new ArrayBuffer(0),
+        name: 'fixture.zip',
+        mime: 'application/zip',
+      },
+    },
+  })
+  const old = Worker.instances[0]
+  old.onmessage(completed())
+  assert.deepEqual(fixture.page.activePreview.value.ruleCounts, [2, 1, 0])
+  assert.deepEqual(fixture.page.totalRuleCounts.value, [3, 3, 0])
+  assert.equal(fixture.page.totalCount.value, 6)
+  fixture.page.previewIndex.value = 1
+  assert.deepEqual(fixture.page.activePreview.value.ruleCounts, [1, 2, 0])
+  assert.deepEqual(fixture.page.totalRuleCounts.value, [3, 3, 0])
+  fixture.page.rules.value[0].replace = 'C'
+  assert.equal(fixture.page.result.value, null)
+  assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  old.onmessage(completed())
+  assert.equal(fixture.page.result.value, null)
+  assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  await fixture.page.runReplace()
+  Worker.instances[1].onmessage(completed())
+  fixture.page.inputEncoding.value = 'gb18030'
+  assert.equal(fixture.page.result.value, null)
+  assert.deepEqual(fixture.page.totalRuleCounts.value, [0, 0, 0])
+  assert.equal(fixture.page.selectedFiles.value.length, 2)
 })

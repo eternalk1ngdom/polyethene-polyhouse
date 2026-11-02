@@ -6,12 +6,14 @@ export interface ReplaceRule {
   replace: string
 }
 
-/** 返回完整结果和匹配次数，方便界面展示并生成下载文件。 */
+/** 返回完整结果及实际替换计数，统计不需要再次扫描结果文本。 */
 export interface ReplaceResult {
   /** 基于原始文本生成的新内容。 */
   text: string
   /** 所有规则总命中次数。 */
   count: number
+  /** 按输入规则顺序逐条记录实际消费次数，未命中保留 0；每次调用独立分配。 */
+  ruleCounts: number[]
 }
 
 /** 反向字典树节点；编号 0 是根节点。 */
@@ -94,6 +96,7 @@ export function createTextReplacer(
     const parts: string[] = []
     let cursor = 0
     let count = 0
+    const ruleCounts = Array<number>(snapshot.length).fill(0)
     let pending = 0
     let outputLength = 0
     // 只按原文从左到右消费候选，跳过已替换的区间，不再次匹配替换结果。
@@ -112,12 +115,14 @@ export function createTextReplacer(
       cursor += rule.search.length
       pending = cursor
       count += 1
+      // 只计实际消费的候选，不计重叠中被跳过的规则，也不再次匹配输出。
+      ruleCounts[candidate - 1] = ruleCounts[candidate - 1]! + 1
     }
     outputLength += input.length - pending
     if (outputLength > 8 * 1024 * 1024)
       throw new Error('替换结果超过字符数量限制，请缩小文件或调整规则')
     parts.push(input.slice(pending))
-    return { text: parts.join(''), count }
+    return { text: parts.join(''), count, ruleCounts }
   }
 }
 

@@ -53,7 +53,10 @@ test('Python 源码全文替换，保留目录、扩展名、空初始化文件�
     [{ search: '小明', replace: '小蓝' }],
     'directory',
   )
-  assert.deepEqual(result.map((entry) => entry.name), ['项目/main.py', '项目/pkg/__init__.py'])
+  assert.deepEqual(
+    result.map((entry) => entry.name),
+    ['项目/main.py', '项目/pkg/__init__.py'],
+  )
   assert.equal(new TextDecoder().decode(result[0].content), '# 小蓝的说明\r\nname = "小蓝"\r\n')
   assert.equal(result[0].count, 2)
   assert.equal(result[1].content.byteLength, 0)
@@ -167,6 +170,13 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
     const { unzipSync } = await import('fflate')
     assert.equal(replies[0].ok, true)
     assert.deepEqual(
+      replies[0].result.files.map((item) => item.ruleCounts),
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    )
+    assert.deepEqual(
       Object.values(unzipSync(new Uint8Array(replies[0].result.bytes))).map((bytes) =>
         new TextDecoder().decode(bytes),
       ),
@@ -203,11 +213,46 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
       },
     })
     assert.equal(replies[4].ok, true)
+    assert.deepEqual(replies[4].result.files[0].ruleCounts, [1])
     assert.equal(new TextDecoder().decode(replies[4].result.bytes), '测试')
   } finally {
     if (oldSelf === undefined) delete globalThis.self
     else globalThis.self = oldSelf
   }
+})
+
+test('逐条统计不跨文件累积，包含空文件及预览窗口外的真实替换', () => {
+  const result = replaceBatch(
+    [
+      file('a.txt', '小明广告小明'),
+      file('b.txt', '小明广告广告'),
+      file('empty.txt', ''),
+      file('long.txt', '正文'.repeat(6000) + '小明'),
+    ],
+    [
+      { search: '小明', replace: '小蓝' },
+      { search: '广告', replace: '' },
+      { search: '未出现', replace: 'X' },
+    ],
+  )
+  assert.deepEqual(
+    result.map((entry) => entry.ruleCounts),
+    [
+      [2, 1, 0],
+      [1, 2, 0],
+      [0, 0, 0],
+      [1, 0, 0],
+    ],
+  )
+  for (const entry of result)
+    assert.equal(
+      entry.ruleCounts.reduce((sum, count) => sum + count, 0),
+      entry.count,
+    )
+  assert.equal(result[3].truncated, true)
+  assert.equal(result[3].preview.includes('小蓝'), false)
+  assert.equal(new TextDecoder().decode(result[3].content).endsWith('小蓝'), true)
+  assert.equal(new TextDecoder().decode(result[0].content), '小蓝小蓝')
 })
 test('整批输出预算不能被多个合法小文件绕过', () => {
   assert.throws(

@@ -13,7 +13,10 @@ const { createTextReplacer } = await import(
 )
 
 function directReplace(input, rules) {
-  const ordered = [...rules].sort((a, b) => b.search.length - a.search.length)
+  const ordered = rules
+    .map((rule, index) => ({ ...rule, index }))
+    .sort((a, b) => b.search.length - a.search.length)
+  const ruleCounts = Array(rules.length).fill(0)
   const parts = []
   let cursor = 0,
     pending = 0,
@@ -28,9 +31,10 @@ function directReplace(input, rules) {
     cursor += rule.search.length
     pending = cursor
     count++
+    ruleCounts[rule.index]++
   }
   parts.push(input.slice(pending))
-  return { text: parts.join(''), count }
+  return { text: parts.join(''), count, ruleCounts }
 }
 
 const cases = [

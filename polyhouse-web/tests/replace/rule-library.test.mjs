@@ -165,6 +165,7 @@ test('空库合法，中文/emoji/换行/删除规则往返一致且兼容原替
   assert.deepEqual(createTextReplacer(result.sets[0].rules)('小明😀constructor'), {
     text: '🌸\n__proto__',
     count: 3,
+    ruleCounts: [1, 1, 1],
   })
 })
 

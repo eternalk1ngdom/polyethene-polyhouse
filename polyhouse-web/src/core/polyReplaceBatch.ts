@@ -12,6 +12,8 @@ export interface ReplacedFile {
   preview: string
   /** 替换次数，0 也属于成功。 */
   count: number
+  /** 全文实际替换次数，顺序对应同批规则，不受预览截断影响。 */
+  ruleCounts: number[]
   /** 是否因长度上限截断预览。 */
   truncated: boolean
 }
@@ -125,6 +127,7 @@ export function replaceBatch(
       content,
       preview: result.text.slice(0, 10000),
       count: result.count,
+      ruleCounts: result.ruleCounts,
       truncated: result.text.length > 10000,
     })
   }

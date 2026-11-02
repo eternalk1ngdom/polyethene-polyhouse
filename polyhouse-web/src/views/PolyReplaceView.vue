@@ -34,6 +34,13 @@ const activePreview = computed(() => result.value?.files[previewIndex.value])
 const totalCount = computed(
   () => result.value?.files.reduce((total, file) => total + file.count, 0) ?? 0,
 )
+// 各文件共用同一规则快照；沿输入顺序求和，切换预览只改变当前文件列。
+const totalRuleCounts = computed(() =>
+  rules.value.map(
+    (_, index) =>
+      result.value?.files.reduce((total, file) => total + file.ruleCounts[index]!, 0) ?? 0,
+  ),
+)
 
 /** ElSelect 未将描述属性透传到内部输入，显式保留原编码说明的读屏关联。 */
 function vEncodingHelp(element: HTMLElement): void {
@@ -307,6 +314,41 @@ function download(): void {
               :value="index"
             />
           </ElSelect>
+          <section class="rule-counts" aria-labelledby="rule-counts-title">
+            <h3 id="rule-counts-title">逐条替换统计</h3>
+            <p class="rule-counts-help">
+              统计覆盖全文，按实际执行计次（含删除、原样替换）；0 表示未命中。
+            </p>
+            <div
+              class="rule-counts-scroll"
+              tabindex="0"
+              role="region"
+              aria-labelledby="rule-counts-title"
+            >
+              <table class="rule-counts-table">
+                <thead>
+                  <tr>
+                    <th scope="col">规则</th>
+                    <th scope="col">当前预览文件（处）</th>
+                    <th scope="col">整批合计（处）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(rule, index) in rules" :key="index">
+                    <th scope="row">
+                      <span>规则 {{ index + 1 }}</span>
+                      <span class="rule-counts-text">查找：{{ rule.search }}</span>
+                      <span class="rule-counts-text"
+                        >替换为：{{ rule.replace === '' ? '（删除匹配内容）' : rule.replace }}</span
+                      >
+                    </th>
+                    <td>{{ activePreview?.ruleCounts[index] ?? 0 }}</td>
+                    <td>{{ totalRuleCounts[index] ?? 0 }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
           <p v-if="activePreview?.truncated">预览仅显示前 10000 个字符，下载包含完整结果。</p>
           <label for="result-preview">替换结果预览</label>
           <textarea id="result-preview" :value="activePreview?.preview ?? ''" readonly rows="14" />
@@ -464,6 +506,60 @@ textarea:focus {
 }
 .download {
   margin-top: 16px;
+}
+.rule-counts {
+  margin-top: 16px;
+}
+.rule-counts h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.rule-counts-help {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.rule-counts-scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--ph-line);
+  border-radius: 8px;
+}
+.rule-counts-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rule-counts-table th,
+.rule-counts-table td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--ph-line);
+  vertical-align: top;
+}
+.rule-counts-table th {
+  font-weight: 500;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.rule-counts-table thead {
+  background: var(--ph-soft);
+}
+.rule-counts-table th:first-child {
+  width: 45%;
+}
+.rule-counts-table td {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rule-counts-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.rule-counts-text {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .empty {
   padding: 70px 24px;
