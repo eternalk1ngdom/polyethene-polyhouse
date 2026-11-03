@@ -271,14 +271,18 @@ function download(): void {
         </p>
         <FileDropZone
           accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
-          label="将文本文件拖到这里"
-          description="支持多选文本文件"
+          label="点击选择文本文件，或拖到这里"
+          :description="directorySupported ? '支持多选；也可从下方选择文件夹' : '支持多选文本文件'"
           help-id="replace-pick-help"
-          :directory-enabled="directorySupported"
           @select="selectFiles($event, 'files')"
-          @directory="directoryPicker?.click()"
           @reject="message = $event"
         />
+        <ElButton
+          v-if="directorySupported"
+          class="directory-button"
+          @click="directoryPicker?.click()"
+          >选择文件夹</ElButton
+        >
         <input
           v-if="directorySupported"
           ref="directoryPicker"
@@ -288,6 +292,7 @@ function download(): void {
           multiple
           @change="selectFile($event, 'directory')"
         />
+        <p v-else>当前浏览器不支持选择文件夹，可改为选择文件。</p>
         <p class="selection-help">按全文替换；目录默认全选，不自动排除文件，请核对清单。</p>
         <section
           v-if="candidateFiles.length"
@@ -554,6 +559,9 @@ p {
 }
 .panel h2:not(:first-child) {
   margin-top: 32px;
+}
+.directory-button {
+  margin: 12px 0 0;
 }
 .selection-help {
   color: var(--ph-muted);

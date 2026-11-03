@@ -608,8 +608,7 @@ onBeforeUnmount(() => {
 
       <FileDropZone
         accept="image/jpeg,image/png,image/webp,image/avif"
-        label="将图片拖到这里"
-        button-label="选择图片"
+        label="点击选择图片，或拖到这里"
         description="JPEG / PNG / WebP / AVIF · 支持多选和追加"
         help-id="pick-help"
         :disabled="busy"
