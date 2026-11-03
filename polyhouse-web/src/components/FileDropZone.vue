@@ -45,30 +45,28 @@ function onDrop(event: DragEvent): void {
 </script>
 
 <template>
-  <label class="file-drop" :class="{ disabled }" @dragover.prevent @drop="onDrop">
-    <input
-      type="file"
-      multiple
-      :accept="accept"
-      :aria-label="label"
-      :aria-describedby="helpId"
-      :disabled="disabled"
-      @change="onSelect"
-    />
-    <ElIcon class="drop-icon" aria-hidden="true"><Upload /></ElIcon>
-    <span class="drop-title">{{ label }}</span>
-    <span class="drop-description">{{ description }}</span>
-  </label>
+  <div class="file-drop" :class="{ disabled }" @dragover.prevent @drop="onDrop">
+    <!-- 原生文件入口只覆盖主区域；附加操作在 label 外，避免点击目录也误开文件选择器。 -->
+    <label class="file-pick">
+      <input
+        type="file"
+        multiple
+        :accept="accept"
+        :aria-label="label"
+        :aria-describedby="helpId"
+        :disabled="disabled"
+        @change="onSelect"
+      />
+      <ElIcon class="drop-icon" aria-hidden="true"><Upload /></ElIcon>
+      <span class="drop-title">{{ label }}</span>
+      <span class="drop-description">{{ description }}</span>
+    </label>
+    <div v-if="$slots.actions" class="drop-actions"><slot name="actions" /></div>
+  </div>
 </template>
 
 <style scoped>
 .file-drop {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 28px 18px;
   border: 2px dashed var(--ph-line);
   border-radius: 12px;
   background: var(--ph-soft);
@@ -89,13 +87,28 @@ function onDrop(event: DragEvent): void {
   border-style: solid;
   border-color: var(--ph-accent-strong);
 }
-.file-drop input {
+.file-pick {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 18px;
+  cursor: inherit;
+}
+.file-pick input {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   opacity: 0;
   cursor: inherit;
+}
+.drop-actions {
+  display: flex;
+  justify-content: center;
+  padding: 0 18px 10px;
 }
 .drop-icon {
   font-size: 26px;
