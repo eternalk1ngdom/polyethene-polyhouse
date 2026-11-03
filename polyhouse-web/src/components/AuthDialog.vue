@@ -171,9 +171,11 @@ watch(
 
 <style scoped>
 .auth-host :deep(.auth-dialog) {
+  display: flex;
+  flex-direction: column;
   max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 64px);
-  overflow-y: auto;
+  overflow: visible;
   border-radius: 18px;
   padding: 28px;
   background: #ffffff;
@@ -184,7 +186,13 @@ watch(
   color: var(--ph-ink);
 }
 .auth-host :deep(.el-dialog__header) {
+  flex-shrink: 0;
   padding-bottom: 0;
+}
+/* 短屏只滚动表单；焦点循环回关闭按钮时，它不能随整窗滚出可视区域。 */
+.auth-host :deep(.el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
 }
 .auth-host :deep(.el-input__wrapper) {
   min-height: 44px;
