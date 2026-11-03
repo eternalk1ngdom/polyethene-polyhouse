@@ -6,7 +6,9 @@ import { compileScript, parse } from 'vue/compiler-sfc'
 import ts from 'typescript'
 
 const url = (code) => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-const controls = url('export const ElIcon = {}, Upload = {};')
+const controls = url(
+  'export const ElButton = {}, ElButtonGroup = {}, ElDropdown = {}, ElDropdownItem = {}, ElDropdownMenu = {}, ElIcon = {}, ArrowDown = {}, Upload = {};',
+)
 const { descriptor } = parse(
   await readFile(new URL('../../src/components/FileDropZone.vue', import.meta.url), 'utf8'),
 )
@@ -35,7 +37,10 @@ const renderer = createRenderer({
 test('点击与拖入交付完整文件引用，取消不改变状态，目录拒绝与禁用无法绕过', async (t) => {
   const selected = [],
     rejected = [],
-    disabled = ref(false)
+    disabled = ref(false),
+    directoryEnabled = ref(false)
+  let directoryRequests = 0,
+    fileRequests = 0
   let input
   const app = renderer.createApp({
     setup: () => () =>
@@ -53,13 +58,26 @@ test('点击与拖入交付完整文件引用，取消不改变状态，目录�
           description: '支持多选',
           helpId: 'help',
           disabled: disabled.value,
+          directoryEnabled: directoryEnabled.value,
           onSelect: (files) => selected.push(files),
           onReject: (message) => rejected.push(message),
+          onDirectory: () => directoryRequests++,
         },
       ),
   })
   app.mount({})
   t.after(() => app.unmount())
+  input.picker.value = { click: () => fileRequests++ }
+  input.openFiles()
+  assert.equal(fileRequests, 1)
+  input.chooseAlternative('directory')
+  assert.equal(directoryRequests, 0)
+  directoryEnabled.value = true
+  await nextTick()
+  for (const invalid of ['files', null, {}, 1]) input.chooseAlternative(invalid)
+  assert.equal(directoryRequests, 0)
+  input.chooseAlternative('directory')
+  assert.equal(directoryRequests, 1)
   const first = { name: 'a.txt' },
     second = { name: 'b.txt' }
   const picker = { files: [first, second], value: 'a.txt' }
@@ -80,6 +98,10 @@ test('点击与拖入交付完整文件引用，取消不改变状态，目录�
   assert.equal(selected.length, 2)
   disabled.value = true
   await nextTick()
+  input.openFiles()
+  input.chooseAlternative('directory')
+  assert.equal(fileRequests, 1)
+  assert.equal(directoryRequests, 1)
   input.onSelect({ target: picker })
   input.onDrop(drop([], [first]))
   assert.equal(selected.length, 2)

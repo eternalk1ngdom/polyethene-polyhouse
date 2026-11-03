@@ -271,27 +271,23 @@ function download(): void {
         </p>
         <FileDropZone
           accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
-          label="点击选择文本文件，或拖到这里"
+          label="将文本文件拖到这里"
           description="支持多选文本文件"
           help-id="replace-pick-help"
+          :directory-enabled="directorySupported"
           @select="selectFiles($event, 'files')"
+          @directory="directoryPicker?.click()"
           @reject="message = $event"
-        >
-          <template v-if="directorySupported" #actions>
-            <div class="directory-choice">
-              <ElButton text @click="directoryPicker?.click()">选择文件夹</ElButton>
-              <span>保留子目录</span>
-              <input
-                ref="directoryPicker"
-                type="file"
-                hidden
-                webkitdirectory
-                multiple
-                @change="selectFile($event, 'directory')"
-              />
-            </div>
-          </template>
-        </FileDropZone>
+        />
+        <input
+          v-if="directorySupported"
+          ref="directoryPicker"
+          type="file"
+          hidden
+          webkitdirectory
+          multiple
+          @change="selectFile($event, 'directory')"
+        />
         <p class="selection-help">按全文替换；目录默认全选，不自动排除文件，请核对清单。</p>
         <section
           v-if="candidateFiles.length"
@@ -558,15 +554,6 @@ p {
 }
 .panel h2:not(:first-child) {
   margin-top: 32px;
-}
-.directory-choice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--ph-muted);
-  font-size: 12px;
 }
 .selection-help {
   color: var(--ph-muted);
