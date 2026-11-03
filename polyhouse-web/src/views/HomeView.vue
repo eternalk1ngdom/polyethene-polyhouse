@@ -180,7 +180,11 @@ h1 {
   background: var(--ph-soft);
   border: 1px solid var(--ph-line);
   border-radius: 99px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
+.tool-search:hover,
 .tool-search:focus-within {
   border-color: var(--ph-accent);
   box-shadow: 0 0 0 4px var(--ph-pink-soft);
@@ -210,6 +214,13 @@ h1 {
   color: white;
   border-radius: 50%;
   font-size: 22px;
+  transition: background 0.2s;
+}
+.search-action:hover,
+.search-action:focus-visible,
+.about-action:hover,
+.about-action:focus-visible {
+  background: var(--ph-accent-strong);
 }
 .popular-searches {
   display: flex;
@@ -241,6 +252,10 @@ h1 {
   padding: 8px;
   font-size: 13px;
   color: var(--ph-muted);
+}
+.discover-link:hover,
+.discover-link:focus-visible {
+  color: var(--ph-accent-strong);
 }
 .gallery-toolbar {
   display: flex;
@@ -320,7 +335,8 @@ h2 {
   font-size: 12px;
   transition: background 0.2s;
 }
-.artwork-link:hover .artwork-cta {
+.artwork-link:hover .artwork-cta,
+.artwork-link:focus-visible .artwork-cta {
   background: var(--ph-accent-strong);
 }
 .card-meta {
@@ -439,6 +455,7 @@ h3 {
   color: white;
   border-radius: 99px;
   font-size: 14px;
+  transition: background 0.2s;
 }
 .about-signature {
   display: block;
