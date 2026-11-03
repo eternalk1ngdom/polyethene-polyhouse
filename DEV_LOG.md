@@ -4,7 +4,7 @@
 
 - 当前：[v1.0-dev.12 上线前质量收敛](docs/dev-log/v1.0-dev.12.md)，先读“当前摘要”；[Q0～Q5 计划与新窗口提示词](docs/plans/prelaunch-quality-hardening.md)。不批量加载历史。
 - 基线：main/origin/main `3357a5f`；dev为规划 `e1c4f31`；Q0/Q1及同步记录在 `codex/fix-tool-layout`（`fb32755`）。两分支已推送，尚未PR/合并；保护/CI未配置。
-- Q0/Q1首个工具布局闭环完成：统一1320px/900px断点及介绍区，修复妙压长名称撑宽，保留首页光晕。原目录/工作树和其他修改保留，远端/部署另按授权。
+- Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
 - 筹备：[服务器/续费/武汉个人备案讨论](docs/dev-log/launch-preparation.md)持续更新，倾向109元普通4核4G、免费朋友测试；未采购/备案/恢复P5。本地文档分支 `codex/docs-launch-preparation`。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
 
@@ -12,16 +12,16 @@
 
 - 认证、Redis 多端会话、唯一 OWNER、每日成长、P0～P4 账号/资料审核及 U1～U4 整理已完成。公共注册关闭，OWNER 开户 USER/ADMIN，ADMIN 仅管理 USER，INSIDER 不自动有管理权；昵称/头像先审后发，历史资料仍待人工核对。
 - 前端暂定方案二：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
-- 妙替 R1～R7：本机词库、JSON 备份恢复（只替换全部）、分享、默认关闭的草稿/历史、AC 文本批处理、逐条全文统计/有界定位、文件勾选与 ZIP。500 候选、无默认排除；实际最多 20 文件、单个 2 MiB/合计 5 MiB；手选 UTF-8/GBK/GB18030、输出 UTF-8，`.py` 按全文处理。详见 README/dev.10。
-- 妙压 T1～T4：本地单图/批量体积卡位、JPEG DPI/COM、成功项 ZIP；20 张/60 MiB、单张 20 MiB/4000 万像素。T5 换底/PDF/云预设已否决；Safari/Firefox 真机、真实 AVIF 等未验边界见 dev.11。
+- 妙替 R1～R7：本机词库/备份/分享/可选草稿、批处理/全文统计/有界定位/勾选/ZIP；500候选无默认排除，处理20文件/单个2 MiB/合计5 MiB；手选UTF-8/GBK/GB18030、输出UTF-8，源码全文替换。详见README/dev.10。
+- 妙压 T1～T4：本地单图/批量体积卡位、JPEG DPI/COM、成功项ZIP；20张/60 MiB，单张20 MiB/4000万像素。T5换底/PDF/云预设已否决；未验边界见dev.11。
 - **本机已有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，不复制/输出；Redis 启动检查不是运行期监控。
 - **P5/上线/服务器操作搁置；后端依赖升级已否决，不再提议或询问**。AI、Docker、云模板未接入，3D/社交不在范围；恢复部署须重新评估网络、审核、备份/恢复与发布。
 
 ## 最近验证与下一步
 
-- Q1历史基线：构建/类型、ESLint、四文件 Prettier、两工具 lifecycle 21/21 通过；实际检查空态/长名称/成功/失败、鼠标/Tab/弹窗、导航页脚与首页搜索。
-- Chromium 覆盖 320/390/768/1024/1440、699/700/702、899/900/902px；701/901 请求实际取整为 702/902，精确宽度未验。截图/尺寸见忽略目录 `.local-backups/prelaunch-q1-20261103/` 及阶段日志。
-- 本轮前端：`codex/feat-tool-progressive-ui` 保留筹备提交；首页悬停反馈已本地验证，下一步两工具基本/高级分层与统一文件入口。账号/管理页面及全面Q2～Q5待续；风格总结按用户要求留下一轮。
+- 本轮：`codex/feat-tool-progressive-ui` 保留筹备提交；首页粉色悬停/搜索光晕、工具基本/高级分层、统一文件入口、提示精简与单边框焦点完成。折叠保留参数/结果，来源提示主动展开。
+- 本轮验证：构建/类型、ESLint、11文件Prettier、测试332/332通过；Chromium基本/高级模式44组尺寸无横溢出，含320/390/768/1024/1440与700/900断点两侧；操作证据见阶段日志及忽略目录 `.local-backups/progressive-ui-20261103/`。
+- 请求701/901实际702/902，精确宽度未验；Safari/Firefox真机、系统文件拖入未实测（接收逻辑有单测）。下一步Q1账号/管理页、全面Q2～Q5；风格总结留下一轮。
 - main不变，dev仅含规划；实施留任务分支。远端晋级/CI/P5/部署/清理另按授权。
 
 ## 历史索引（按需）
@@ -38,4 +38,4 @@
 | [dev.4](docs/dev-log/v1.0-dev.4.md) / [dev.3](docs/dev-log/v1.0-dev.3.md) | 头像、首页、个人区域与成长 |
 | [dev.2](docs/dev-log/v1.0-dev.2.md) / [dev.1](docs/dev-log/v1.0-dev.1.md) | 鉴权基础、成长与初始工程 |
 
-旧清单/验证见[整理前入口快照](docs/dev-log/entry-before-context-governance.md)。阶段编号、本地提交、历史测试都不等于正式发布或 GitHub 已同步。
+旧清单见[入口快照](docs/dev-log/entry-before-context-governance.md)。阶段号、本地提交、历史测试不等于发布或已推送。

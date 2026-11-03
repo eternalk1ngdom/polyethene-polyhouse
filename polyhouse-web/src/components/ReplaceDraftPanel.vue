@@ -14,6 +14,8 @@ interface Props {
 interface Emits {
   /** 只更换规则，不执行替换或更改所选文件。 */
   load: [rules: ReplaceRule[]]
+  /** 高级区收起时仍向工具报告生效设置和需要用户决定的来源/异常。 */
+  disclosure: [enabled: boolean, needsAttention: boolean]
 }
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
@@ -41,7 +43,29 @@ const source = shallowRef<StoredReplaceDraft>()
 let decideLeave: ((leave: boolean) => void) | undefined
 const blocked = computed(() => !ready.value || pending.value || dialogOpen.value || closing.value)
 const sharePending = ref(false)
+const shareAttention = ref(false)
 const draftBlocked = computed(() => blocked.value || sharePending.value)
+watch(
+  [
+    enabled,
+    paused,
+    shareAttention,
+    cleanupFailed,
+    locationWarning,
+    () => manager.state.value.status,
+  ],
+  () =>
+    emit(
+      'disclosure',
+      enabled.value,
+      paused.value ||
+        shareAttention.value ||
+        cleanupFailed.value ||
+        Boolean(locationWarning.value) ||
+        !['ready', 'saved', 'disabled', 'cancelled'].includes(manager.state.value.status),
+    ),
+  { immediate: true, flush: 'sync' },
+)
 const title = computed(
   () =>
     ({
@@ -226,6 +250,7 @@ function label(item: StoredReplaceDraft): string {
     :restore-draft="restoreSharedDraft"
     :keep-current="keepSharedEditing"
     @pending="sharePending = $event"
+    @attention="shareAttention = $event"
   />
   <section class="draft-panel" aria-label="本机规则草稿">
     <div class="draft-toolbar">
