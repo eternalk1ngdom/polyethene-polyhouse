@@ -25,6 +25,7 @@ const selectedFiles = computed(() =>
   candidateFiles.value.filter((_, index) => !skippedFiles.value.has(index)),
 )
 const directoryPicker = ref<HTMLInputElement>()
+const inputPanel = ref<HTMLElement>()
 const fileList = ref<HTMLUListElement>()
 const selectedMode = ref<ReplaceMode>('files')
 const selectionIssue = computed(() => {
@@ -162,6 +163,16 @@ async function setAllParticipation(checked: boolean): Promise<void> {
     fileList.value?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus()
 }
 
+/** 清空只释放文件选择和旧任务；规则/编码保留，移除按钮后将焦点交回文件入口。 */
+async function clearFileQueue(): Promise<void> {
+  invalidate()
+  candidateFiles.value = []
+  skippedFiles.value = new Set()
+  selectedMode.value = 'files'
+  await nextTick()
+  inputPanel.value?.querySelector<HTMLInputElement>('.file-drop input')?.focus()
+}
+
 /** 显示单文件大小帮助用户定位超限项，不需要读取正文。 */
 function fileSizeLabel(size: number): string {
   if (size < 1024) return `${size} B`
@@ -264,7 +275,7 @@ function download(): void {
       <p>让重复的文字修改，简单一点。</p>
     </header>
     <div class="layout">
-      <section class="panel" aria-labelledby="input-title">
+      <section ref="inputPanel" class="panel" aria-labelledby="input-title">
         <h2 id="input-title">1. 选择文本文件</h2>
         <p id="replace-pick-help">
           本机处理，不上传、不覆盖原件。最多20个文件，单个2 MiB，合计5 MiB。
@@ -313,6 +324,7 @@ function download(): void {
             <ElButton :disabled="selectedFiles.length === 0" @click="setAllParticipation(false)"
               >全部跳过</ElButton
             >
+            <ElButton @click="clearFileQueue">清空队列</ElButton>
           </div>
           <p id="file-selection-help">只处理勾选项；取消勾选后仍可选回，原文件不变。</p>
           <ul ref="fileList" class="file-list" aria-label="候选文件清单">
