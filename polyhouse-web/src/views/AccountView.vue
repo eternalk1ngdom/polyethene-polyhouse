@@ -368,7 +368,7 @@ onMounted(() => {
         type="primary"
         :loading="userStore.status === 'checking'"
         @click="accountUi.openLogin()"
-        >登录 / 注册</ElButton
+        >登录个人空间</ElButton
       ><RouterLink to="/" class="anonymous-home"
         >先回首页看看<ElIcon><ArrowRight /></ElIcon
       ></RouterLink>
