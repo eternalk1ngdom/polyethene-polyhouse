@@ -95,7 +95,7 @@ export function useProfileReview(section: () => ReviewSection = () => 'pending')
       if (current === generation && id === readId) loading.value = false
     }
   }
-  function openDecision(item: ProfileSubmission, approve: boolean): void {
+  function openDecision(item: ProfileSubmission, approve?: boolean): void {
     if (!allowed.value || busy.value) return
     selection.value = { type: 'decision', submission: { ...item }, approve }
     reason.value = ''
@@ -117,23 +117,33 @@ export function useProfileReview(section: () => ReviewSection = () => 'pending')
       uncertain.value = false
     }
   }
-  async function submit(): Promise<void> {
+  async function submit(avatarDecision?: boolean): Promise<void> {
     if (!allowed.value || busy.value || !selection.value || uncertain.value) return
+    const s = selection.value
+    const approve = s.approve ?? avatarDecision
+    if (s.type === 'decision' && approve === undefined) return
+    // 空白通过自动生成事实性审计说明，沿用后端原因契约。
+    const needsReason = s.submission?.kind !== 'AVATAR' || approve !== true
+    const value = reason.value.trim()
     if (
-      !reason.value.trim() ||
+      (needsReason && !value) ||
       reason.value.length > 200 ||
       /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(reason.value)
     ) {
       dialogError.value = '请填写 1～200 字原因，不含换行或隐藏字符'
       return
     }
-    const current = generation,
-      s = selection.value
+    const current = generation
     busy.value = true
     dialogError.value = ''
     try {
-      if (s.type === 'decision' && s.submission && s.approve !== undefined)
-        await decideReview(s.submission, s.approve, reason.value, store.token)
+      if (s.type === 'decision' && s.submission && approve !== undefined)
+        await decideReview(
+          s.submission,
+          approve,
+          value ? reason.value : '通过头像审核',
+          store.token,
+        )
       else if (s.type === 'public' && s.published && s.action)
         await changePublished(s.published, s.action, reason.value, store.token)
       else throw new ApiError('操作目标不完整，请重新选择', 400)
@@ -156,6 +166,13 @@ export function useProfileReview(section: () => ReviewSection = () => 'pending')
       if (current === generation) busy.value = false
     }
   }
+  watch(
+    reason,
+    () => {
+      if (!uncertain.value) dialogError.value = ''
+    },
+    { flush: 'sync' },
+  )
   function next(delta: number, publicList = false): void {
     if (loading.value || busy.value) return
     const p = publicList ? publicPage : page,

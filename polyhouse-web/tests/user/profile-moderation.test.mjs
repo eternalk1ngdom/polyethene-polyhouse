@@ -155,3 +155,24 @@ test('审核中切换分区只结算一次并刷新当前列表，同 Token 换�
  f.c.openPublic({userId:'2',username:'fixture'},'KEEP');f.c.reason.value='原账号私有原因';f.store.user.id='9'
  assert.equal(f.c.selection.value,null);assert.equal(f.c.reason.value,'');assert.equal(f.c.notice.value,'')
 })
+
+test('头像预览不提交，通过可留空，驳回必须填写并能清除旧提示', async (t) => {
+  const writes = []
+  const f = fixture('review', { decide: async (item, approve, reason) => writes.push({ item, approve, reason }) })
+  t.after(f.unmount)
+  const avatar = { ...record, kind: 'AVATAR', proposedValue: null }
+  f.c.openDecision(avatar)
+  await f.c.submit()
+  await f.c.submit(false)
+  assert.equal(writes.length, 0)
+  assert.match(f.c.dialogError.value, /请填写/)
+  f.c.reason.value = '  头像内容不合适  '
+  assert.equal(f.c.dialogError.value, '')
+  await f.c.submit(false)
+  f.c.openDecision(avatar)
+  await f.c.submit(true)
+  assert.deepEqual(writes.map(({ approve, reason }) => [approve, reason]), [
+    [false, '  头像内容不合适  '],
+    [true, '通过头像审核'],
+  ])
+})

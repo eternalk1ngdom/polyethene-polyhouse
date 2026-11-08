@@ -68,9 +68,11 @@ const {
 } = useProfileReview(() => section.value)
 const title = computed(() =>
   selection.value?.type === 'decision'
-    ? selection.value.approve
-      ? '通过资料审核'
-      : '驳回资料申请'
+    ? selection.value.submission?.kind === 'AVATAR'
+      ? '预览头像申请'
+      : selection.value.approve
+        ? '通过资料审核'
+        : '驳回资料申请'
     : selection.value?.action === 'KEEP'
       ? '保留历史资料'
       : '下架公开资料',
@@ -81,6 +83,12 @@ const selectedImage = computed(() =>
     : null,
 )
 const previewReady = ref(false)
+const reasonInput = ref<InstanceType<typeof ElInput>>()
+async function reviewAvatar(approve: boolean): Promise<void> {
+  if (approve && !previewReady.value) return
+  await submit(approve)
+  if (!uncertain.value && dialogError.value) reasonInput.value?.focus()
+}
 watch(
   selectedImage,
   () => {
@@ -141,16 +149,26 @@ onMounted(() => {
             </div>
             <div class="actions">
               <ElButton
-                :aria-label="`通过 ${item.username} ${item.kind}`"
+                v-if="item.kind === 'AVATAR'"
+                :aria-label="`预览 ${item.username} 头像`"
                 :disabled="busy"
-                @click="openDecision(item, true)"
-                >预览并通过</ElButton
-              ><ElButton
-                :aria-label="`驳回 ${item.username} ${item.kind}`"
-                :disabled="busy"
-                @click="openDecision(item, false)"
-                >驳回</ElButton
+                @click="openDecision(item)"
+                >预览</ElButton
               >
+              <template v-else>
+                <ElButton
+                  :aria-label="`通过 ${item.username} ${item.kind}`"
+                  :disabled="busy"
+                  @click="openDecision(item, true)"
+                  >预览并通过</ElButton
+                >
+                <ElButton
+                  :aria-label="`驳回 ${item.username} ${item.kind}`"
+                  :disabled="busy"
+                  @click="openDecision(item, false)"
+                  >驳回</ElButton
+                >
+              </template>
             </div>
           </li>
         </ul>
@@ -270,9 +288,10 @@ onMounted(() => {
           :closable="false"
           role="alert"
         />
-        <ElForm label-position="top" @submit.prevent="submit"
-          ><ElFormItem label="处理原因（必填）"
+        <ElForm label-position="top" @submit.prevent="submit()"
+          ><ElFormItem :label="selectedImage ? '处理原因（驳回必填）' : '处理原因（必填）'"
             ><ElInput
+              ref="reasonInput"
               v-model="reason"
               type="textarea"
               :rows="2"
@@ -282,7 +301,16 @@ onMounted(() => {
               placeholder="只填写必要说明，勿填隐私或凭据"
           /></ElFormItem>
           <div class="actions">
+            <template v-if="selectedImage && !uncertain">
+              <ElButton type="primary" :disabled="busy || !previewReady" @click="reviewAvatar(true)"
+                >通过</ElButton
+              >
+              <ElButton type="danger" plain :disabled="busy" @click="reviewAvatar(false)"
+                >驳回</ElButton
+              >
+            </template>
             <ElButton
+              v-else
               :disabled="busy"
               @click="
                 () => {
@@ -292,9 +320,10 @@ onMounted(() => {
               "
               >{{ uncertain ? '关闭并刷新核对' : '取消' }}</ElButton
             ><ElButton
+              v-if="!selectedImage"
               type="primary"
               native-type="submit"
-              :disabled="uncertain || (!!selectedImage && !!selection?.approve && !previewReady)"
+              :disabled="uncertain"
               :loading="busy"
               >确认{{ title }}</ElButton
             >
