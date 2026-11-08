@@ -21,6 +21,15 @@ class OwnerBootstrapCommandTest {
         assertThat(apply.apply()).isTrue();
     }
 
+    @Test
+    void shouldCreateOnlyWithExplicitApplyAndWithoutExistingUserId() {
+        var request = OwnerBootstrapCommand.parse(new String[]{"--create", "--username=root", "--apply"});
+        assertThat(request.create()).isTrue();
+        assertThat(request.passwordStdin()).isFalse();
+        assertThat(OwnerBootstrapCommand.parse(new String[]{"--create", "--username=root", "--apply",
+                "--password-stdin"}).passwordStdin()).isTrue();
+    }
+
     @ParameterizedTest
     @MethodSource("badArguments")
     void shouldRejectMalformedOrUnexpectedArguments(String[] args) {
@@ -38,6 +47,9 @@ class OwnerBootstrapCommandTest {
                 new String[]{"--user-id=1", "--username=owner_account", "--username=another"},
                 new String[]{"--user-id=1", "--user-id=2", "--username=owner_account"},
                 new String[]{"--user-id=1", "--username=owner_account", "--apply", "--apply"},
+                new String[]{"--create", "--username=root"},
+                new String[]{"--create", "--username=root", "--apply", "--user-id=1"},
+                new String[]{"--user-id=1", "--username=root", "--apply", "--password-stdin"},
                 new String[]{"--user-id=1", "--username=owner_account", "--spring.datasource.url=external"})
                 .map(args -> Arguments.of((Object) args));
     }

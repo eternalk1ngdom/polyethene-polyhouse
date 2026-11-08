@@ -27,7 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -227,9 +228,13 @@ class AccountManagementIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT password_hash FROM sys_user WHERE id=?", String.class, user)).isEqualTo(oldHash);
         assertCode(() -> auth.getCurrentUser(userToken), ErrorCode.UNAUTHORIZED);
     }
-    @Test void migrationIsRepeatableWithoutResettingManagedAccount() throws Exception {
+    @Test void freshSchemaCannotBeReplayedOverManagedAccount() throws Exception {
         act(user, request(user), AccountManagementAction.BAN, ownerToken);
-        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) { sandbox.migrate(connection, "007_account_management.sql"); }
+        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
+            assertThatThrownBy(() -> ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                    new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8)))
+                    .isInstanceOf(org.springframework.jdbc.datasource.init.ScriptStatementFailedException.class);
+        }
         assertThat(status(user)).isZero(); assertThat(version(user)).isEqualTo(1); assertThat(count()).isEqualTo(1);
     }
     @Test void httpRejectsInvalidTargetAndQueryOverrideCannotChangeTarget() throws Exception {
@@ -307,18 +312,13 @@ class AccountManagementIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql", "009_avatar_database.sql")) migrate(connection, migration);
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
                 }
             }
-        }
-        private void migrate(Connection connection, String migration) throws Exception {
-            String source = Files.readString(Path.of("sql", migration));
-            if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-            source = source.replace("USE `polyhouse_db`;", "");
-            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
         }
         /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
         @Override

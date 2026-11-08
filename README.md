@@ -57,7 +57,7 @@ IDEA 绿色 Run/Debug 按钮需另绑启动前外部工具，步骤见[Redis 启
 
 新机器缺少预设时，先在 IDEA 建立 `PolyhouseApplication` 运行配置，再执行 `.\polyhouse\scripts\Initialize-LocalAuth.ps1`，通过隐藏输入提供数据库密码。初始化只在密钥缺失时生成一次 32 字节安全随机密钥；重复执行保留已有账号、密码和密钥，无效旧密钥会明确拒绝而非静默替换。测试隔离用例仍可使用临时随机密钥，专门的运行配置用例会验证这里保存的固定密钥。
 
-当前后端需先执行 001～004 后的追加迁移 [005_account_security.sql](polyhouse/sql/005_account_security.sql)，再启动新版应用；迁移前备份，不在启动时自动改表。本人改密接口、首次限制、凭据版本、隔离验收及回退边界见[账号安全说明](docs/operations/account-security.md)。本机 005 已执行，既有账号密码/角色保持不变；P2 已关闭公共注册并交付屋主开户，先执行 006 再运行新版；入口、接口、一次凭据与回退边界见[屋主开户说明](docs/operations/account-provisioning.md)。P3 账号列表、封禁/解封及屋主代重置已交付，需再执行 007；页面 `/manage`、权限/一次交付/隔离验收与回退见[账号管理说明](docs/operations/account-management.md)。P4 昵称/头像审核已完成，需继续执行 008，再重启后端；新上传地址、私有目录、历史核对与回退见[资料审核说明](docs/operations/profile-moderation.md)。
+本机 MySQL 与 TiDB Cloud 的新库均执行 [001_schema.sql](polyhouse/sql/001_schema.sql)。备份、首个屋主初始化和回退见[数据库初始化说明](docs/operations/database-bootstrap.md)。应用启动时不自动建表，已有库应按实际结构单独迁移。账号与资料运维见[账号安全](docs/operations/account-security.md)、[屋主开户](docs/operations/account-provisioning.md)、[账号管理](docs/operations/account-management.md)和[资料审核](docs/operations/profile-moderation.md)。
 
 ## 公共层响应约定
 
@@ -127,7 +127,7 @@ npm run lint:check
 
 头像在浏览器裁剪为 160×160 WebP，输出不超过 20 KiB。`POST /api/auth/avatar/submissions` 使用 Bearer 和 JSON `avatarBase64/requestId`；返回申请状态和额度。头像每日最多 5 次，昵称 2 次；成功入库计次，同意图重试不多扣。
 
-待审和生效头像保存在数据库，前端只展示获准的图片。已有库先备份后执行 [009 迁移](polyhouse/sql/009_avatar_database.sql)。接口、旧头像迁移边界、备份及回退见[资料审核说明](docs/operations/profile-moderation.md)与[头像存储说明](docs/operations/avatar-storage.md)。
+待审和生效头像保存在数据库，前端只展示获准的图片。空库基线已包含头像字段。接口、旧头像迁移边界、备份及回退见[资料审核说明](docs/operations/profile-moderation.md)与[头像存储说明](docs/operations/avatar-storage.md)。
 
 个人中心的注销弹窗必须勾选影响说明，并准确输入“注销账号”；取消或确认期间切换账号后，旧确认失效。注销会停用账号并撤销全部终端会话，原账号名不能复用，已有资料和历史记录仍保留，不代表永久删除个人数据。前端成功反馈只在服务端确认后显示；网络/服务故障不能冒充操作成功，也不能据此断言服务端未执行。退出与注销共用命令占用状态，防止跨入口重复提交。
 
@@ -154,7 +154,8 @@ npm run lint:check
 ## 按需说明与学习
 
 - [后端基础详解](docs/learning/backend-basics.md)：用户模型、成长、JWT、认证与退出/软注销、MySQL/Redis 和 IDEA 设置。只在相关任务/学习时读取。
-- [屋主初始化与隔离要求](docs/operations/owner-bootstrap.md)：已有正式 OWNER，不重放初始化或清空记录。
+- [数据库初始化与回退](docs/operations/database-bootstrap.md)：本机 MySQL 与 TiDB Cloud 共用空库基线。
+- [已有屋主与测试隔离](docs/operations/owner-bootstrap.md)：正式库不运行 OWNER 夹具。
 - [账号安全](docs/operations/account-security.md)、[开户](docs/operations/account-provisioning.md)、[管理](docs/operations/account-management.md)、[资料审核](docs/operations/profile-moderation.md)：以对应追加迁移、接口和回退说明为准。
 - [只读策划书索引](docs/design/blueprint-index.md)、[计划索引](docs/plans/README.md)：规划、批准、实现与验收状态分别查证。
 

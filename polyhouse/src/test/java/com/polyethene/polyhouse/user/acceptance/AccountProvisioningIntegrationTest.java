@@ -22,7 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -172,21 +173,11 @@ class AccountProvisioningIntegrationTest {
         assertThat(provisioning.create(request, ownerToken).username()).isEqualTo("ph000001");
     }
 
-    @Test void migrationRetainsLegacyNamesAndSkipsDeletedNamesWithoutTruncatingDigits() throws Exception {
-        var legacy = auth.register(new RegisterDTO("ph000123", OWNER_PASSWORD, "历史账号"));
-        jdbc.update("UPDATE sys_user SET deleted=1 WHERE id=?", legacy.id());
-        jdbc.update("DELETE FROM sys_account_sequence WHERE slot=1");
-        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
-            sandbox.migrate(connection, "006_account_provisioning.sql");
-            assertThat(sequence()).isEqualTo(124);
-            provisioning.create(request(UserRoleEnum.USER), ownerToken);
-            sandbox.migrate(connection, "006_account_provisioning.sql");
-            assertThat(sequence()).isEqualTo(125);
-        }
-        // 迁移后独立导入的历史名也不能复用，数据库唯一索引覆盖软删除。
-        var collided = auth.register(new RegisterDTO("ph000125", OWNER_PASSWORD, "保留原名"));
+    @Test void allocatorSkipsDeletedNamesWithoutTruncatingDigits() {
+        assertThat(sequence()).isEqualTo(1);
+        var collided = auth.register(new RegisterDTO("ph000001", OWNER_PASSWORD, "保留原名"));
         jdbc.update("UPDATE sys_user SET deleted=1 WHERE id=?", collided.id());
-        assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph000126");
+        assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph000002");
         jdbc.update("UPDATE sys_account_sequence SET next_value=999999 WHERE slot=1");
         assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph999999");
         assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph1000000");
@@ -289,18 +280,13 @@ class AccountProvisioningIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql", "009_avatar_database.sql")) migrate(connection, migration);
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
                 }
             }
-        }
-        private void migrate(Connection connection, String migration) throws Exception {
-            String source = Files.readString(Path.of("sql", migration));
-            if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-            source = source.replace("USE `polyhouse_db`;", "");
-            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
         }
         /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
         @Override

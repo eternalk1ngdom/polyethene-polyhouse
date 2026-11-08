@@ -14,7 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
@@ -214,12 +215,8 @@ class CapacityRecoveryIntegrationTest {
                     sql.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                     created = true;
                     connection.setCatalog(name);
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql", "009_avatar_database.sql")) {
-                        String source = Files.readString(Path.of("sql", migration));
-                        if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-                        source = source.replace("USE `polyhouse_db`;", "");
-                        ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
-                    }
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 }
                 String host = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
                 if (!List.of("localhost", "127.0.0.1", "::1").contains(host)) throw new IllegalArgumentException("Only local Redis is allowed");

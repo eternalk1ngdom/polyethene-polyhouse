@@ -1,6 +1,6 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-08（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
+更新时间：2026-11-09（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.13 云端架构与头像改造](docs/dev-log/v1.0-dev.13.md)，先读“当前摘要”。
 - 基线：从 dev `0c353c3` 建立 `feature/avatar-compression-db`；GitHub Pages 已部署前端，云后端待验收。
@@ -22,6 +22,7 @@
 - 头像在浏览器裁剪为 160×160 WebP，JSON 提交，审核图片持久化到数据库。迁移、接口和回退见[资料审核](docs/operations/profile-moderation.md)。
 - 本轮前端 335 项、后端普通 311 项、真实隔离 49 项通过，包含浏览器上传、审核与刷新显示。详见 dev.13。
 - 头像审核改为单一预览入口，弹窗通过可留空、驳回必填；前端 336 项及隔离浏览器审核回归通过。
+- 本机库已备份、试还原并重建。MySQL 与 TiDB Cloud 共用[空库基线与屋主初始化](docs/operations/database-bootstrap.md)，云库待实测。
 - 下一步：按上线验收清单准备 Render、TiDB Cloud 与 Upstash，实际云环境验证和发布按授权执行。
 
 ## 历史索引（按需）

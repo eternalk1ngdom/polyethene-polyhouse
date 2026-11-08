@@ -38,7 +38,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -239,22 +240,16 @@ class ProfileModerationIntegrationTest {
   assertThat(status(live.id())).isEqualTo("PENDING");
   assertThat(pendingAvatar(user)).isEqualTo(previous);
  }
- @Test void migrationIsRepeatableAndDoesNotApproveLegacyContent()throws Exception{
+ @Test void freshSchemaRejectsInvalidAvatarStatusAndPreservesPendingContent()throws Exception{
   String before=fingerprint(user);
   var submitted=avatar(userToken);
   String pending=pendingAvatar(user);
-  jdbc.update("""
-    INSERT INTO sys_profile_submission(id,user_id,kind,status,credential_version,version,request_id,
-      content_hash,private_key,created_at,expires_at)
-    VALUES (1,?,'AVATAR','PENDING',0,1,?,?,?,CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))
-    """,other,UUID.randomUUID().toString(),"a".repeat(64),"b".repeat(32)+".jpg");
-  try(Connection c=DriverManager.getConnection(sandbox.url,sandbox.user,sandbox.password)){
-   sandbox.migrate(c,"009_avatar_database.sql");
-  }
-  assertThat(status("1")).isEqualTo("INVALIDATED");
+  assertThatThrownBy(() -> jdbc.update("UPDATE sys_user SET avatar_status=3 WHERE id=?",user))
+    .isInstanceOf(org.springframework.dao.DataAccessException.class)
+    .hasMessageContaining("chk_sys_user_avatar_status");
   assertThat(status(submitted.id())).isEqualTo("PENDING");
   assertThat(pendingAvatar(user)).isEqualTo(pending);
-  assertThat(fingerprint(user)).isEqualTo(before);assertThat(profiles.published(new ProfilePublishedQueryDTO(1,20,ProfileField.NICKNAME,true),ownerToken).total()).isEqualTo("4");
+  assertThat(fingerprint(user)).isEqualTo(before);
  }
  @Test void existingPublishedBytesStayUntilApproval()throws Exception{
   String old=AvatarFixture.webp("green");
@@ -377,18 +372,13 @@ class ProfileModerationIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql", "009_avatar_database.sql")) migrate(connection, migration);
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
                 }
             }
-        }
-        private void migrate(Connection connection, String migration) throws Exception {
-            String source = Files.readString(Path.of("sql", migration));
-            if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-            source = source.replace("USE `polyhouse_db`;", "");
-            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
         }
         /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
         @Override
