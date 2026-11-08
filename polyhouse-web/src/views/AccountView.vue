@@ -759,7 +759,9 @@ h1 {
   }
   .cover-word {
     right: 12%;
-    font-size: 90px;
+    font-size: clamp(48px, 14vw, 68px);
+    line-height: 1.05;
+    white-space: nowrap;
     bottom: -8px;
   }
   .profile-overview {
