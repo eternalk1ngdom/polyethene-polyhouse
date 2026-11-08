@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { toolRegistry } from '../config/toolRegistry'
 import { needsAccountSectionRedirect, resolveAccountSection } from '../utils/accountSections'
@@ -10,7 +10,7 @@ const toolViews = {
 }
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { title: '日常小事，顺手一点' } },
     {
