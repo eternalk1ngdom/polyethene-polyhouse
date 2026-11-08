@@ -1,9 +1,12 @@
 package com.polyethene.polyhouse.ops;
 
+import com.polyethene.polyhouse.common.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.stream.Stream;
 
@@ -28,6 +31,33 @@ class OwnerBootstrapCommandTest {
         assertThat(request.passwordStdin()).isFalse();
         assertThat(OwnerBootstrapCommand.parse(new String[]{"--create", "--username=root", "--apply",
                 "--password-stdin"}).passwordStdin()).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "   ")
+    void shouldRejectMissingPasswordBeforeAskingForConfirmation(String input) {
+        assertThatThrownBy(() -> OwnerBootstrapCommand.readConfirmedPassword(prompt -> {
+            assertThat(prompt).isEqualTo("Owner password: ");
+            return input == null ? null : input.toCharArray();
+        })).isInstanceOf(BusinessException.class).hasMessageContaining("cannot be empty");
+    }
+
+    @Test
+    void shouldRejectDifferentConfirmationAndClearBothBuffers() {
+        char[] first = "example-password".toCharArray();
+        char[] second = "mistyped-password".toCharArray();
+        assertThatThrownBy(() -> OwnerBootstrapCommand.readConfirmedPassword(prompt ->
+                prompt.equals("Owner password: ") ? first : second))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("do not match");
+        assertThat(first).containsOnly('\0');
+        assertThat(second).containsOnly('\0');
+    }
+
+    @Test
+    void shouldReturnExactConfirmedPasswordWithoutTrimming() throws Exception {
+        String input = " example-password ";
+        assertThat(OwnerBootstrapCommand.readConfirmedPassword(prompt -> input.toCharArray())).isEqualTo(input);
     }
 
     @ParameterizedTest

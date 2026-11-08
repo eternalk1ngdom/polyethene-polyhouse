@@ -1,5 +1,6 @@
 package com.polyethene.polyhouse.ops;
 
+import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.mapper.OwnerBootstrapMapper;
 import com.polyethene.polyhouse.service.AuthRedisStore;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.function.Function;
 
 /** 独立运维入口；只装配存储及初始化服务，既不启动 Web 端口，也不扫描 Controller。 */
 public final class OwnerBootstrapCommand {
@@ -62,7 +64,7 @@ public final class OwnerBootstrapCommand {
         } catch (IllegalArgumentException exception) {
             LOG.error("参数或密码格式不合法，请参阅屋主初始化文档。");
         } catch (IOException exception) {
-            LOG.error("无法读取密码，请使用交互终端或明确指定受控标准输入。");
+            LOG.error("Could not read the owner password. No database changes were made.");
         } catch (RuntimeException exception) {
             // 禁止输出原始异常或异常链，连接配置和底层 SQL 可能含运维敏感信息。
             LOG.error("运维命令未完成，请核对私有配置和存储连接后重新检查；不要在聊天中提供凭据。");
@@ -97,17 +99,38 @@ public final class OwnerBootstrapCommand {
     private static String readPassword(boolean passwordStdin) throws IOException {
         if (passwordStdin) {
             // 只在显式要求时读取标准输入，便于由运维进程用私有管道传入。
-            return new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)).readLine();
+            return requirePassword(new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)).readLine());
         }
         var console = System.console();
         if (console == null) throw new IOException();
-        char[] secret = console.readPassword("Owner password: ");
-        if (secret == null) throw new IOException();
+        return readConfirmedPassword(console::readPassword);
+    }
+
+    /** 在启动数据库上下文前检查两次隐藏输入，避免粘贴失败或输错后创建唯一屋主。 */
+    static String readConfirmedPassword(Function<String, char[]> prompt) throws IOException {
+        char[] secret = prompt.apply("Owner password: ");
+        char[] confirmation = null;
         try {
-            return new String(secret);
+            String password = requirePassword(secret == null ? null : new String(secret));
+            confirmation = prompt.apply("Confirm owner password: ");
+            if (confirmation == null) throw new IOException();
+            if (!Arrays.equals(secret, confirmation)) {
+                throw new BusinessException(ErrorCode.INVALID_PARAMETER,
+                        "Passwords do not match. No database changes were made.");
+            }
+            return password;
         } finally {
-            Arrays.fill(secret, '\0');
+            if (secret != null) Arrays.fill(secret, '\0');
+            if (confirmation != null) Arrays.fill(confirmation, '\0');
         }
+    }
+
+    private static String requirePassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER,
+                    "Owner password cannot be empty. No database changes were made.");
+        }
+        return password;
     }
 
     /** 运维参数不包含密码或令牌；只有显式 apply 才允许提交。 */

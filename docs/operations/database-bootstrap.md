@@ -19,7 +19,7 @@ $ownerClassPath = 'target/classes;' + (Get-Content -LiteralPath 'target/owner-cl
 java -cp $ownerClassPath com.polyethene.polyhouse.ops.OwnerBootstrapCommand --create --username=root --apply
 ```
 
-在交互终端输入密码，输入内容不回显。命令用应用的 BCrypt 随机盐哈希，在同一事务内创建用户并写入首次初始化记录。若已有任意用户或首次初始化记录，命令拒绝创建。已有库需要核对或授予已有账号时，见[已有账号的屋主初始化](owner-bootstrap.md)。
+在交互终端依次响应 `Owner password:` 和 `Confirm owner password:`，两次输入同一个密码，输入内容不回显。空密码或两次不一致会在连接数据库前退出。命令用应用的 BCrypt 随机盐哈希，在同一事务内创建用户并写入首次初始化记录。若已有任意用户或首次初始化记录，命令拒绝创建。已有库需要核对或授予已有账号时，见[已有账号的屋主初始化](owner-bootstrap.md)。
 
 ## 备份与回退
 
