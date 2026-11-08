@@ -31,12 +31,6 @@ export interface SourceInspection {
   message: string
 }
 
-/** 把字节数换成一位小数的 MB，用于提示文案。 */
-function toMegabytes(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(1)
-}
-
-/** 把像素数换成一位小数的 MP，用于提示文案。 */
 /**
  * 像素数换算成"百万像素"：1 MP = 1,000,000 像素，与相机、手机的规格写法一致。
  * 不能用 1024×1024——那会把 8000×5400 的图说成 41.2MP，而用户自己一乘就知道是 43.2MP。
@@ -50,7 +44,7 @@ function accept(width: number | null, height: number | null): SourceInspection {
   return { ok: true, width, height, reason: null, message: '' }
 }
 
-/** 组装拒绝结果；message 说明超了哪一项、超到多少，用户才知道该缩图还是换图。 */
+/** 组装拒绝结果；区分体积和像素超限，方便用户选择缩图或压缩。 */
 function reject(reason: SourceRejection, message: string): SourceInspection {
   return { ok: false, width: null, height: null, reason, message }
 }
@@ -63,7 +57,7 @@ export function inspectSourceSize(byteLength: number): SourceInspection {
   if (byteLength > MAX_SOURCE_BYTES)
     return reject(
       'file-too-large',
-      `图片 ${toMegabytes(byteLength)}MB，超过 20MB 上限；请先缩小或压缩后再试。`,
+      `图片超过 ${MAX_SOURCE_BYTES / 1024 / 1024} MiB 上限；请先缩小或压缩后再试。`,
     )
   return accept(null, null)
 }

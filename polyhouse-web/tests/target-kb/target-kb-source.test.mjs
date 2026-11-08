@@ -77,7 +77,7 @@ test('文件体积：正好 20 MiB 放行，多 1 字节拒绝', () => {
   const over = inspectSource(padTo(base, MAX_SOURCE_BYTES + 1))
   assert.equal(over.ok, false)
   assert.equal(over.reason, 'file-too-large')
-  assert.match(over.message, /20MB/)
+  assert.match(over.message, /超过 20 MiB/)
 })
 
 test('像素上限：正好 40 MP 放行，多一个像素拒绝', () => {

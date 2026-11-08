@@ -5,6 +5,8 @@ import { ElAlert, ElButton, ElCheckbox, ElInput, ElOption, ElSelect } from 'elem
 import RuleLibraryPanel from '../components/RuleLibraryPanel.vue'
 import ReplaceDraftPanel from '../components/ReplaceDraftPanel.vue'
 import ReplaceResultPreview from '../components/ReplaceResultPreview.vue'
+import FileDropZone from '../components/FileDropZone.vue'
+import ToolAdvancedOptions from '../components/ToolAdvancedOptions.vue'
 import type { ReplaceRule } from '../core/acReplacer'
 import type { VirtualFileEntry } from '../core/types'
 import { validateBatch } from '../core/polyReplaceBatch'
@@ -22,8 +24,8 @@ const skippedFiles = ref(new Set<number>())
 const selectedFiles = computed(() =>
   candidateFiles.value.filter((_, index) => !skippedFiles.value.has(index)),
 )
-const filePicker = ref<HTMLInputElement>()
 const directoryPicker = ref<HTMLInputElement>()
+const inputPanel = ref<HTMLElement>()
 const fileList = ref<HTMLUListElement>()
 const selectedMode = ref<ReplaceMode>('files')
 const selectionIssue = computed(() => {
@@ -43,6 +45,25 @@ const selectionIssue = computed(() => {
   }
 })
 const inputEncoding = ref<InputEncoding>('utf-8')
+const advancedOpen = ref(false)
+const detailsOpen = ref(false)
+const draftEnabled = ref(false)
+const draftNeedsAttention = ref(false)
+const advancedSummary = computed(() =>
+  [
+    inputEncoding.value === 'utf-8' ? 'UTF-8' : 'GBK / GB18030',
+    draftEnabled.value ? '自动草稿已开启' : '词库 · 分享 · 草稿',
+    draftNeedsAttention.value ? '有草稿或分享提示' : '',
+  ]
+    .filter(Boolean)
+    .join(' · '),
+)
+/** 折叠不阻止来源初始化；待恢复、冲突或存储异常必须能被看见。 */
+function updateDraftDisclosure(enabled: boolean, needsAttention: boolean): void {
+  draftEnabled.value = enabled
+  draftNeedsAttention.value = needsAttention
+  if (needsAttention) advancedOpen.value = true
+}
 const directorySupported = 'webkitdirectory' in document.createElement('input')
 const rules = ref<ReplaceRule[]>([{ search: '', replace: '' }])
 const draftPanel = ref<InstanceType<typeof ReplaceDraftPanel>>()
@@ -94,19 +115,21 @@ onBeforeUnmount(invalidate)
 /** 先限制候选数量，再保存引用；正文只在开始处理时读取，超限/取消保留原清单。 */
 function selectFile(event: Event, mode: ReplaceMode): void {
   const input = event.target as HTMLInputElement
-  const incoming = input.files
-  if (!incoming?.length) return
-  if (incoming.length > MAX_CANDIDATE_FILES) {
-    input.value = ''
+  const files = input.files ?? []
+  selectFiles(files, mode)
+  input.value = ''
+}
+/** 点击、拖入与目录选择共用候选限额，不在投放区另造一套读取/排除规则。 */
+function selectFiles(files: ArrayLike<File>, mode: ReplaceMode): void {
+  if (!files.length) return
+  if (files.length > MAX_CANDIDATE_FILES) {
     message.value = '候选文件最多 500 个，本次未载入；请缩小选择范围。原文件清单保持不变。'
     return
   }
-  const files = Array.from(incoming)
-  input.value = ''
   invalidate()
   selectedMode.value = mode
   skippedFiles.value = new Set()
-  candidateFiles.value = files
+  candidateFiles.value = Array.from(files)
 }
 
 /** Checkbox 的通用值还可为字符串/数字，本页只接受布尔参与状态。 */
@@ -138,6 +161,16 @@ async function setAllParticipation(checked: boolean): Promise<void> {
   await nextTick()
   if (activatedButton?.disabled)
     fileList.value?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus()
+}
+
+/** 清空只释放文件选择和旧任务；规则/编码保留，移除按钮后将焦点交回文件入口。 */
+async function clearFileQueue(): Promise<void> {
+  invalidate()
+  candidateFiles.value = []
+  skippedFiles.value = new Set()
+  selectedMode.value = 'files'
+  await nextTick()
+  inputPanel.value?.querySelector<HTMLInputElement>('.file-drop input')?.focus()
 }
 
 /** 显示单文件大小帮助用户定位超限项，不需要读取正文。 */
@@ -242,30 +275,22 @@ function download(): void {
       <p>让重复的文字修改，简单一点。</p>
     </header>
     <div class="layout">
-      <section class="panel" aria-labelledby="input-title">
+      <section ref="inputPanel" class="panel" aria-labelledby="input-title">
         <h2 id="input-title">1. 选择文本文件</h2>
-        <p>
-          文件仅在浏览器中处理，不会上传。最多载入 500 个候选；勾选参与处理的文件最多 20
-          个，每个不超过 2 MiB，总计不超过 5 MiB。文件夹保留目录结构并打包为
-          ZIP，空文件夹不会包含在结果中；任一参与文件无法处理则整批停止，可取消该文件的勾选或检查输入编码。
+        <p id="replace-pick-help">
+          本机处理，不上传、不覆盖原件。最多20个文件，单个2 MiB，合计5 MiB。
         </p>
-        <p>
-          Python 等源码按全文替换，注释、字符串和代码中匹配的内容都会修改，不支持仅替换注释。
-          不自动跳过 .git、.venv
-          等目录，所有候选默认参与，请手动取消不需要的文件。浏览器枚举大目录可能耗时，请选择小型文本目录。
-        </p>
-        <ElButton class="file-button" @click="filePicker?.click()">选择文件</ElButton>
-        <input
-          ref="filePicker"
-          type="file"
-          hidden
-          multiple
+        <FileDropZone
           accept=".txt,.md,.json,.csv,.html,.css,.js,.ts,.vue,.java,.py,.xml,.yml,.yaml,.log"
-          @change="selectFile($event, 'files')"
+          label="点击选择文本文件，或拖到这里"
+          :description="directorySupported ? '支持多选；也可从下方选择文件夹' : '支持多选文本文件'"
+          help-id="replace-pick-help"
+          @select="selectFiles($event, 'files')"
+          @reject="message = $event"
         />
         <ElButton
           v-if="directorySupported"
-          class="file-button directory-button"
+          class="directory-button"
           @click="directoryPicker?.click()"
           >选择文件夹</ElButton
         >
@@ -279,8 +304,12 @@ function download(): void {
           @change="selectFile($event, 'directory')"
         />
         <p v-else>当前浏览器不支持选择文件夹，可改为选择文件。</p>
-        <p v-if="!candidateFiles.length" class="file-name">尚未选择文件</p>
-        <section v-else class="file-selection" aria-labelledby="file-selection-title">
+        <p class="selection-help">按全文替换；目录默认全选，不自动排除文件，请核对清单。</p>
+        <section
+          v-if="candidateFiles.length"
+          class="file-selection"
+          aria-labelledby="file-selection-title"
+        >
           <h3 id="file-selection-title">参与处理的文件</h3>
           <p id="file-selection-summary" role="status">
             共 {{ candidateFiles.length }} 个，参与 {{ selectedFiles.length }} 个，跳过
@@ -295,10 +324,9 @@ function download(): void {
             <ElButton :disabled="selectedFiles.length === 0" @click="setAllParticipation(false)"
               >全部跳过</ElButton
             >
+            <ElButton @click="clearFileQueue">清空队列</ElButton>
           </div>
-          <p id="file-selection-help">
-            勾选表示参与；取消后仍可选回，不删除原文件。只读取和导出参与文件。
-          </p>
+          <p id="file-selection-help">只处理勾选项；取消勾选后仍可选回，原文件不变。</p>
           <ul ref="fileList" class="file-list" aria-label="候选文件清单">
             <li v-for="(file, index) in candidateFiles" :key="index">
               <ElCheckbox
@@ -320,26 +348,8 @@ function download(): void {
             {{ selectionIssue }}，请调整勾选；清单会保留。
           </p>
         </section>
-        <label for="input-encoding">文件原本的编码</label>
-        <ElSelect
-          id="input-encoding"
-          v-encoding-help
-          v-model="inputEncoding"
-          class="business-select"
-          aria-label="文件原本的编码"
-          fit-input-width
-        >
-          <ElOption label="UTF-8（默认）" value="utf-8" />
-          <ElOption label="GBK / GB18030" value="gb18030" />
-        </ElSelect>
-        <p id="encoding-help">
-          请选择所有文件共同使用的编码；无法自动判断，请检查预览。导出统一为 UTF-8，GBK
-          文件不会保留原编码；Python、HTML、XML 等文件中的编码声明不会自动修改。
-        </p>
         <h2>2. 设置替换规则</h2>
-        <p>按原文一次处理；同一位置多条规则匹配时，优先较长的内容。替换内容留空表示删除。</p>
-        <RuleLibraryPanel :rules="rules" @load="rules = $event" />
-        <ReplaceDraftPanel ref="draftPanel" :rules="rules" @load="rules = $event" />
+        <p>同一位置优先匹配长规则；替换内容留空表示删除。</p>
         <div v-for="(rule, index) in rules" :key="index" class="rule">
           <label :for="`search-${index}`">查找 {{ index + 1 }}</label>
           <ElInput
@@ -357,9 +367,40 @@ function download(): void {
           />
           <ElButton v-if="rules.length > 1" text @click="removeRule(index)">删除规则</ElButton>
         </div>
+        <ElButton :disabled="rules.length >= 20 || busy" @click="addRule">添加规则</ElButton>
+        <ToolAdvancedOptions
+          id="replace-advanced"
+          v-model="advancedOpen"
+          :summary="advancedSummary"
+        >
+          <label for="input-encoding">文件原本的编码</label>
+          <ElSelect
+            id="input-encoding"
+            v-encoding-help
+            v-model="inputEncoding"
+            class="business-select"
+            aria-label="文件原本的编码"
+            fit-input-width
+          >
+            <ElOption label="UTF-8（默认）" value="utf-8" />
+            <ElOption label="GBK / GB18030" value="gb18030" />
+          </ElSelect>
+          <p id="encoding-help">
+            默认UTF-8；乱码时可手选GBK / GB18030。导出统一为UTF-8，源码内的编码声明不会自动修改。
+          </p>
+          <p class="selection-help">
+            最多载入500个候选，勾选项仍须符合处理限额。文件夹保留目录结构并导出ZIP，不包含空目录；读取或解码失败时整批停止。
+          </p>
+          <RuleLibraryPanel :rules="rules" @load="rules = $event" />
+          <ReplaceDraftPanel
+            ref="draftPanel"
+            :rules="rules"
+            @load="rules = $event"
+            @disclosure="updateDraftDisclosure"
+          />
+        </ToolAdvancedOptions>
         <div class="actions">
-          <ElButton :disabled="rules.length >= 20 || busy" @click="addRule">添加规则</ElButton
-          ><ElButton
+          <ElButton
             type="primary"
             :loading="busy"
             :disabled="Boolean(selectionIssue)"
@@ -397,59 +438,69 @@ function download(): void {
               :value="index"
             />
           </ElSelect>
-          <section class="rule-counts" aria-labelledby="rule-counts-title">
-            <h3 id="rule-counts-title">逐条替换统计</h3>
-            <p class="rule-counts-help">
-              统计覆盖全文，按实际执行计次（含删除、原样替换）；0 表示未命中。
-            </p>
-            <div
-              class="rule-counts-scroll"
-              tabindex="0"
-              role="region"
-              aria-labelledby="rule-counts-title"
-            >
-              <table class="rule-counts-table">
-                <thead>
-                  <tr>
-                    <th scope="col">规则</th>
-                    <th scope="col">当前预览文件（处）</th>
-                    <th scope="col">整批合计（处）</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(rule, index) in rules" :key="index">
-                    <th scope="row">
-                      <span>规则 {{ index + 1 }}</span>
-                      <span class="rule-counts-text">查找：{{ rule.search }}</span>
-                      <span class="rule-counts-text"
-                        >替换为：{{ rule.replace === '' ? '（删除匹配内容）' : rule.replace }}</span
-                      >
-                    </th>
-                    <td>
-                      <span>{{ activePreview?.ruleCounts[index] ?? 0 }}</span>
-                      <ElButton
-                        v-if="previewHitCounts[index]"
-                        class="locate-rule"
-                        :aria-label="`定位规则 ${index + 1}`"
-                        aria-controls="result-preview"
-                        @click="previewPanel?.locateRule(index)"
-                        >定位</ElButton
-                      >
-                      <span v-else-if="activePreview?.ruleCounts[index]" class="unavailable-hit"
-                        >预览外或超过标记上限，无法定位</span
-                      >
-                    </td>
-                    <td>{{ totalRuleCounts[index] ?? 0 }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <ToolAdvancedOptions
+            id="replace-statistics"
+            v-model="detailsOpen"
+            title="逐条统计与定位"
+            :summary="`${rules.length}条规则 · 统计覆盖全文`"
+          >
+            <section class="rule-counts" aria-labelledby="rule-counts-title">
+              <h3 id="rule-counts-title">逐条替换统计</h3>
+              <p class="rule-counts-help">
+                统计覆盖全文，按实际执行计次（含删除、原样替换）；0 表示未命中。
+              </p>
+              <div
+                class="rule-counts-scroll"
+                tabindex="0"
+                role="region"
+                aria-labelledby="rule-counts-title"
+              >
+                <table class="rule-counts-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">规则</th>
+                      <th scope="col">当前预览文件（处）</th>
+                      <th scope="col">整批合计（处）</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(rule, index) in rules" :key="index">
+                      <th scope="row">
+                        <span>规则 {{ index + 1 }}</span>
+                        <span class="rule-counts-text">查找：{{ rule.search }}</span>
+                        <span class="rule-counts-text"
+                          >替换为：{{
+                            rule.replace === '' ? '（删除匹配内容）' : rule.replace
+                          }}</span
+                        >
+                      </th>
+                      <td>
+                        <span>{{ activePreview?.ruleCounts[index] ?? 0 }}</span>
+                        <ElButton
+                          v-if="previewHitCounts[index]"
+                          class="locate-rule"
+                          :aria-label="`定位规则 ${index + 1}`"
+                          aria-controls="result-preview"
+                          @click="previewPanel?.locateRule(index)"
+                          >定位</ElButton
+                        >
+                        <span v-else-if="activePreview?.ruleCounts[index]" class="unavailable-hit"
+                          >预览外或超过标记上限，无法定位</span
+                        >
+                      </td>
+                      <td>{{ totalRuleCounts[index] ?? 0 }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </ToolAdvancedOptions>
           <ReplaceResultPreview
             v-if="activePreview"
             :key="previewIndex"
             ref="previewPanel"
             :file="activePreview"
+            :details="detailsOpen"
           />
           <ElButton type="primary" class="download" @click="download">{{
             result.mime === 'application/zip' ? '下载 ZIP 结果包' : '下载结果文件'
@@ -507,7 +558,7 @@ p {
 }
 .layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
@@ -522,13 +573,12 @@ p {
   margin-top: 32px;
 }
 .directory-button {
-  margin-left: 8px;
+  margin: 12px 0 0;
 }
-.file-name {
-  display: inline-block;
+.selection-help {
   color: var(--ph-muted);
   overflow-wrap: anywhere;
-  font-size: 14px;
+  font-size: 12px;
 }
 .rule {
   margin: 18px 0;
@@ -537,7 +587,7 @@ p {
   border: 1px solid var(--ph-line);
   border-radius: 10px;
 }
-label:not(.file-button):not(.file-checkbox) {
+label:not(.file-drop):not(.file-checkbox) {
   display: block;
   margin: 10px 0 6px;
   font-size: 14px;
@@ -701,19 +751,25 @@ label:not(.file-button):not(.file-checkbox) {
   border-radius: 12px;
   background: var(--ph-soft);
 }
+/* 规则编辑器和词库操作需要完整阅读宽度；与图片工作台同在窄桌面下转单栏。 */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 700px) {
   .replace-page {
     width: calc(100% - 40px);
     margin-top: 32px;
-  }
-  .layout {
-    grid-template-columns: 1fr;
   }
   .panel {
     padding: 20px;
   }
   header {
     padding: 24px 20px;
+  }
+  h1 {
+    font-size: 34px;
   }
 }
 </style>

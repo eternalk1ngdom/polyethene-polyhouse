@@ -17,7 +17,7 @@ import TargetKbPanel from '../components/TargetKbPanel.vue'
 
 <style scoped>
 .targetkb-page {
-  width: min(1120px, calc(100% - 96px));
+  width: min(1320px, calc(100% - 96px));
   margin: 28px auto 0;
 }
 .back {
@@ -34,6 +34,9 @@ header {
   color: var(--ph-muted);
   font-size: 12px;
   letter-spacing: 1.5px;
+}
+header p {
+  line-height: 1.7;
 }
 h1 {
   font-size: 42px;

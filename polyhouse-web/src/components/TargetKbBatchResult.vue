@@ -178,6 +178,7 @@ function stateText(row: TargetKbBatchRow): string {
   border: 1px solid var(--ph-line);
   border-radius: 10px;
   background: var(--ph-soft);
+  overflow-wrap: anywhere;
 }
 .failures p {
   margin: 0 0 8px;

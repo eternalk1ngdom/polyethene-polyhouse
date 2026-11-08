@@ -147,6 +147,43 @@ async function settle() {
   await nextTick()
 }
 
+test('折叠高级选项保留参数和运行结果，隐藏参数无效时展开以便修正', async (t) => {
+  const f = await mount()
+  t.after(f.close)
+  f.page.entries.value = [entry(1)]
+  f.page.minInput.value = '30KB'
+  f.page.dpiInput.value = '300'
+  f.page.allowShrink.value = false
+  await settle()
+  f.page.advancedOpen.value = true
+  f.page.advancedOpen.value = false
+  const pending = f.page.run()
+  await settle()
+  const active = Worker.instances[0]
+  assert.equal(f.page.busy.value, true)
+  f.page.advancedOpen.value = true
+  f.page.advancedOpen.value = false
+  await settle()
+  assert.equal(f.page.busy.value, true)
+  assert.equal(active.stopped, false)
+  complete(active)
+  await pending
+  const result = f.page.result.value
+  f.page.advancedOpen.value = true
+  f.page.advancedOpen.value = false
+  await settle()
+  assert.equal(f.page.result.value, result)
+  assert.equal(f.page.minInput.value, '30KB')
+  assert.equal(f.page.dpiInput.value, '300')
+  assert.equal(f.page.allowShrink.value, false)
+  assert.match(f.page.advancedSummary.value, /30KB.*保留尺寸.*300/)
+  f.page.dpiInput.value = '0'
+  await settle()
+  await f.page.run()
+  assert.equal(f.page.advancedOpen.value, true)
+  assert.match(f.page.message.value, /DPI/)
+})
+
 // 等待点由 Promise 控制，不靠计时器碰巧点中读文件/打包阶段；编码和字节算法由专项另验。
 test('读图时取消：迟到读取不能启动 Worker 或复活结果', async (t) => {
   const f = await mount()

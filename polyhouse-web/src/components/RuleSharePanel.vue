@@ -26,6 +26,8 @@ interface Props {
 interface Emits {
   /** 让旧草稿提示和本提示互斥，避免同时要求两次来源决定。 */
   pending: [value: boolean]
+  /** 无效链接及清理失败同样不能被折叠高级区遮住。 */
+  attention: [value: boolean]
 }
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
@@ -73,6 +75,11 @@ watch(
   { immediate: true },
 )
 watch(pending, (value) => emit('pending', value), { immediate: true, flush: 'sync' })
+watch(
+  [pending, notice, cleanupHash],
+  () => emit('attention', pending.value || Boolean(notice.value) || Boolean(cleanupHash.value)),
+  { immediate: true, flush: 'sync' },
+)
 onBeforeUnmount(() => share.dispose())
 
 function generate(): void {

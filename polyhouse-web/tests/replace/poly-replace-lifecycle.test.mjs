@@ -53,6 +53,8 @@ const { default: component } = await import(
       '../components/RuleLibraryPanel.vue': url('export default {}'),
       '../components/ReplaceDraftPanel.vue': url('export default {}'),
       '../components/ReplaceResultPreview.vue': url('export default {}'),
+      '../components/FileDropZone.vue': url('export default {}'),
+      '../components/ToolAdvancedOptions.vue': url('export default {}'),
     },
   )
 )
@@ -109,6 +111,83 @@ const reply = (text) => ({
       bytes: new ArrayBuffer(1),
     },
   },
+})
+
+test('清空队列取消读取/Worker并隔离迟到结果，保留规则编码且可以重选', async (t) => {
+  const f = mount()
+  t.after(f.unmount)
+  const p = f.page
+  p.inputEncoding.value = 'gb18030'
+  let finish
+  p.selectFiles(
+    [
+      {
+        ...file(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve
+            }),
+        ),
+        webkitRelativePath: 'root/fixture.txt',
+      },
+    ],
+    'directory',
+  )
+  const reading = p.runReplace()
+  await p.clearFileQueue()
+  finish(new ArrayBuffer(1))
+  await reading
+  assert.equal(Worker.instances.length, 0)
+  assert.equal(p.candidateFiles.value.length, 0)
+  assert.equal(p.skippedFiles.value.size, 0)
+  assert.equal(p.selectedMode.value, 'files')
+  assert.equal(p.selectionIssue.value, '')
+  assert.equal(p.inputEncoding.value, 'gb18030')
+  assert.deepEqual(p.rules.value, [{ search: 'A', replace: 'B' }])
+  p.selectFiles([file()], 'files')
+  await p.runReplace()
+  const old = Worker.instances[0]
+  await p.clearFileQueue()
+  assert.equal(old.stopped, true)
+  old.onmessage(reply('late'))
+  assert.equal(p.result.value, null)
+  assert.equal(p.busy.value, false)
+  p.selectFiles([file()], 'files')
+  await p.runReplace()
+  Worker.instances[1].onmessage(reply('new'))
+  assert.equal(p.activePreview.value.preview, 'new')
+  await p.clearFileQueue()
+  assert.equal(p.result.value, null)
+  assert.equal(p.candidateFiles.value.length, 0)
+})
+
+test('高级面板收起不停止替换或清空结果，待处理来源主动展开', async (t) => {
+  const fixture = mount()
+  t.after(fixture.unmount)
+  const page = fixture.page
+  page.selectFiles([file()], 'files')
+  await page.runReplace()
+  const active = Worker.instances[0]
+  page.advancedOpen.value = true
+  page.advancedOpen.value = false
+  await nextTick()
+  assert.equal(page.busy.value, true)
+  assert.equal(active.stopped, false)
+  active.onmessage(reply('B'))
+  const completed = page.result.value
+  page.advancedOpen.value = true
+  page.detailsOpen.value = true
+  page.advancedOpen.value = false
+  page.detailsOpen.value = false
+  await nextTick()
+  assert.equal(page.result.value, completed)
+  page.updateDraftDisclosure(true, true)
+  assert.equal(page.advancedOpen.value, true)
+  assert.match(page.advancedSummary.value, /自动草稿已开启.*提示/)
+  page.advancedOpen.value = false
+  page.updateDraftDisclosure(true, false)
+  assert.equal(page.advancedOpen.value, false)
+  assert.equal(page.result.value, completed)
 })
 
 test('取消读取后，迟到的文件内容不会创建 Worker；原选择可以立即重试', async (t) => {

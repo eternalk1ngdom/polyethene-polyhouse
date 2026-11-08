@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { zip } from 'fflate'
 import { ElAlert, ElButton, ElIcon, ElInput, ElProgress, ElSwitch } from 'element-plus'
-import { Close, Download, Picture, Upload } from '@element-plus/icons-vue'
+import { Close, Download, Picture } from '@element-plus/icons-vue'
+import FileDropZone from './FileDropZone.vue'
+import ToolAdvancedOptions from './ToolAdvancedOptions.vue'
 import TargetKbBatchResult from './TargetKbBatchResult.vue'
 import {
   MAX_BATCH_BYTES,
@@ -85,6 +87,16 @@ const targetInput = ref('')
 const minInput = ref('')
 const dpiInput = ref('')
 const allowShrink = ref(true)
+const advancedOpen = ref(false)
+/** 折叠后仍提示生效的非默认设置，避免用户忘记隐藏参数。 */
+const advancedSummary = computed(() => {
+  const settings = [
+    minInput.value.trim() ? `下限 ${minInput.value.trim()}` : '',
+    !allowShrink.value ? '保留尺寸' : '',
+    dpiInput.value.trim() ? `DPI ${dpiInput.value.trim()}` : '',
+  ].filter(Boolean)
+  return settings.length ? settings.join(' · ') : '体积下限 · 尺寸 · DPI'
+})
 const busy = ref(false)
 const packing = ref(false)
 const message = ref('')
@@ -126,8 +138,8 @@ const rows = computed<TargetKbBatchRow[]>(() =>
   })),
 )
 const batchSummary = computed(() => summarizeBatch(rows.value))
-/** 提示文案用的整数 MB，避免在模板里做换算。 */
-const MAX_BATCH_MB = Math.round(MAX_BATCH_BYTES / 1024 / 1024)
+/** 文件限额按二进制 MiB 表示，与实际校验字节数一致。 */
+const MAX_BATCH_MIB = Math.round(MAX_BATCH_BYTES / 1024 / 1024)
 
 /**
  * 只释放"输出侧"的临时地址。
@@ -283,25 +295,6 @@ function clearAll(): void {
   invalidate()
   releaseEntries()
   message.value = ''
-}
-
-/** 文件选择与拖放走同一个入口，避免两条路径行为不一致。 */
-function onSelect(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  input.value = ''
-  if (files.length) void acceptFiles(files)
-}
-
-/** 拖放只能由 Drag and Drop API 提供文件，Pointer Events 拿不到 File 对象。 */
-function onDrop(event: DragEvent): void {
-  event.preventDefault()
-  const files = Array.from(event.dataTransfer?.files ?? [])
-  if (files.length) void acceptFiles(files)
-}
-
-function onDragOver(event: DragEvent): void {
-  event.preventDefault()
 }
 
 /** 目标体积与下限都交给内核解析，页面不重复实现单位换算。 */
@@ -464,6 +457,8 @@ async function run(): Promise<void> {
     dpi = readDpi()
   } catch (error: unknown) {
     message.value = error instanceof Error ? error.message : '参数填写有误'
+    // 高级参数可能已折叠，出错时展开以便直接修正；不重置用户输入。
+    if (minInput.value.trim() || dpiInput.value.trim()) advancedOpen.value = true
     return
   }
 
@@ -597,10 +592,8 @@ onBeforeUnmount(() => {
     <section class="panel" aria-labelledby="pick-title">
       <h2 id="pick-title">1. 选择图片</h2>
       <p id="pick-help">
-        图片只在浏览器里处理，不会上传。单张不超过 20 MB、不超过 4000 万像素；一次最多
-        {{ MAX_BATCH_FILES }} 张、合计不超过
-        {{ MAX_BATCH_MB }} MB。源文件在目标区间内且无需转换格式时直接交付；JPEG 指定 DPI
-        时可只写元数据、不重新压缩像素。需要压缩或转换格式时输出 JPEG，透明区域会变成白底。
+        本机处理，不上传。最多 {{ MAX_BATCH_FILES }} 张、合计 {{ MAX_BATCH_MIB }} MiB；单张 20 MiB /
+        4000 万像素。需要压缩或转换时输出 JPEG，透明区域变白。
       </p>
       <ElAlert
         v-if="capabilityGap"
@@ -613,18 +606,15 @@ onBeforeUnmount(() => {
         role="alert"
       />
 
-      <label class="drop" @dragover="onDragOver" @drop="onDrop">
-        <input
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp,image/avif"
-          aria-describedby="pick-help"
-          @change="onSelect"
-        />
-        <ElIcon class="drop-icon"><Upload /></ElIcon>
-        <span class="drop-main">点击选择图片，或把图片拖到这里</span>
-        <span class="drop-sub">可多选；再次拖入会追加到列表末尾；JPEG / PNG / WebP / AVIF</span>
-      </label>
+      <FileDropZone
+        accept="image/jpeg,image/png,image/webp,image/avif"
+        label="点击选择图片，或拖到这里"
+        description="JPEG / PNG / WebP / AVIF · 支持多选和追加"
+        help-id="pick-help"
+        :disabled="busy"
+        @select="acceptFiles"
+        @reject="message = $event"
+      />
 
       <figure v-if="singleEntry" class="source">
         <img :src="singleEntry.url" :alt="`待压缩的图片：${singleEntry.file.name}`" />
@@ -674,47 +664,41 @@ onBeforeUnmount(() => {
       <ElInput
         id="target-size"
         v-model="targetInput"
-        placeholder="例如 200KB、1.5MB 或 307200"
+        placeholder="例如 200 KiB 或 1.5 MiB"
         maxlength="16"
         aria-describedby="target-help"
       />
       <p id="target-help">
-        支持 KB、MB
-        与纯字节；留空无法开始。目标体积指输出文件的字节数，不是画质档位。多张共用同一组设置。
+        支持 KiB、MiB 或字节，旧写法 KB、MB 仍可用。多张共用设置，默认按需缩小尺寸。
       </p>
 
-      <label for="min-size">体积下限（可选）</label>
-      <ElInput
-        id="min-size"
-        v-model="minInput"
-        placeholder="例如 30KB；留空表示只限制上限"
-        maxlength="16"
-        aria-describedby="min-help"
-      />
-      <p id="min-help">
-        有些系统要求文件不能太小。低于下限时会插入一段无损的注释段把体积补到下限，不改画质、不重新编码。
-      </p>
+      <ToolAdvancedOptions id="targetkb-advanced" v-model="advancedOpen" :summary="advancedSummary">
+        <label for="min-size">体积下限（可选）</label>
+        <ElInput
+          id="min-size"
+          v-model="minInput"
+          placeholder="例如 30 KiB；留空表示只限制上限"
+          maxlength="16"
+          aria-describedby="min-help"
+        />
+        <p id="min-help">文件过小时用注释数据补到下限，不改变画质。</p>
 
-      <div class="switch-row">
-        <ElSwitch id="allow-shrink" v-model="allowShrink" aria-describedby="shrink-help" />
-        <label for="allow-shrink">允许缩小尺寸</label>
-      </div>
-      <p id="shrink-help">
-        质量降到最低仍超限时，按 85% 逐档缩小最长边（最多 6
-        档）。关闭后只能靠降质量，压不下去会直接报失败。
-      </p>
+        <div class="switch-row">
+          <ElSwitch id="allow-shrink" v-model="allowShrink" aria-describedby="shrink-help" />
+          <label for="allow-shrink">允许缩小尺寸</label>
+        </div>
+        <p id="shrink-help">降低画质仍超限时缩小尺寸；关闭后可能无法达到目标。</p>
 
-      <label for="dpi">DPI（可选）</label>
-      <ElInput
-        id="dpi"
-        v-model="dpiInput"
-        placeholder="例如 300；留空表示不改"
-        maxlength="4"
-        aria-describedby="dpi-help"
-      />
-      <p id="dpi-help">
-        DPI 只是文件里的元数据，不会让图片变清晰；实际打印尺寸由像素数与 DPI 共同决定。
-      </p>
+        <label for="dpi">DPI（可选）</label>
+        <ElInput
+          id="dpi"
+          v-model="dpiInput"
+          placeholder="例如 300；留空表示不改"
+          maxlength="4"
+          aria-describedby="dpi-help"
+        />
+        <p id="dpi-help">仅修改打印密度标记，不增加清晰度。支持 {{ DPI_RANGE }}，留空不改。</p>
+      </ToolAdvancedOptions>
 
       <div class="actions">
         <ElButton
@@ -843,54 +827,17 @@ h2 {
   margin: 0 0 12px;
 }
 h2:not(:first-child) {
-  margin-top: 30px;
+  margin-top: 32px;
 }
 p {
   color: var(--ph-muted);
   line-height: 1.7;
   font-size: 14px;
 }
-label:not(.drop) {
+label:not(.file-drop) {
   display: block;
   margin: 14px 0 6px;
   font-size: 14px;
-}
-.drop {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 30px 18px;
-  border: 1px dashed var(--ph-line);
-  border-radius: 12px;
-  background: var(--ph-soft);
-  cursor: pointer;
-  text-align: center;
-}
-.drop:hover {
-  border-color: var(--ph-accent-strong);
-}
-.drop:focus-within {
-  outline: 3px solid var(--ph-accent-strong);
-  outline-offset: 4px;
-}
-.drop input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-.drop-icon {
-  font-size: 26px;
-  color: var(--ph-muted);
-}
-.drop-main {
-  font-size: 14px;
-}
-.drop-sub {
-  font-size: 12px;
-  color: var(--ph-muted);
 }
 .source {
   margin: 16px 0 0;
@@ -938,6 +885,8 @@ label:not(.drop) {
   margin: 8px 0 0;
   padding: 0;
   display: grid;
+  /* 默认 auto 轨道会按长文件名的最小内容撑宽，挤出右侧移除入口。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .pick-row {

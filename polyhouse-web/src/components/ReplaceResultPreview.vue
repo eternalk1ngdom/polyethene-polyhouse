@@ -4,7 +4,10 @@ import { ElButton } from 'element-plus'
 import type { FileSummary } from '../core/polyReplaceProtocol'
 
 interface Props {
+  /** 原预览仍覆盖既有摘要，折叠只减少定位说明和导航。 */
   file: FileSummary
+  /** 默认保留旧调用方的完整导航；基础视图由工具显式收起。 */
+  details?: boolean
 }
 interface PreviewPart {
   text: string
@@ -12,7 +15,7 @@ interface PreviewPart {
   deleted: boolean
   ruleIndex: number
 }
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { details: true })
 const preview = ref<HTMLElement>()
 const activeRule = ref(-1)
 const position = ref(0)
@@ -96,8 +99,8 @@ defineExpose({ locateRule })
   <div class="result-preview-section">
     <h3 id="result-preview-title">替换结果预览</h3>
     <p id="preview-help" class="preview-help">
-      浅色背景表示执行过替换；“已删除”仅为位置提示，不属于结果正文。 每个文件仅标记前 10000
-      字符内的前 500 处，预览外或超出标记上限的执行不能定位；统计与下载覆盖全文。
+      高亮表示替换处；“已删除”提示不写入文件。
+      <span v-if="details">仅标记前10000字符内的前500处；定位限于标记，统计与下载覆盖全文。</span>
     </p>
     <p v-if="file.truncated" class="preview-help">预览已截断，下载包含完整结果。</p>
     <div
@@ -131,7 +134,7 @@ defineExpose({ locateRule })
         ></template
       >
     </div>
-    <div v-if="activeRule >= 0" class="preview-navigation" aria-label="替换位置导航">
+    <div v-if="details && activeRule >= 0" class="preview-navigation" aria-label="替换位置导航">
       <p role="status">
         规则 {{ activeRule + 1 }} · 可定位第 {{ position + 1 }} /
         {{ available.length }} 处（当前文件共 {{ file.ruleCounts[activeRule] }} 处）
@@ -146,7 +149,7 @@ defineExpose({ locateRule })
         >下一处</ElButton
       >
     </div>
-    <p v-else class="preview-help">点击统计表中的“定位”查看某条规则的位置。</p>
+    <p v-else-if="details" class="preview-help">点击统计表中的“定位”查看某条规则的位置。</p>
   </div>
 </template>
 
