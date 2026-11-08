@@ -3,7 +3,7 @@
  * 纯函数、无状态，单图面板与批量列表共用，避免两处各写一份后对不上。
  */
 export function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`
   return `${bytes} B`
 }

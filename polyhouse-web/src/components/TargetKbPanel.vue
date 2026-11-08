@@ -664,12 +664,12 @@ onBeforeUnmount(() => {
       <ElInput
         id="target-size"
         v-model="targetInput"
-        placeholder="例如 200KB、1.5MB 或 307200"
+        placeholder="例如 200 KiB 或 1.5 MiB"
         maxlength="16"
         aria-describedby="target-help"
       />
       <p id="target-help">
-        支持 KB、MB 或字节（1 KB = 1024 字节）。多张共用设置，默认按需缩小尺寸。
+        支持 KiB、MiB 或字节，旧写法 KB、MB 仍可用。多张共用设置，默认按需缩小尺寸。
       </p>
 
       <ToolAdvancedOptions id="targetkb-advanced" v-model="advancedOpen" :summary="advancedSummary">
@@ -677,7 +677,7 @@ onBeforeUnmount(() => {
         <ElInput
           id="min-size"
           v-model="minInput"
-          placeholder="例如 30KB；留空表示只限制上限"
+          placeholder="例如 30 KiB；留空表示只限制上限"
           maxlength="16"
           aria-describedby="min-help"
         />

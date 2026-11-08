@@ -37,7 +37,7 @@ test('批量上限：数量与总体积都要挡住', () => {
   assert.doesNotThrow(() => validateBatch([{ name: 'a.jpg', size: MAX_BATCH_BYTES }]))
   assert.throws(
     () => validateBatch([{ name: 'a.jpg', size: MAX_BATCH_BYTES }, { name: 'b.jpg', size: 1 }]),
-    /超过 60.0MB 上限/,
+    /超过 60 MiB 上限/,
   )
 })
 
