@@ -173,9 +173,13 @@ export interface AvatarChange {
   /** 今日剩余提交额度。 */
   remainingToday: number
 }
-/** 公开头像地址仅允许本项目版本化资源。 */
-export function isAvatarPath(value: unknown): value is string {
-  return typeof value === 'string' && /^\/api\/media\/avatars\/[a-f0-9]{32}\.jpg$/.test(value)
+/** 只允许服务端生成的有界 WebP data URL。 */
+export function isAvatarSource(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 27_331 &&
+    /^data:image\/webp;base64,UklGR[A-Za-z0-9+/]+={0,2}$/.test(value)
+  )
 }
 /** UUID 由浏览器安全随机源产生，支持普通 IP 的开发上下文。 */
 export function newProfileRequestId(): string {
@@ -186,15 +190,20 @@ export function newProfileRequestId(): string {
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
+interface AvatarSubmitRequest {
+  /** 裁剪后的 WebP 字节，按标准 Base64 编码。 */
+  avatarBase64: string
+  /** 同一意图重试使用同一个编号。 */
+  requestId: string
+}
+
 /** 同一图像意图沿用请求号；旧响应没有申请字段时拒绝，不能误报已发布。 */
 export function uploadAvatar(
-  file: Blob,
+  avatarBase64: string,
   token: string,
   requestId = newProfileRequestId(),
 ): Promise<AvatarChange> {
-  const data = new FormData()
-  data.append('file', file, 'avatar.jpg')
-  data.append('requestId', requestId)
+  const data: AvatarSubmitRequest = { avatarBase64, requestId }
   return apiRequest(
     { method: 'POST', url: '/auth/avatar/submissions', data },
     (value) => {

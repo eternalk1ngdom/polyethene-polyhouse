@@ -133,7 +133,7 @@ test('明确的首次改密拒绝保留会话，不允许头像或注销；普�
   assert.equal(store.isLoggedIn, true)
   assert.equal(store.requiresPasswordChange, true)
   assert.equal(useAccountUiStore().canDeregister, false)
-  await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), (error) => error.code === 40301)
+  await assert.rejects(store.uploadAvatar('Zml4dHVyZQ=='), (error) => error.code === 40301)
   store.setSession('new-credential', profile)
   store.requirePasswordChange('fixture-credential')
   assert.equal(store.requiresPasswordChange, false)
@@ -187,12 +187,12 @@ test('上传只发送小图、请求号和当前 Bearer，待审内容不提前�
       })
     assert.equal(config.url, '/auth/avatar/submissions')
     assert.equal(config.headers.Authorization, 'Bearer fixture-credential')
-    assert.ok(config.data instanceof FormData)
-    assert.deepEqual([...config.data.keys()], ['file', 'requestId'])
-    return success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 })
+    assert.equal(JSON.parse(config.data).avatarBase64, 'Zml4dHVyZQ==')
+    assert.deepEqual(Object.keys(JSON.parse(config.data)), ['avatarBase64', 'requestId'])
+    return success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 })
   }
   const restoring = store.restoreSession()
-  await store.uploadAvatar(new Blob(['fixture'], { type: 'image/jpeg' }))
+  await store.uploadAvatar('Zml4dHVyZQ==')
   finishRestore()
   await restoring
   assert.equal(store.user.avatar, null)
@@ -205,9 +205,9 @@ test('换号后的旧上传结果不能修改新用户，错误或非法图片�
   let finish
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
-      finish = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+      finish = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
     })
-  const pending = store.uploadAvatar(new Blob(['fixture']))
+  const pending = store.uploadAvatar('Zml4dHVyZQ==')
   store.setSession('new-credential', { ...profile, id: '99', avatar: null })
   finish()
   assert.equal(await pending, null)
@@ -218,7 +218,7 @@ test('换号后的旧上传结果不能修改新用户，错误或非法图片�
     { avatar: avatarPath, remainingToday: 9 },
   ]) {
     apiClient.defaults.adapter = async (config) => success(config, value)
-    await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), ApiError)
+    await assert.rejects(store.uploadAvatar('Zml4dHVyZQ=='), ApiError)
     assert.equal(store.user.avatar, null)
   }
 })
@@ -231,10 +231,10 @@ test('头像变更不会取消同一会话已经发出的退出意图', async ()
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
       if (config.url === '/auth/avatar/submissions')
-        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
       else finishLogout = () => resolve(success(config))
     })
-  const uploading = store.uploadAvatar(new Blob(['fixture']))
+  const uploading = store.uploadAvatar('Zml4dHVyZQ==')
   const loggingOut = store.logout()
   finishUpload()
   await uploading
@@ -251,11 +251,11 @@ test('上传返回前另一标签已换号时，不等待存储事件也不能�
   apiClient.defaults.adapter = (config) => {
     if (config.url === '/auth/avatar/submissions')
       return new Promise((resolve) => {
-        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
       })
     return Promise.resolve(success(config, { ...profile, id: '99' }))
   }
-  const pending = store.uploadAvatar(new Blob(['fixture']))
+  const pending = store.uploadAvatar('Zml4dHVyZQ==')
   storage.set('polyhouse_token', 'other-tab-credential')
   finishUpload()
   assert.equal(await pending, null)

@@ -7,7 +7,7 @@ const source = await readFile(new URL('../../src/core/avatarCrop.ts', import.met
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { initialCrop, cropScale, clampCrop, zoomCrop, avatarSourceSize } = await import(
+const { initialCrop, cropScale, clampCrop, zoomCrop, avatarSourceSize, avatarWebpSourceSize } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 
@@ -53,4 +53,20 @@ test('在分配像素前读取 PNG/JPEG 尺寸并拒绝截断或伪造格式', (
   assert.equal(avatarSourceSize(png.slice(0, 10)), null)
   assert.equal(avatarSourceSize(new Uint8Array([255, 216, 255, 192, 255, 255])), null)
   assert.equal(avatarSourceSize(new TextEncoder().encode('<svg/>')), null)
+})
+
+test('WebP 头像原图先检查尺寸并拒绝动画和截断容器', () => {
+  const bytes = new Uint8Array(30)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, 0x52494646)
+  view.setUint32(4, bytes.length - 8, true)
+  view.setUint32(8, 0x57454250)
+  view.setUint32(12, 0x56503858)
+  view.setUint32(16, 10, true)
+  view.setUint16(24, 479, true)
+  view.setUint16(27, 639, true)
+  assert.deepEqual(avatarWebpSourceSize(bytes), { width: 480, height: 640 })
+  assert.equal(avatarWebpSourceSize(bytes.subarray(0, -1)), null)
+  view.setUint8(20, 2)
+  assert.equal(avatarWebpSourceSize(bytes), null)
 })

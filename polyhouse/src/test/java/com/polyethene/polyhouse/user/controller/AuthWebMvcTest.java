@@ -276,6 +276,18 @@ class AuthWebMvcTest {
     }
 
     @Test
+    void shouldAllowPagesAvatarJsonPreflight() throws Exception {
+        String origin = "https://eternalk1ngdom.github.io";
+        mvc.perform(options("/api/auth/avatar/submissions")
+                        .header(HttpHeaders.ORIGIN, origin)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization, Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin));
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void shouldNotLetCorsPermissionBypassAuthenticationAndRejectOtherOriginsAsJson() throws Exception {
         mvc.perform(get("/api/auth/me").header(HttpHeaders.ORIGIN, "http://localhost:5173"))
                 .andExpect(status().isUnauthorized())

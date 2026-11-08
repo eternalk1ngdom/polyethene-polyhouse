@@ -14,7 +14,10 @@ interface UnauthorizedHandler {
 }
 
 /** 复用连接配置和有限等待时间；实例独立于页面，不从用户缓存推断身份。 */
-export const apiClient = axios.create({ baseURL: '/api', timeout: 12000 })
+export const apiClient = axios.create({
+  baseURL: import.meta.env?.VITE_API_BASE_URL?.trim() || '/api',
+  timeout: 12000,
+})
 let unauthorizedHandler: UnauthorizedHandler | undefined
 let passwordChangeRequiredHandler: UnauthorizedHandler | undefined
 
@@ -113,13 +116,13 @@ export async function apiImage(path: string, submittedToken: string): Promise<Bl
       method: 'GET',
       url: path,
       responseType: 'blob',
-      headers: { Authorization: `Bearer ${submittedToken}`, 'Cache-Control': 'no-store' },
+      headers: { Authorization: `Bearer ${submittedToken}` },
     })
     if (
       !(response.data instanceof Blob) ||
-      response.data.type !== 'image/jpeg' ||
+      response.data.type !== 'image/webp' ||
       response.data.size === 0 ||
-      response.data.size > 256 * 1024
+      response.data.size > 20 * 1024
     )
       throw new ApiError('待审图片响应不完整，请重试', 502)
     return response.data

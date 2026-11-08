@@ -265,14 +265,9 @@ class AccountSecurityIntegrationTest {
         return call("POST", "/api/auth/password/change", token, Map.of("currentPassword", current, "newPassword", next));
     }
     private HttpResponse<String> initialAvatar(String token) throws Exception {
-        // 使用实际上传协议才能进入已映射方法的认证拦截器；JSON 请求只会在路由阶段得到 415。
-        String boundary = "p1-avatar-fixture";
-        String body = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fixture.jpg\"\r\n"
-                + "Content-Type: image/jpeg\r\n\r\nfixture\r\n--" + boundary + "--\r\n";
-        return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/avatar"))
-                .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + token)
-                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+        // 合法 JSON 请求应进入认证拦截器，临时凭据无法提交待审。
+        return call("POST", "/api/auth/avatar/submissions", token,
+                Map.of("avatarBase64", "UklGRg==", "requestId", UUID.randomUUID().toString()));
     }
     private HttpResponse<String> call(String method, String path, String token, Map<String, String> body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(10));
@@ -309,7 +304,7 @@ class AccountSecurityIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) migrate(connection, migration);
+                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql", "009_avatar_database.sql")) migrate(connection, migration);
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;

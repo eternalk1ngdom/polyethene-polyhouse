@@ -32,7 +32,7 @@ public class ProfileModerationController {
     @GetMapping("/api/profile-submissions/{id}/image")
     public ResponseEntity<byte[]> image(@Valid @PathVariable("id") ProfileResourceDTO id,@Valid SessionTokenDTO session) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("X-Content-Type-Options","nosniff")
-            .contentType(MediaType.IMAGE_JPEG).body(service.image(id,session.token()));
+            .contentType(MediaType.valueOf("image/webp")).body(service.image(id,session.token()));
     }
     /** 只审核 URI 中的申请及 DTO 指定版本，不能覆盖申请内容。 */
     @RequireRole(UserRoleEnum.OWNER) @PostMapping("/api/manage/profile-reviews/{id}/decision")

@@ -75,3 +75,36 @@ export function avatarSourceSize(bytes: Uint8Array): { width: number; height: nu
   }
   return null
 }
+
+/** 只从 WebP 头读取有界尺寸。动画不适合静态头像，先于浏览器解码拒绝。 */
+export function avatarWebpSourceSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 25) return null
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (
+    view.getUint32(0) !== 0x52494646 ||
+    view.getUint32(4, true) !== bytes.length - 8 ||
+    view.getUint32(8) !== 0x57454250
+  )
+    return null
+  const size = view.getUint32(16, true)
+  if (size + (size & 1) > bytes.length - 20) return null
+  const kind = view.getUint32(12)
+  // VP8X 的 24 位尺寸减一存放，VP8L 则把两个尺寸编码到同一 32 位字段。
+  if (kind === 0x56503858 && size === 10 && (view.getUint8(20) & 2) === 0)
+    return {
+      width: 1 + view.getUint16(24, true) + view.getUint8(26) * 65536,
+      height: 1 + view.getUint16(27, true) + view.getUint8(29) * 65536,
+    }
+  if (kind === 0x5650384c && size >= 5 && view.getUint8(20) === 0x2f) {
+    const bits = view.getUint32(21, true)
+    return { width: 1 + (bits & 0x3fff), height: 1 + ((bits >>> 14) & 0x3fff) }
+  }
+  if (
+    kind === 0x56503820 &&
+    size >= 10 &&
+    view.getUint8(23) === 0x9d &&
+    view.getUint16(24) === 0x012a
+  )
+    return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
+  return null
+}

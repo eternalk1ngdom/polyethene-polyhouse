@@ -1,6 +1,7 @@
 package com.polyethene.polyhouse.model.vo;
 import com.polyethene.polyhouse.common.constant.*;
 import com.polyethene.polyhouse.model.entity.PublishedProfileField;
+import com.polyethene.polyhouse.utils.AvatarImageUtils;
 /** 历史清单与下架确认只由 OWNER 获取。
  * @param userId 精确账号编号
  * @param username 登录名
@@ -15,5 +16,5 @@ public record PublishedProfileVO(String userId,String username,ProfileField kind
         boolean verified,int status,UserRoleEnum role) {
     /** 不扩大为完整 User，也不输出凭据/扩展 JSON。 */
     public static PublishedProfileVO from(PublishedProfileField p) { return new PublishedProfileVO(Long.toString(p.userId()),
-        p.username(),p.kind(),p.value(),Long.toString(p.version()),p.verified(),p.status(),p.role()); }
+        p.username(),p.kind(),p.kind()==ProfileField.AVATAR?AvatarImageUtils.displaySource(p.value()):p.value(),Long.toString(p.version()),p.verified(),p.status(),p.role()); }
 }

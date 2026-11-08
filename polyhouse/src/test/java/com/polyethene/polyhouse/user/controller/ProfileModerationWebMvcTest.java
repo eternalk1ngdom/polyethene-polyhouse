@@ -43,7 +43,7 @@ class ProfileModerationWebMvcTest {
  @Test void pathTargetCannotBeOverwrittenAndBinaryIsPrivate()throws Exception{
   when(profiles.image(any(),any())).thenReturn(new byte[]{1,2});
   mvc.perform(get("/api/profile-submissions/42/image?id=99").header("Authorization","Bearer fixture"))
-   .andExpect(status().isOk()).andExpect(content().contentType("image/jpeg")).andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"));
+   .andExpect(status().isOk()).andExpect(content().contentType("image/webp")).andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"));
   verify(profiles).image(new ProfileResourceDTO(42L),"fixture");
  }
  @Test void invalidDtoAndInitialCredentialNeverReachService()throws Exception{

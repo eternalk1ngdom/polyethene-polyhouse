@@ -2,10 +2,10 @@
 
 更新时间：2026-11-08（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
-- 当前：[v1.0-dev.12 上线前质量收敛](docs/dev-log/v1.0-dev.12.md)，先读“当前摘要”；[Q0～Q5 计划与新窗口提示词](docs/plans/prelaunch-quality-hardening.md)。不批量加载历史。
-- 基线：main/origin/main `3357a5f`；阶段工程成果经 PR #1 合入 dev（`6088a34`）。合并结果与审阅分支文件一致；本次 GitHub 无自动检查记录。
+- 当前：[v1.0-dev.13 云端架构与头像改造](docs/dev-log/v1.0-dev.13.md)，先读“当前摘要”。
+- 基线：从 dev `0c353c3` 建立 `feature/avatar-compression-db`；GitHub Pages 已部署前端，云后端待验收。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
-- 下一阶段：[上线筹备与放行顺序](docs/dev-log/launch-preparation.md)。目标是个人学习与少量朋友免费测试；新增海外静态前端与本机穿透候选，连通和备案口径待确认。
+- 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
 
 ## 已实现与边界
@@ -17,18 +17,17 @@
 - **本机已有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，不复制/输出；Redis 启动检查不是运行期监控。
 - **后端依赖升级已否决**。AI、Docker、云模板未接入，3D/社交不在范围。P5 先做本地筹备，服务器与公网操作须具体授权。
 
-## 最近验证与下一步
+## 最近交付与下一步
 
-- 当前：`codex/feat-tool-progressive-ui`；已按最终反馈撤销投放区拆分按钮，妙压恢复简洁整框、妙替框下独立目录按钮，保留灰底。按需参考已剔除错误推荐，前轮个人入口/登录修复保留。
-- 前轮妙替可清空队列并保留规则与编码。本轮妙压统一容量显示与超限提示，兼容原有 KB/MB 输入；前端构建、静态检查、333 项测试及 Chromium 超限提示通过。
-- 本轮检查登录后个人/管理页并修复手机封面遮字；后端普通323项通过、103项按配置跳过，四组真实隔离专项47项通过。技能73文件校验通过。
-- 快速收口：Chromium 实际替换、队列重置、PNG 压缩与下载通过。锁定代码候选 `70668ae` 用于筹备；首轮浏览器范围按 Chromium 准备，真实环境写入冒烟仍是公开放行条件。
-- 本阶段工程成果由 `codex/prelaunch-quality-review` 合入 dev；私人上线筹备日志留本地。晋级 main、P5 与部署另按授权。
+- 头像在浏览器裁剪为 160×160 WebP，JSON 提交，审核图片持久化到数据库。迁移、接口和回退见[资料审核](docs/operations/profile-moderation.md)。
+- 本轮前端 335 项、后端普通 311 项、真实隔离 49 项通过，包含浏览器上传、审核与刷新显示。详见 dev.13。
+- 下一步：按上线验收清单准备 Render、TiDB Cloud 与 Upstash，实际云环境验证和发布按授权执行。
 
 ## 历史索引（按需）
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.12](docs/dev-log/v1.0-dev.12.md) | 上线前质量收敛、前端回归与阶段合并 |
 | [dev.11](docs/dev-log/v1.0-dev.11.md) | 妙压 T1～T4、取消保护、隔离集成与 Git 同步 |
 | [dev.10](docs/dev-log/v1.0-dev.10.md) | 妙替 R1～R7、独立复审与主线同步 |
 | [dev.9](docs/dev-log/v1.0-dev.9.md) | 文档治理、主线整合、质量优先与规范去重 |

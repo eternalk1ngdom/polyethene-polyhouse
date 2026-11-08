@@ -17,7 +17,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 允许本地前端和策划书约定的浏览器扩展来源，跨域许可不代替 Token 或角色校验。
+ * 允许正式静态站点、本地开发和浏览器扩展来源，跨域许可不代替 Token 或角色校验。
  */
 @Configuration(proxyBeanMethods = false)
 public class CorsConfig {
@@ -26,6 +26,7 @@ public class CorsConfig {
     @Bean
     public CorsFilter apiCorsFilter(ObjectMapper mapper) {
         CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("https://eternalk1ngdom.github.io"));
         configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://127.0.0.1:5173",
                 "chrome-extension://*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
