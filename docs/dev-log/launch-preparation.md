@@ -10,6 +10,14 @@
 - 一年后：优惠资格限一次不等于不能续费。按控制台实际报价续费，或到期前完成新机恢复/备案接入/切换；不承诺第二年仍是 109 元，也不依赖再次获得首单资格。
 - 备案：大陆公网网站须先完成 ICP 备案；开通后按要求办理公安联网备案。少量朋友、免费、登录后访问均不直接构成免备案依据。个人工具站能否按实际功能通过，待腾讯云备案审核与湖北管局确认。
 - 本地质量扫查已收口，开始上线筹备。当前记录仍无服务器/域名采购、备案通过或生产防滥用验收。后续报价、购买与审核状态在本文件更新；动态信息在下单/申报前重验。
+- 新候选：海外托管静态前端，本地 Windows 运行后端，通过 HTTPS 穿透连通。用于评估朋友试用，尚未选定或实测。原云服务器方案保留为备选。
+
+## 海外前端与本机后端候选（2026-11-08）
+
+- 技术路径为 Cloudflare Pages 托管 Vue 的 `dist`，提供 `*.pages.dev` HTTPS 子域名。用 Pages Functions 仅代理同站 `/api/*` 到本机的穿透入口，沿用现有相对 API 与头像路径；页面刷新走 SPA 路由回退。Vite 开发代理不参与生产。代理保留方法、认证头、上传请求体及响应状态，鉴权接口和私有媒体不缓存。[Vue 部署](https://developers.cloudflare.com/pages/framework-guides/deploy-a-vue-site/) · [Functions 路由](https://developers.cloudflare.com/pages/functions/routing/)
+- 首选验证 Tailscale Funnel（Beta），Personal 套餐提供试用所需能力，Windows 可运行，按设备和 tailnet 提供 HTTPS `*.ts.net` 地址，存在带宽限制。Cloudflare Quick Tunnel 可做短时验证，地址临时；Cloudflare 持久公开路由需要可配置到 Cloudflare 的域名，Pages 子域名不作为这个域名使用。[Funnel](https://tailscale.com/docs/features/tailscale-funnel) · [Tailscale 套餐](https://tailscale.com/pricing) · [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/)
+- 公网穿透只指向本机试用网关，网关验证仅托管端掌握的凭据并限制路径；应用的登录和角色校验仍生效。MySQL、Redis、管理端口及开发环境不发布。使用隔离账号和数据验证登录、上传/私有图与关机时的错误反馈。家用电脑离线时账号、头像和审核功能不可用；前端正常可达时，两工具的匿名本地处理仍可用。大陆家庭宽带和移动网络需分别实测两段链路。
+- 工信部现行规则以境内提供服务为判断条件之一；此方案含武汉家宽上的真实后端，不凭海外静态托管或免费子域名判断免备案。邀请朋友前，按完整拓扑向湖北省通信管理局及宽带运营商核实备案和家宽接入条款，并确认账号/头像经过第三方代理的处理范围。当前无部署、无隧道连通或合规放行结果。[备案管理办法](https://policy.mofcom.gov.cn/claw/clawContent.shtml?id=100058) · [湖北管局备案咨询](https://hubca.miit.gov.cn/jgzn/lxfs/art/2020/art_c0b54b2895b944f4a44982462fb05590.html)
 
 ## 首轮试用放行顺序（2026-11-08）
 

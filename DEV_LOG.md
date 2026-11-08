@@ -5,7 +5,7 @@
 - 当前：[v1.0-dev.12 上线前质量收敛](docs/dev-log/v1.0-dev.12.md)，先读“当前摘要”；[Q0～Q5 计划与新窗口提示词](docs/plans/prelaunch-quality-hardening.md)。不批量加载历史。
 - 基线：main/origin/main `3357a5f`；dev为规划 `e1c4f31`；Q0/Q1及同步记录在 `codex/fix-tool-layout`（`fb32755`）。两分支已推送，尚未PR/合并；保护/CI未配置。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
-- 下一阶段：[上线筹备与放行顺序](docs/dev-log/launch-preparation.md)。目标是个人学习与少量朋友免费测试；服务器/域名采购、备案状态与正式部署待确认。
+- 下一阶段：[上线筹备与放行顺序](docs/dev-log/launch-preparation.md)。目标是个人学习与少量朋友免费测试；新增海外静态前端与本机穿透候选，连通和备案口径待确认。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
 
 ## 已实现与边界
