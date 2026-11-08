@@ -17,8 +17,15 @@ import type {
   TargetKbVerdict,
 } from './targetKbTypes'
 
-/** 体积单位换算表；不带单位时按字节理解，避免把 "200" 误当 200KB。 */
-const SIZE_UNITS: Record<string, number> = { B: 1, KB: 1024, MB: 1024 * 1024 }
+/** 保留历史 KB/MB 的二进制换算；不带单位时按字节理解。 */
+const SIZE_UNITS: Record<string, number> = {
+  B: 1,
+  KB: 1024,
+  KIB: 1024,
+  MB: 1024 ** 2,
+  MIB: 1024 ** 2,
+}
+const TARGET_LIMIT_MESSAGE = `目标体积不能超过 ${MAX_TARGET_BYTES / 1024 / 1024} MiB`
 
 /**
  * 收敛阈值：质量差小于千分之五再细分已没有实际意义。
@@ -36,18 +43,18 @@ export interface TargetKbSearchInput {
 }
 
 /**
- * 解析用户输入的目标体积，接受 `200KB`、`1.5MB`、`307200` 三种写法。
+ * 解析用户输入的目标体积，接受 `200 KiB`、`1.5 MiB`、旧单位与裸字节数。
  * 只解析上限，下限由调用方通过 createTargetRange 组合。
  */
 export function parseTargetSize(input: string): TargetKbTarget {
   const text = input.trim().toUpperCase()
-  const matched = /^(\d+(?:\.\d+)?)\s*(B|KB|MB)?$/.exec(text)
-  if (!matched) throw new Error('请填写类似 200KB 或 1.5MB 的目标体积')
+  const matched = /^(\d+(?:\.\d+)?)\s*(B|KI?B|MI?B)?$/.exec(text)
+  if (!matched) throw new Error('请填写类似 200 KiB 或 1.5 MiB 的目标体积')
   const amount = Number(matched[1])
   const unit = matched[2] ?? 'B'
   const bytes = Math.round(amount * (SIZE_UNITS[unit] ?? 1))
   if (!Number.isFinite(bytes) || bytes < 1) throw new Error('目标体积必须大于 0')
-  if (bytes > MAX_TARGET_BYTES) throw new Error('目标体积不能超过 20MB')
+  if (bytes > MAX_TARGET_BYTES) throw new Error(TARGET_LIMIT_MESSAGE)
   return { minBytes: 0, maxBytes: bytes }
 }
 
@@ -58,7 +65,7 @@ export function parseTargetSize(input: string): TargetKbTarget {
 export function createTargetRange(minBytes: number, maxBytes: number): TargetKbTarget {
   if (!Number.isInteger(minBytes) || minBytes < 0) throw new Error('体积下限必须是非负整数')
   if (!Number.isInteger(maxBytes) || maxBytes < 1) throw new Error('体积上限必须是正整数')
-  if (maxBytes > MAX_TARGET_BYTES) throw new Error('目标体积不能超过 20MB')
+  if (maxBytes > MAX_TARGET_BYTES) throw new Error(TARGET_LIMIT_MESSAGE)
   if (minBytes > maxBytes) throw new Error('体积下限不能大于上限')
   return { minBytes, maxBytes }
 }
@@ -112,7 +119,7 @@ export function startSearch(input: TargetKbSearchInput): TargetKbStep {
   const { target, longEdge } = input
   if (!Number.isInteger(target.maxBytes) || target.maxBytes < 1)
     throw new Error('体积上限必须是正整数')
-  if (target.maxBytes > MAX_TARGET_BYTES) throw new Error('目标体积不能超过 20MB')
+  if (target.maxBytes > MAX_TARGET_BYTES) throw new Error(TARGET_LIMIT_MESSAGE)
   if (!Number.isInteger(target.minBytes) || target.minBytes < 0)
     throw new Error('体积下限必须是非负整数')
   if (target.minBytes > target.maxBytes) throw new Error('体积下限不能大于上限')

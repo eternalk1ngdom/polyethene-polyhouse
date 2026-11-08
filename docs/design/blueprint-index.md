@@ -21,6 +21,7 @@
 当前有效事实入口：
 
 - [状态与阶段](../../DEV_LOG.md)、[方案二设计](frontend-v2.md)、[妙替既有边界](../dev-log/v1.0-dev.5.md)。
+- [前端体验参考](frontend-experience.md)：仅宏观设计、跨页面改版或大规模前端查漏时读取；不纳入每轮必读，也不替代根契约。
 - [账号、权限与资料审核批准计划](../plans/controlled-beta-account-management.md)：P0～P4 完成，P5/上线搁置；[U1～U4 整理计划](../plans/pre-p5-account-workspace-ui.md)已收口。
 - [账号安全](../operations/account-security.md)、[屋主开户](../operations/account-provisioning.md)、[账号管理](../operations/account-management.md)、[资料审核](../operations/profile-moderation.md)：对应接口、迁移和隔离验收。
 - [上线前质量收敛计划](../plans/prelaunch-quality-hardening.md)：下一阶段先统一现有前端尺度，再复核交互/后端与组合验收，不新增产品功能。

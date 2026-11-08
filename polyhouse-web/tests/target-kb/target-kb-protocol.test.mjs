@@ -83,8 +83,8 @@ test('图片数据必须是可转移的 ArrayBuffer', () => {
   assert.throws(() => parseRequest(request({ bytes: new ArrayBuffer(0) })), /缺少图片数据/)
 })
 
-test('目标区间沿用内核规则：超 20MB、下限大于上限都拒绝', () => {
-  assert.throws(() => parseRequest(request({ target: { minBytes: 0, maxBytes: 21 * 1024 * 1024 } })), /20MB/)
+test('目标区间沿用内核规则：超 20 MiB、下限大于上限都拒绝', () => {
+  assert.throws(() => parseRequest(request({ target: { minBytes: 0, maxBytes: 21 * 1024 * 1024 } })), /20 MiB/)
   assert.throws(() => parseRequest(request({ target: { minBytes: 900, maxBytes: 100 } })), /下限不能大于上限/)
   assert.throws(() => parseRequest(request({ target: { minBytes: -1, maxBytes: 100 } })), /非负整数/)
 })

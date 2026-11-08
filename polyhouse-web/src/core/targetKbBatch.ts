@@ -54,11 +54,6 @@ export interface TargetKbBatchEntry {
   size: number
 }
 
-/** 把字节数换成一位小数的 MB，供提示文案使用。 */
-function toMegabytes(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(1)
-}
-
 /**
  * 校验一批输入。
  * 在选图阶段就拦住，避免用户等了一轮串行处理才发现超限。
@@ -73,7 +68,7 @@ export function validateBatch(entries: readonly TargetKbBatchEntry[]): void {
   const total = entries.reduce((sum, entry) => sum + entry.size, 0)
   if (total > MAX_BATCH_BYTES)
     throw new Error(
-      `合计 ${toMegabytes(total)}MB，超过 ${toMegabytes(MAX_BATCH_BYTES)}MB 上限，请减少选择或先移除部分图片`,
+      `合计超过 ${MAX_BATCH_BYTES / 1024 / 1024} MiB 上限，请减少选择或先移除部分图片`,
     )
 }
 

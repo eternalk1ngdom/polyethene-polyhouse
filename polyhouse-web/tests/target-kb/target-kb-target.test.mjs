@@ -26,11 +26,15 @@ const { parseTargetSize, createTargetRange, judgeSize } = await loadCompress()
 test('解析带单位的目标体积并换算为字节', () => {
   assert.deepEqual(parseTargetSize('200KB'), { minBytes: 0, maxBytes: 204800 })
   assert.deepEqual(parseTargetSize('1.5MB'), { minBytes: 0, maxBytes: 1572864 })
+  assert.deepEqual(parseTargetSize('200 KiB'), parseTargetSize('200KB'))
+  assert.deepEqual(parseTargetSize('1.5 MiB'), parseTargetSize('1.5MB'))
+  assert.equal(parseTargetSize('20 MiB').maxBytes, 20 * 1024 * 1024)
+  assert.throws(() => parseTargetSize('20971521'), /20 MiB/)
   assert.deepEqual(parseTargetSize('307200'), { minBytes: 0, maxBytes: 307200 })
   assert.deepEqual(parseTargetSize('  200 kb '), { minBytes: 0, maxBytes: 204800 })
 })
 
-test('拒绝非法、为零与超过 20MB 的目标体积', () => {
+test('拒绝非法、为零与超过 20 MiB 的目标体积', () => {
   for (const input of ['', '   ', 'abc', '-1', '200GB', '0', '0.4B', '21MB', '1e3'])
     assert.throws(() => parseTargetSize(input), Error, `应拒绝：${input}`)
 })
@@ -42,7 +46,7 @@ test('上下限组合校验区间', () => {
   assert.throws(() => createTargetRange(-1, 1024), /非负整数/)
   assert.throws(() => createTargetRange(0, 0), /正整数/)
   assert.throws(() => createTargetRange(0, 1.5), /正整数/)
-  assert.throws(() => createTargetRange(0, 21 * 1024 * 1024), /20MB/)
+  assert.throws(() => createTargetRange(0, 21 * 1024 * 1024), /20 MiB/)
 })
 
 test('体积判定区分过大、过小与命中区间', () => {
