@@ -3,7 +3,7 @@
 更新时间：2026-11-08（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.12 上线前质量收敛](docs/dev-log/v1.0-dev.12.md)，先读“当前摘要”；[Q0～Q5 计划与新窗口提示词](docs/plans/prelaunch-quality-hardening.md)。不批量加载历史。
-- 基线：main/origin/main `3357a5f`；dev为规划 `e1c4f31`；Q0/Q1及同步记录在 `codex/fix-tool-layout`（`fb32755`）。两分支已推送，尚未PR/合并；保护/CI未配置。
+- 基线：main/origin/main `3357a5f`；阶段工程成果经 PR #1 合入 dev（`6088a34`）。合并结果与审阅分支文件一致；本次 GitHub 无自动检查记录。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
 - 下一阶段：[上线筹备与放行顺序](docs/dev-log/launch-preparation.md)。目标是个人学习与少量朋友免费测试；新增海外静态前端与本机穿透候选，连通和备案口径待确认。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
@@ -23,7 +23,7 @@
 - 前轮妙替可清空队列并保留规则与编码。本轮妙压统一容量显示与超限提示，兼容原有 KB/MB 输入；前端构建、静态检查、333 项测试及 Chromium 超限提示通过。
 - 本轮检查登录后个人/管理页并修复手机封面遮字；后端普通323项通过、103项按配置跳过，四组真实隔离专项47项通过。技能73文件校验通过。
 - 快速收口：Chromium 实际替换、队列重置、PNG 压缩与下载通过。锁定代码候选 `70668ae` 用于筹备；首轮浏览器范围按 Chromium 准备，真实环境写入冒烟仍是公开放行条件。
-- 本阶段工程成果已推送 `codex/prelaunch-quality-review`，main 不变、dev 仅含规划；私人上线筹备日志留本地。远端晋级、P5 与部署另按授权。
+- 本阶段工程成果由 `codex/prelaunch-quality-review` 合入 dev；私人上线筹备日志留本地。晋级 main、P5 与部署另按授权。
 
 ## 历史索引（按需）
 
