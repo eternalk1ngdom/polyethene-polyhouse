@@ -42,8 +42,22 @@
 ### CORS、请求体与健康检查
 
 - 生产 CORS 使用精确来源 `https://eternalk1ngdom.github.io`、`http://localhost:5173` 和 `http://localhost:3000`，允许 `GET, POST, PUT, DELETE, OPTIONS` 以及 `Authorization`、`Content-Type`、`Accept`。确认合法的预检在鉴权前完成，未知来源被拒绝，实际受保护请求仍需 Token。当前登录使用 Bearer，建议保留 `allowCredentials=false`。Cookie 登录如有明确需求，再评估单独的凭据与跨站安全契约。 [现有 CORS 实现](../../polyhouse/src/main/java/com/polyethene/polyhouse/config/CorsConfig.java) · [Fetch 跨域规范](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials)
-- 保留关闭 multipart 的现状。生产 `/api/*` 请求体上限为 384 KiB，覆盖最大 60,023 字符字段的 JSON 转义和其他字段。CORS 先处理预检，体积检查随后在 JSON 解析前拒绝超限并返回 413，覆盖带 `Content-Length` 与分块传输，保留 Base64 字段校验。
+- 保留关闭 multipart 的现状。生产 `/api/*` 请求体上限为 384 KiB，覆盖最大 60,023 字符字段的 JSON 转义和其他字段。合法预检由 CORS 完成。实际请求先过总量和并发检查，再做体积检查，之后才占用敏感操作的执行额度。体积超限在 JSON 解析前返回 413，覆盖带 `Content-Length` 与分块传输，保留 Base64 字段校验。
 - Render 首次启动可用默认 TCP 健康检查验证监听。若需要 HTTP 就绪检查，使用低成本的专用路径并验收实际语义。TiDB 与 Redis 连通性通过独立冒烟核对，避免每次探活都调用外部服务。 [Render 健康检查](https://render.com/docs/health-checks)
+
+### 单实例 API 限额
+
+生产 profile 在 `polyhouse.api-limits` 绑定初始值，三组额度都随时间逐步补充。下表为 0.1 CPU 试用起点，按实际请求量和 429 分布校准。
+
+| 额度 | 持续速率 | 最大突发 | 最大在途 |
+| --- | --- | --- | --- |
+| API 总量 | 480 次/分钟 | 16 | 6 |
+| 登录 POST | 30 次/分钟 | 3 | 1 |
+| 敏感写入 | 60 次/分钟 | 4 | 2 |
+
+改密、注销、昵称和头像提交及管理写入共享敏感额度。退出会话只占 API 总量。登录和敏感写入同时受各自额度与总额度约束。超限立即返回 429/42900、`Retry-After` 和 `Cache-Control: no-store`，允许的跨域来源可读取重试头。正常 CORS 预检和默认 TCP 探活不占 API 额度。
+
+实例内只有三个固定预算，不按转发头、账号或随机路径创建计数键，也不增加 Redis 请求。额度在实例重启时重置。同一实例的调用方共享额度，单一来源仍可耗尽该额度。实际入口还需验证可信来源并按来源限制滥用。多副本时由共同入口或共享状态统一计数。
 
 ## 3. 本地验收
 

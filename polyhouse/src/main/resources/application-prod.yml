@@ -41,6 +41,20 @@ spring:
       timeout: 3s
 
 polyhouse:
+  # 单实例初始预算，允许短突发；持续速率和并发分别约束流量与在途工作。
+  api-limits:
+    api:
+      requests-per-minute: 480
+      burst: 16
+      concurrent: 6
+    login:
+      requests-per-minute: 30
+      burst: 3
+      concurrent: 1
+    sensitive:
+      requests-per-minute: 60
+      burst: 4
+      concurrent: 2
   jwt:
     secret: ${POLYHOUSE_JWT_SECRET:}
 

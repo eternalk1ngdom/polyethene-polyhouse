@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.ServerHttpResponse;
@@ -32,6 +33,7 @@ public class CorsConfig {
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
             configuration.setAllowedOrigins(List.of(pagesOrigin, "http://localhost:5173", "http://localhost:3000"));
             configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+            configuration.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
         } else {
             configuration.setAllowedOrigins(List.of(pagesOrigin));
             configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://127.0.0.1:5173",
