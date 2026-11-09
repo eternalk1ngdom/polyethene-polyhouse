@@ -66,13 +66,10 @@ const {
   submit,
   next,
 } = useProfileReview(() => section.value)
+const fieldLabel = (field?: 'AVATAR' | 'NICKNAME') => (field === 'AVATAR' ? '头像' : '昵称')
 const title = computed(() =>
   selection.value?.type === 'decision'
-    ? selection.value.submission?.kind === 'AVATAR'
-      ? '预览头像申请'
-      : selection.value.approve
-        ? '通过资料审核'
-        : '驳回资料申请'
+    ? `预览${fieldLabel(selection.value.submission?.kind)}申请`
     : selection.value?.action === 'KEEP'
       ? '保留历史资料'
       : '下架公开资料',
@@ -84,8 +81,8 @@ const selectedImage = computed(() =>
 )
 const previewReady = ref(false)
 const reasonInput = ref<InstanceType<typeof ElInput>>()
-async function reviewAvatar(approve: boolean): Promise<void> {
-  if (approve && !previewReady.value) return
+async function reviewSubmission(approve: boolean): Promise<void> {
+  if (approve && selectedImage.value && !previewReady.value) return
   await submit(approve)
   if (!uncertain.value && dialogError.value) reasonInput.value?.focus()
 }
@@ -143,32 +140,16 @@ onMounted(() => {
         <ul class="review-list">
           <li v-for="item in items" :key="item.id">
             <div class="copy">
-              <strong>{{ item.username }} · {{ item.kind === 'AVATAR' ? '头像' : '昵称' }}</strong
-              ><span v-if="item.proposedValue">申请内容：{{ item.proposedValue }}</span
+              <strong>{{ item.username }} · {{ fieldLabel(item.kind) }}</strong
               ><small>版本 {{ item.version }} · {{ item.createdAt.replace('T', ' ') }}</small>
             </div>
             <div class="actions">
               <ElButton
-                v-if="item.kind === 'AVATAR'"
-                :aria-label="`预览 ${item.username} 头像`"
+                :aria-label="`预览 ${item.username} ${fieldLabel(item.kind)}`"
                 :disabled="busy"
                 @click="openDecision(item)"
                 >预览</ElButton
               >
-              <template v-else>
-                <ElButton
-                  :aria-label="`通过 ${item.username} ${item.kind}`"
-                  :disabled="busy"
-                  @click="openDecision(item, true)"
-                  >预览并通过</ElButton
-                >
-                <ElButton
-                  :aria-label="`驳回 ${item.username} ${item.kind}`"
-                  :disabled="busy"
-                  @click="openDecision(item, false)"
-                  >驳回</ElButton
-                >
-              </template>
             </div>
           </li>
         </ul>
@@ -259,11 +240,7 @@ onMounted(() => {
     >
       <template v-if="selection"
         ><p>目标账号：{{ selection.submission?.username ?? selection.published?.username }}</p>
-        <p>
-          资料类型：{{
-            (selection.submission?.kind ?? selection.published?.kind) === 'AVATAR' ? '头像' : '昵称'
-          }}
-        </p>
+        <p>资料类型：{{ fieldLabel(selection.submission?.kind ?? selection.published?.kind) }}</p>
         <PrivateProfileImage
           v-if="selectedImage"
           :submission-id="selectedImage"
@@ -289,7 +266,8 @@ onMounted(() => {
           role="alert"
         />
         <ElForm label-position="top" @submit.prevent="submit()"
-          ><ElFormItem :label="selectedImage ? '处理原因（驳回必填）' : '处理原因（必填）'"
+          ><ElFormItem
+            :label="selection.type === 'decision' ? '处理原因（驳回必填）' : '处理原因（必填）'"
             ><ElInput
               ref="reasonInput"
               v-model="reason"
@@ -301,11 +279,14 @@ onMounted(() => {
               placeholder="只填写必要说明，勿填隐私或凭据"
           /></ElFormItem>
           <div class="actions">
-            <template v-if="selectedImage && !uncertain">
-              <ElButton type="primary" :disabled="busy || !previewReady" @click="reviewAvatar(true)"
+            <template v-if="selection.type === 'decision' && !uncertain">
+              <ElButton
+                type="primary"
+                :disabled="busy || (!!selectedImage && !previewReady)"
+                @click="reviewSubmission(true)"
                 >通过</ElButton
               >
-              <ElButton type="danger" plain :disabled="busy" @click="reviewAvatar(false)"
+              <ElButton type="danger" plain :disabled="busy" @click="reviewSubmission(false)"
                 >驳回</ElButton
               >
             </template>
@@ -320,7 +301,7 @@ onMounted(() => {
               "
               >{{ uncertain ? '关闭并刷新核对' : '取消' }}</ElButton
             ><ElButton
-              v-if="!selectedImage"
+              v-if="selection.type === 'public'"
               type="primary"
               native-type="submit"
               :disabled="uncertain"
