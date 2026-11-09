@@ -90,6 +90,30 @@ beforeEach(() => {
   setPasswordChangeRequiredHandler((token) => useUserStore().requirePasswordChange(token))
 })
 
+test('网页登录按浏览器环境发送 PC 或 H5，触屏电脑仍使用 PC', async (t) => {
+  const clients = [
+    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0', 10, 'PC'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 0, 'PC'],
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Mobile/15E148 Safari/604.1', 5, 'H5'],
+    ['Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Mobile Safari/537.36', 5, 'H5'],
+    ['Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Safari/537.36', 5, 'H5'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 5, 'H5'],
+    ['', 0, 'PC'],
+  ]
+  let navigator
+  t.mock.getter(globalThis, 'navigator', () => navigator)
+  const request = { username: 'fixture', password: 'fixture-password' }
+  for (const [userAgent, maxTouchPoints, clientType] of clients) {
+    navigator = { userAgent, maxTouchPoints }
+    apiClient.defaults.adapter = async (config) => {
+      assert.equal(config.url, '/auth/login')
+      assert.deepEqual(JSON.parse(config.data), { ...request, clientType })
+      return success(config, loginResult())
+    }
+    await login(request)
+  }
+})
+
 test('ADMIN 和首次改密状态来自真实响应，缺少布尔状态的响应拒绝', async () => {
   const store = useUserStore()
   apiClient.defaults.adapter = async (config) => success(config, loginResult('initial-credential', { ...profile, role: 'ADMIN', passwordChangeRequired: true }))

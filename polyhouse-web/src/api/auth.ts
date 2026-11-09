@@ -132,11 +132,20 @@ function decodeLogin(value: unknown): LoginResponse {
   }
 }
 
-/** 浏览器统一使用 PC 会话，屏幕尺寸变化不切换服务端终端编号。 */
+/** 登录时选择会话槽位，缩放窗口不改变设备类别。移动端标识只用于会话分组。 */
+function browserClientType(): 'PC' | 'H5' {
+  const { userAgent = '', maxTouchPoints = 0 } = globalThis.navigator ?? {}
+  // iPad Safari 可能使用 Mac UA。多点触控仅作为这个兼容场景的提示。
+  const mobile = /\b(?:Android|iPhone|iPad|iPod|Mobile)\b/i.test(userAgent)
+  const desktopModeIPad = /\bMacintosh\b/i.test(userAgent) && maxTouchPoints > 1
+  return mobile || desktopModeIPad ? 'H5' : 'PC'
+}
+
+/** 两类浏览器分别占用现有 PC / H5 会话，默认仍是 PC。 */
 export async function login(request: LoginRequest): Promise<LoginResponse> {
   try {
     return await apiRequest(
-      { method: 'POST', url: '/auth/login', data: { ...request, clientType: 'PC' } },
+      { method: 'POST', url: '/auth/login', data: { ...request, clientType: browserClientType() } },
       decodeLogin,
     )
   } catch (error: unknown) {
