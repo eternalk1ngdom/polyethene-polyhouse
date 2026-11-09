@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
   ElAlert,
@@ -13,6 +13,7 @@ import {
   ElTag,
 } from 'element-plus'
 import ManagementWorkspace from '../components/ManagementWorkspace.vue'
+import AccountCredentialField from '../components/AccountCredentialField.vue'
 import { useAccountManagement } from '../composables/useAccountManagement'
 import { useUserStore } from '../stores/useUserStore'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
@@ -56,6 +57,17 @@ const labels: Record<ManagedAccount['role'], string> = {
   INSIDER: '内部用户',
   OWNER: '屋主',
 }
+const detailId = ref<string | null>(null)
+const details = computed(() =>
+  owner.value ? items.value.find((account) => account.id === detailId.value) : undefined,
+)
+watch(
+  [() => store.token, () => store.user?.id, owner],
+  () => {
+    detailId.value = null
+  },
+  { flush: 'sync' },
+)
 const actionLabel = computed(
   () => ({ BAN: '封禁账号', UNBAN: '解封账号', PASSWORD_RESET: '重置密码' })[action.value],
 )
@@ -130,6 +142,12 @@ onMounted(() => {
               ><small v-if="account.passwordChangeRequired">下次登录需改密</small>
             </div>
             <div class="row-actions">
+              <ElButton
+                v-if="owner"
+                :aria-label="`查看 ${account.username} 的详情`"
+                @click="detailId = account.id"
+                >详情</ElButton
+              >
               <span v-if="account.readOnly">屋主账号 · 只读</span>
               <template v-else>
                 <ElButton
@@ -172,6 +190,47 @@ onMounted(() => {
       <ElButton v-if="!store.isLoggedIn" @click="accountUi.openLogin()">登录账号</ElButton
       ><RouterLink v-else to="/account">返回个人中心</RouterLink>
     </section>
+    <ElDialog
+      :model-value="!!details"
+      title="账号详情"
+      width="min(560px, calc(100vw - 32px))"
+      @update:model-value="
+        (visible) => {
+          if (!visible) detailId = null
+        }
+      "
+    >
+      <template v-if="details">
+        <AccountCredentialField label="登录账号" :value="details.username" />
+        <dl class="target-summary">
+          <div>
+            <dt>用户编号</dt>
+            <dd>{{ details.id }}</dd>
+          </div>
+          <div>
+            <dt>当前昵称</dt>
+            <dd>{{ details.nickname }}</dd>
+          </div>
+          <div>
+            <dt>身份</dt>
+            <dd>{{ labels[details.role] }}</dd>
+          </div>
+          <div>
+            <dt>状态</dt>
+            <dd>{{ details.status === 1 ? '正常' : '已封禁' }}</dd>
+          </div>
+          <div>
+            <dt>创建时间</dt>
+            <dd>{{ details.createdAt.replace('T', ' ') }}</dd>
+          </div>
+          <div>
+            <dt>下次登录</dt>
+            <dd>{{ details.passwordChangeRequired ? '需先修改密码' : '按正常流程登录' }}</dd>
+          </div>
+        </dl>
+        <p v-if="!details.readOnly">初始密码仅在开户时交付。若未保存，请回到账户列表重置密码。</p>
+      </template>
+    </ElDialog>
     <ElDialog
       :model-value="dialogOpen"
       :title="result ? '操作结果' : pending ? '核对操作结果' : actionLabel"

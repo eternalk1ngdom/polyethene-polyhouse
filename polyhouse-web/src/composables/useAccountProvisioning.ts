@@ -175,19 +175,6 @@ export function useAccountProvisioning() {
     }
   }
 
-  async function copyCredentials(): Promise<void> {
-    if (!result.value?.firstDelivery || !result.value.initialPassword) return
-    const current = revision
-    try {
-      await navigator.clipboard.writeText(
-        `账号：${result.value.username}\n初始密码：${result.value.initialPassword}\n首次登录请修改密码。`,
-      )
-      if (current === revision) message.value = '已复制，请通过私密渠道交付；此内容包含临时密码。'
-    } catch {
-      if (current === revision) message.value = '浏览器不允许自动复制，请手动选择并复制账号和密码。'
-    }
-  }
-
   return {
     allowed,
     role,
@@ -200,6 +187,5 @@ export function useAccountProvisioning() {
     create: () => run(false),
     confirm: () => run(true),
     acknowledge,
-    copyCredentials,
   }
 }

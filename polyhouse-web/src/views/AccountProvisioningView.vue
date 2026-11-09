@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import ManagementWorkspace from '../components/ManagementWorkspace.vue'
+import AccountCredentialField from '../components/AccountCredentialField.vue'
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElRadio, ElRadioGroup } from 'element-plus'
 import { useAccountProvisioning } from '../composables/useAccountProvisioning'
 import { useUserStore } from '../stores/useUserStore'
@@ -21,8 +22,15 @@ const {
   create,
   confirm,
   acknowledge,
-  copyCredentials,
 } = useAccountProvisioning()
+const detailsOpen = ref(false)
+watch(
+  result,
+  () => {
+    detailsOpen.value = false
+  },
+  { flush: 'sync' },
+)
 // 深链接也核对服务端资料，不按本地缓存角色直接显示屋主表单。
 onMounted(() => {
   void store.restoreSession()
@@ -51,36 +59,43 @@ onMounted(() => {
         role="status"
       />
       <template v-if="result">
-        <dl class="credential-summary">
-          <div>
-            <dt>登录账号</dt>
-            <dd>{{ result.username }}</dd>
-          </div>
-          <div>
-            <dt>初始昵称</dt>
-            <dd>{{ result.nickname }}</dd>
-          </div>
-          <div>
-            <dt>创建身份</dt>
-            <dd>{{ result.role === 'ADMIN' ? '管理员' : '普通用户' }}</dd>
-          </div>
-        </dl>
-        <ElForm label-position="top" @submit.prevent>
-          <ElFormItem v-if="result.firstDelivery" label="初始密码 · 仅本次展示">
-            <ElInput
-              :model-value="result.initialPassword ?? ''"
-              readonly
-              type="password"
-              show-password
-              autocomplete="off"
-            />
-          </ElFormItem>
-        </ElForm>
-        <p v-if="result.firstDelivery" class="delivery-note">
-          离开、刷新或确认后无法找回。请保存并私密交付，勿分享截图或公开粘贴。
-        </p>
         <div class="actions">
-          <ElButton v-if="result.firstDelivery" @click="copyCredentials">复制账号与密码</ElButton>
+          <ElButton
+            :aria-expanded="detailsOpen"
+            aria-controls="creation-details"
+            @click="detailsOpen = !detailsOpen"
+            >{{ detailsOpen ? '收起开户详情' : '查看开户详情' }}</ElButton
+          >
+        </div>
+        <p v-if="result.firstDelivery" class="delivery-note">
+          请打开详情保存初始密码，并通过私密渠道交付。离开页面、刷新或确认保存后，原密码无法找回。
+        </p>
+        <div id="creation-details" v-show="detailsOpen">
+          <template v-if="detailsOpen">
+            <dl class="credential-summary">
+              <div>
+                <dt>用户编号</dt>
+                <dd>{{ result.id }}</dd>
+              </div>
+              <div>
+                <dt>初始昵称</dt>
+                <dd>{{ result.nickname }}</dd>
+              </div>
+              <div>
+                <dt>创建身份</dt>
+                <dd>{{ result.role === 'ADMIN' ? '管理员' : '普通用户' }}</dd>
+              </div>
+            </dl>
+            <AccountCredentialField label="登录账号" :value="result.username" />
+            <AccountCredentialField
+              v-if="result.initialPassword"
+              label="初始密码"
+              :value="result.initialPassword"
+              secret
+            />
+          </template>
+        </div>
+        <div class="actions">
           <ElButton type="primary" @click="acknowledge">{{
             result.firstDelivery ? '已保存，清除本次凭据' : '已核对，结束本次操作'
           }}</ElButton>
@@ -195,6 +210,9 @@ onMounted(() => {
   margin: 0;
   overflow-wrap: anywhere;
   font-weight: 600;
+}
+.credential-field + .credential-field {
+  margin-top: 14px;
 }
 .actions {
   display: flex;
