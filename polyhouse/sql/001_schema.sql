@@ -1,5 +1,6 @@
 -- MySQL 8.0 / TiDB Cloud 空库初始化。执行前选择明确的空数据库。
 -- 不建库、不切库、不删表、不创建用户。表已存在时立即报错，请勿用强制继续模式。
+-- 已有库只按文档选用文末的升级语句，不重跑整份文件。
 -- 约束预检、屋主开户和旧库回退参见 docs/operations/database-bootstrap.md。
 
 -- 用户名在软删除后仍被保留；同一时刻只允许一个 OWNER（包括禁用或软删除）。
@@ -207,3 +208,12 @@ CREATE TABLE `sys_profile_audit` (
 -- 空槽用于串行化首次屋主初始化，发号从 1 开始。
 INSERT INTO `sys_owner_bootstrap` (`slot`) VALUES (1);
 INSERT INTO `sys_account_sequence` (`slot`, `next_value`) VALUES (1, 1);
+
+-- 已有库升级：确认目标库和现有约束后，按文档复制所需语句单独执行。
+-- 先添加新约束，再移除旧约束，避免中途失去角色校验。空库初始化会跳过此段。
+/* EXISTING_DATABASE_INSIDER_MIGRATION
+ALTER TABLE `sys_account_creation`
+    ADD CONSTRAINT `chk_account_creation_role_v2` CHECK (`role` IN ('USER', 'ADMIN', 'INSIDER'));
+
+ALTER TABLE `sys_account_creation` DROP CHECK `chk_account_creation_role`;
+*/

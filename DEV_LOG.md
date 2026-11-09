@@ -10,7 +10,7 @@
 
 ## 已实现与边界
 
-- 认证、Redis 多端会话、唯一 OWNER、每日成长、P0～P4 账号/资料审核及 U1～U4 整理已完成。公共注册关闭，屋主可创建 USER、ADMIN、INSIDER，已有库需升级开户约束。ADMIN 仅管理 USER，昵称/头像先审后发，历史资料仍待人工核对。
+- 认证、Redis 多端会话、唯一 OWNER、每日成长、P0～P4 账号/资料审核及 U1～U4 整理已完成。公共注册关闭，屋主可创建 USER、ADMIN、INSIDER，云库待[升级开户约束](docs/operations/database-bootstrap.md#已有库允许创建内部用户)。ADMIN 仅管理 USER，昵称/头像先审后发，历史资料仍待人工核对。
 - 前端暂定方案二：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
 - 妙替 R1～R7：本机词库/备份/分享/可选草稿、批处理/全文统计/有界定位/勾选/ZIP；500候选无默认排除，处理20文件/单个2 MiB/合计5 MiB；手选UTF-8/GBK/GB18030、输出UTF-8，源码全文替换。详见README/dev.10。
 - 妙压 T1～T4：本地单图/批量体积卡位、JPEG DPI/COM、成功项ZIP；20张/60 MiB，单张20 MiB/4000万像素。T5换底/PDF/云预设已否决；未验边界见dev.11。

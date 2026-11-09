@@ -11,9 +11,11 @@
 
 ## 已有库允许创建内部用户
 
-发布支持内部用户开户的后端前，先备份已有目标库，用 `SELECT DATABASE();` 确认当前库，并用 `SHOW CREATE TABLE sys_account_creation;` 核对约束。旧库只有 `chk_account_creation_role` 时，执行 [002_allow_insider_provisioning.sql](../../polyhouse/sql/002_allow_insider_provisioning.sql)。脚本先添加允许三种发放角色的新约束，再移除旧约束。
+发布支持内部用户开户的后端前，先备份已有目标库。用 `SELECT DATABASE();` 确认当前库，用 `SHOW CREATE TABLE sys_account_creation;` 核对约束。TiDB 还需确认 `SHOW GLOBAL VARIABLES LIKE 'tidb_enable_check_constraint';` 返回 `ON`。
 
-- 如果中断后新旧约束同时存在，只执行脚本的第二条。最终应只剩 `chk_account_creation_role_v2`，允许 `USER`、`ADMIN` 和 `INSIDER`。直接使用新版空库基线的环境已具备该约束。
+- 旧库只有 `chk_account_creation_role` 时，从 [001_schema.sql](../../polyhouse/sql/001_schema.sql) 文末的 `EXISTING_DATABASE_INSIDER_MIGRATION` 注释块复制两条 `ALTER TABLE`，按顺序逐条执行。先添加新约束，再移除旧约束。已有库不要重跑整份文件。
+- 如果新旧约束同时存在，确认新约束允许 `USER`、`ADMIN` 和 `INSIDER` 后只执行第二条。如果已有正确的新约束且无旧约束，已完成，无需执行。其他结构或报错先核对再继续。
+- 完成后再次执行 `SHOW CREATE TABLE sys_account_creation;`，确认开户角色只受新版 `chk_account_creation_role_v2` 约束，且新版约束处于启用状态。
 - 需要恢复旧约束时先停写，确认 `SELECT COUNT(*) FROM sys_account_creation WHERE role = 'INSIDER';` 为零，再添加 `chk_account_creation_role`（只允许 `USER`、`ADMIN`），随后删除 `chk_account_creation_role_v2`。如果已有内部用户开户记录，保留新版约束和历史数据。
 
 ## 创建首个屋主

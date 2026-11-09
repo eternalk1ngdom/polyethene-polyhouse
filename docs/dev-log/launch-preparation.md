@@ -8,6 +8,7 @@
 - [ ] Render 部署 Spring Boot，验证监听 `PORT`、冷启动与应用内存；核对计划、用量上限和休眠规则。凭据经服务端环境变量注入。
 - [ ] 验证 Render 入站代理覆盖可信来源标识，来源限流能抵抗伪造转发头和直连绕过。基于[单实例限额](../plans/render-docker-production.md#单实例-api-限额)实测共享地址、正常突发和超限恢复，校准公网配额。Tomcat 10.1.61 候选镜像已在本地验证，上线时核对 Render 实际运行版本。
 - [ ] 使用证书校验的 TLS 连接目标 TiDB Cloud。按[数据库初始化说明](../operations/database-bootstrap.md)预检 CHECK/外键，执行统一建表脚本，在隔离云库验证唯一屋主、登录、头像审批与记录追溯。保留已有云库，确认切换目标后再更新 Render 连接。
+- [ ] 已建的目标 TiDB 库按[已有库升级说明](../operations/database-bootstrap.md#已有库允许创建内部用户)核对并更新开户角色约束，确认新版约束生效后发布支持内部用户开户的后端。
 - [ ] 使用生产 profile 连接 Upstash Redis 的原生 TLS 端点。验证登录撤销、头像额度键与过期时间；检查每日用量与缓存故障反馈。
 - [ ] 前端构建注入 `VITE_API_BASE_URL`，值为 Render HTTPS 地址加 `/api`。核对 GitHub Pages 的 Origin 能通过预检，非白名单来源被拒绝。
 - [x] 本机前端预览连接 Render 候选后端 `61dc216`。用户确认屋主登录成功，刷新后恢复登录。

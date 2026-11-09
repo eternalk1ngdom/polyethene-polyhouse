@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -142,8 +143,17 @@ class AccountProvisioningIntegrationTest {
             assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'"))
                     .isInstanceOf(SQLException.class);
 
+            // 验证运维从建库文件复制的升级语句，避免测试与手动执行的 SQL 分叉。
+            String schema = Files.readString(Path.of("sql/001_schema.sql"), StandardCharsets.UTF_8);
+            String migrationMarker = "/* EXISTING_DATABASE_INSIDER_MIGRATION";
+            int markerStart = schema.indexOf(migrationMarker);
+            assertThat(markerStart).isGreaterThanOrEqualTo(0);
+            int migrationStart = markerStart + migrationMarker.length();
+            int migrationEnd = schema.indexOf("*/", migrationStart);
+            assertThat(migrationEnd).isGreaterThan(migrationStart);
+            String migration = schema.substring(migrationStart, migrationEnd);
             ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                    new FileSystemResource("sql/002_allow_insider_provisioning.sql"), StandardCharsets.UTF_8));
+                    new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
 
             try (var result = sql.executeQuery("SELECT role FROM sys_account_creation WHERE target_id=2")) {
                 assertThat(result.next()).isTrue();
