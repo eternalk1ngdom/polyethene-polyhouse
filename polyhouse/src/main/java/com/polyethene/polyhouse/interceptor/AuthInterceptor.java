@@ -12,6 +12,7 @@ import com.polyethene.polyhouse.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.AsyncHandlerInterceptor;
 
@@ -39,6 +40,8 @@ public class AuthInterceptor implements AsyncHandlerInterceptor {
             // 让静态资源和未找到的路由维持框架的 404 等语义，不把不存在的地址误报为未登录。
             return true;
         }
+        // 登录响应包含 Token，受保护响应包含个人资料。跳过 Bearer 校验的入口也必须先禁用缓存。
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         RequireRole classRole = AnnotatedElementUtils.findMergedAnnotation(method.getBeanType(), RequireRole.class);
         RequireRole methodRole = method.getMethodAnnotation(RequireRole.class);
         if (classRole == null && methodRole == null && method.hasMethodAnnotation(SkipBearerAuth.class)) {

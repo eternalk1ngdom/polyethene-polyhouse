@@ -104,6 +104,7 @@ class AuthWebMvcTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"alice\",\"password\":\"fixture-credentials\",\"clientType\":\"H5\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.accessToken").value(TOKEN))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(jsonPath("$.data.user.role").value("USER"));
         verify(service).login(new LoginDTO("alice", "fixture-credentials", "H5"), "192.0.2.20");
     }
@@ -128,7 +129,8 @@ class AuthWebMvcTest {
         var completed = mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "bEaReR " + TOKEN)
                         .param("token", "ignored-query-credential").param("profile.id", "99")
                         .param("profile.role", "OWNER"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("INSIDER"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("INSIDER"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
         // 同一次资料请求只核验一次；下一次请求仍必须重新进入业务鉴权。
         verify(service).getCurrentUser(TOKEN);
         verifyNoMoreInteractions(service);
@@ -144,7 +146,8 @@ class AuthWebMvcTest {
         mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("USER"));
         var rejected = mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
-                .andExpect(status().isUnauthorized()).andReturn();
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store")).andReturn();
         verify(service, times(3)).getCurrentUser(TOKEN);
         verifyNoMoreInteractions(service);
         assertNoRequestIdentity(rejected.getRequest());

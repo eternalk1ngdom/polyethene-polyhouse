@@ -6,6 +6,7 @@
 
 - [x] GitHub Pages 已通过 Actions 构建前端。静态资源使用仓库路径，页面使用 Hash 路由。
 - [ ] Render 部署 Spring Boot，验证监听 `PORT`、冷启动与应用内存；核对计划、用量上限和休眠规则。凭据经服务端环境变量注入。
+- [ ] 验证 Render 入站代理覆盖可信来源标识，伪造转发头和直连无法绕过限流。按实测容量验收入口总预算、登录和敏感操作的独立限额，超限返回 429 并在窗口结束后恢复。复核现有 Tomcat 安全公告的代理触发条件与处置，再放行公网。
 - [ ] 使用证书校验的 TLS 连接目标 TiDB Cloud。按[数据库初始化说明](../operations/database-bootstrap.md)预检 CHECK/外键，执行统一建表脚本，在隔离云库验证唯一屋主、登录、头像审批与记录追溯。保留已有云库，确认切换目标后再更新 Render 连接。
 - [ ] 使用生产 profile 连接 Upstash Redis 的原生 TLS 端点。验证登录撤销、头像额度键与过期时间；检查每日用量与缓存故障反馈。
 - [ ] 前端构建注入 `VITE_API_BASE_URL`，值为 Render HTTPS 地址加 `/api`。核对 GitHub Pages 的 Origin 能通过预检，非白名单来源被拒绝。
