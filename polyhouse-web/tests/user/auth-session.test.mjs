@@ -38,6 +38,9 @@ const { userDisplayName, userRoleLabel, avatarInitial, formatAccountNumber } = a
 )
 const { AuthCommandError, login, getCurrentUser } = await import(authUrl)
 const { ApiError, apiClient, apiRequest, setUnauthorizedHandler, setPasswordChangeRequiredHandler } = await import(apiUrl)
+const { usesExternalLoginApi, waitForLoginService } = await import(
+  await moduleUrl('../../src/api/loginReadiness.ts', { './index': apiUrl })
+)
 const { usernameError, passwordError, nicknameError } = await import(
   await moduleUrl('../../src/utils/authValidation.ts')
 )
@@ -86,8 +89,94 @@ beforeEach(() => {
     removeItem: (key) => storage.delete(key),
   }
   apiClient.defaults.adapter = async (config) => success(config)
+  apiClient.defaults.baseURL = '/api'
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
   setPasswordChangeRequiredHandler((token) => useUserStore().requirePasswordChange(token))
+})
+
+test('仅外部 API 启用登录探测，登录有独立超时且网络结果未知时只提交一次', async () => {
+  assert.equal(usesExternalLoginApi(), false)
+  apiClient.defaults.baseURL = 'https://api.example.invalid/api'
+  assert.equal(usesExternalLoginApi(), true)
+  const calls = []
+  apiClient.defaults.adapter = async (config) => {
+    calls.push([config.method, config.url, config.timeout])
+    if (config.url === '/auth/login') throw new AxiosError('fixture-network-error', 'ECONNABORTED', config)
+    return success(config, profile)
+  }
+  await assert.rejects(login({ username: 'fixture', password: 'fixture-password' }), {
+    message: '本次登录未收到结果，请稍后重试',
+  })
+  await getCurrentUser('fixture-token')
+  assert.deepEqual(calls, [['post', '/auth/login', 30_000], ['get', '/auth/me', 12_000]])
+})
+
+test('启动页和临时错误不会触发密码请求，只有匿名业务 401 表明登录服务已响应', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const replies = [
+    [200, '<html>starting</html>'],
+    [503, null],
+    [401, { code: 40100 }],
+  ]
+  const probe = new AbortController()
+  apiClient.defaults.adapter = async (config) => {
+    assert.equal(config.method, 'get')
+    assert.equal(config.url, '/auth/me')
+    assert.equal(config.timeout, 6_000)
+    assert.equal(config.headers.get('Authorization'), undefined)
+    assert.equal(config.data, undefined)
+    const [status, data] = replies.shift()
+    return { ...success(config), status, data }
+  }
+  const waiting = waitForLoginService(probe.signal)
+  for (const remaining of [2, 1]) {
+    await new Promise(setImmediate)
+    assert.equal(replies.length, remaining)
+    t.mock.timers.tick(3_000)
+  }
+  await waiting
+  assert.equal(replies.length, 0)
+})
+
+test('退出等待会取消后续探测，收到明确限流时也不轮询', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const probe = new AbortController()
+  let count = 0
+  apiClient.defaults.adapter = async (config) => {
+    count += 1
+    return { ...success(config), status: 503 }
+  }
+  const pending = assert.rejects(waitForLoginService(probe.signal), { name: 'AbortError' })
+  await new Promise(setImmediate)
+  probe.abort()
+  await pending
+  t.mock.timers.tick(3_000)
+  assert.equal(count, 1)
+
+  apiClient.defaults.adapter = async (config) => ({ ...success(config), status: 429 })
+  await assert.rejects(waitForLoginService(new AbortController().signal), { status: 429 })
+})
+
+test('等待预算到期后停止，最后一次请求只能使用剩余预算', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let now = 0
+  t.mock.method(performance, 'now', () => now)
+  const timeouts = []
+  apiClient.defaults.adapter = async (config) => {
+    timeouts.push(config.timeout)
+    now = timeouts.length === 1 ? 86_000 : 90_000
+    return timeouts.length === 1
+      ? { ...success(config), status: 503 }
+      : { ...success(config), status: 401, data: { code: 40100 } }
+  }
+  const pending = assert.rejects(waitForLoginService(new AbortController().signal), {
+    message: '等待服务启动超时，请稍后重试',
+  })
+  await new Promise(setImmediate)
+  now = 89_000
+  t.mock.timers.tick(3_000)
+  await pending
+  assert.deepEqual(timeouts, [6_000, 1_000])
 })
 
 test('网页登录按浏览器环境发送 PC 或 H5，触屏电脑仍使用 PC', async (t) => {

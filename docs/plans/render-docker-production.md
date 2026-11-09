@@ -81,7 +81,7 @@ docker rm polyhouse-prod-smoke
 ## 4. 线上验证与回退
 
 1. 本地验收后汇报分支、提交和测试结果，再按授权安排 Git 晋级及 Render 服务。创建时选择新加坡，使用仓库根的 Dockerfile 和构建上下文，凭据从 Render 注入。先验证 Render 后端与 TiDB、Upstash 的连接和资源用量。 [Render 区域](https://render.com/docs/regions)
-2. 验证免费层休眠唤醒和前端 12 秒请求超时的交互。记录第一次和唤醒后一次请求的耗时。若有明显超时，评估前端等待或手动重试提示，并单独确认范围。Render 公布的典型唤醒时间约一分钟。 [Render 免费层](https://render.com/docs/free#spinning-down-on-idle)
+2. 验证免费层休眠唤醒与登录两阶段等待。外部 API 在用户提交后最多探测 90 秒，收到匿名 `/api/auth/me` 的业务响应后提交一次密码，登录请求最多等 30 秒。记录唤醒、首笔登录及后续登录耗时，核对启动页、跨域与取消行为，按实测校准预算。Render 公布的典型唤醒时间约一分钟。 [Render 免费层](https://render.com/docs/free#spinning-down-on-idle)
 3. 云后端通过后，再按授权设置 GitHub Pages 构建变量 `VITE_API_BASE_URL=https://<render-host>/api`。从 Pages 真实来源复核登录和头像审核、两端会话、重新启动后头像可读，以及非白名单来源拒绝。
 4. 若后端候选出现内存超限、连续健康检查失败、鉴权或持久化故障，暂停切换。后端保留上一已验提交供回退，前端保留上一构建配置和产物。首次上线没有可回退后端时，暂停对外试用并修复候选。数据库和 Redis 的数据操作遵循单独备份、恢复和授权流程。
 

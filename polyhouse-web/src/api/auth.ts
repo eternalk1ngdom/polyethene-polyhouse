@@ -145,12 +145,20 @@ function browserClientType(): 'PC' | 'H5' {
 export async function login(request: LoginRequest): Promise<LoginResponse> {
   try {
     return await apiRequest(
-      { method: 'POST', url: '/auth/login', data: { ...request, clientType: browserClientType() } },
+      {
+        method: 'POST',
+        url: '/auth/login',
+        // 首笔登录可能还要建立存储连接，等待预算仅对登录请求放宽。
+        timeout: 30_000,
+        data: { ...request, clientType: browserClientType() },
+      },
       decodeLogin,
     )
   } catch (error: unknown) {
     if (error instanceof ApiError && error.sessionExpired)
       throw new ApiError('账号或密码错误，请重新输入', 401, error.code)
+    if (error instanceof ApiError && error.status === 0)
+      throw new ApiError('本次登录未收到结果，请稍后重试')
     throw error
   }
 }
