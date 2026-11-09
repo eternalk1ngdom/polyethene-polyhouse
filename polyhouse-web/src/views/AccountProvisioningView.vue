@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import ManagementWorkspace from '../components/ManagementWorkspace.vue'
 import AccountCredentialField from '../components/AccountCredentialField.vue'
+import { provisionedRoleLabels } from '../api/accountProvisioning'
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElRadio, ElRadioGroup } from 'element-plus'
 import { useAccountProvisioning } from '../composables/useAccountProvisioning'
 import { useUserStore } from '../stores/useUserStore'
@@ -83,7 +84,7 @@ onMounted(() => {
               </div>
               <div>
                 <dt>创建身份</dt>
-                <dd>{{ result.role === 'ADMIN' ? '管理员' : '普通用户' }}</dd>
+                <dd>{{ provisionedRoleLabels[result.role] }}</dd>
               </div>
             </dl>
             <AccountCredentialField label="登录账号" :value="result.username" />
@@ -104,7 +105,9 @@ onMounted(() => {
       <ElForm v-else label-position="top" :disabled="busy" @submit.prevent="create">
         <ElFormItem label="账号身份">
           <ElRadioGroup v-model="role" :disabled="attempted" aria-label="账号身份">
-            <ElRadio value="USER">普通用户</ElRadio><ElRadio value="ADMIN">管理员</ElRadio>
+            <ElRadio v-for="(label, value) in provisionedRoleLabels" :key="value" :value="value">{{
+              label
+            }}</ElRadio>
           </ElRadioGroup>
         </ElFormItem>
         <p class="format-note">

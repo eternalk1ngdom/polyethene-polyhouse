@@ -4,14 +4,14 @@
 
 ## 使用与接口
 
-已完成首次改密的 OWNER 登录后，右上角个人菜单进入“屋主工作台”，路由 `/manage/accounts`。默认创建普通用户，也可选择管理员；管理员开户必须重新输入屋主当前密码。其他角色即使直接输入 URL 或发 HTTP 请求也不能开户。旧账号继续用原名称和密码，不被批量改名或强制改密。
+已完成首次改密的 OWNER 登录后，右上角个人菜单进入“屋主工作台”，路由 `/manage/accounts`。默认创建普通用户，也可选择管理员或内部用户。管理员开户必须重新输入屋主当前密码。只有屋主可通过页面或接口开户。旧账号继续使用原名称和密码。
 
 创建成功后点「查看开户详情」。登录账号和初始密码右侧各有复制按钮。密码默认遮住，点眼睛可显示或隐藏，收起详情后再打开会重新遮住。屋主也可在账号列表点「详情」，查看账号、昵称、身份、状态、创建时间和首次改密要求，并复制登录账号。
 
 | 接口 | 请求与行为 |
 | --- | --- |
 | `POST /api/auth/register` | 旧路径保留；符合旧 DTO 的请求返回 HTTP 403 / 40300，不调用创建业务；格式错误仍为 400 |
-| `POST /api/manage/accounts` | OWNER Bearer；JSON `requestId`（小写 UUID）、`role`（USER/ADMIN）、可选 `ownerPassword`（ADMIN 必填）；成功 `Result<AccountCreationVO>`，`Cache-Control: no-store` |
+| `POST /api/manage/accounts` | OWNER Bearer；JSON `requestId`（小写 UUID）、`role`（USER/ADMIN/INSIDER）、可选 `ownerPassword`（ADMIN 必填）；成功 `Result<AccountCreationVO>`，`Cache-Control: no-store` |
 | `GET /api/manage/accounts/creation?requestId=...` | OWNER Bearer；仅核对当前屋主该请求的成功事实，无记录为 404，不创建账号、不取回密码 |
 
 成功数据包含字符串 `id`、`username`、初始 `nickname`、创建时 `role`、`firstDelivery` 和 `initialPassword`。仅首次事务成功返回 `firstDelivery=true` 与 20 位随机 ASCII 临时密码；重复 POST/确认 GET 固定为 false/null。请求号相同但换角色返回 409；重放不再授予权限，也不重新发密码。
@@ -32,7 +32,7 @@
 
 ## 迁移与回退
 
-新库按[数据库初始化说明](database-bootstrap.md)建立发号和开户记录表。
+新库按[数据库初始化说明](database-bootstrap.md)建立发号和开户记录表。已有旧版库按同一说明升级开户角色约束。
 
 - `sys_account_sequence` 固定槽位和下一序号。新库从 1 开始，发号时避开仍被历史账号占用的名称。
 - `sys_account_creation`：操作者/请求号联合主键、目标唯一键及初始交付元信息。无外键级联删除，账号注销后仍保留发放事实；当前不清理请求记录，以免旧请求再次产生账号。

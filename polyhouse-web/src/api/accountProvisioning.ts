@@ -1,13 +1,24 @@
 import { ApiError, apiRequest, isRecord } from './index'
 
-/** 创建角色采用白名单，不能复用允许 OWNER/INSIDER 的展示类型。 */
-export type ProvisionedRole = 'USER' | 'ADMIN'
+/** 开户选项和响应使用同一白名单，屋主账号通过独立的初始化流程管理。 */
+export const provisionedRoleLabels = {
+  USER: '普通用户',
+  ADMIN: '管理员',
+  INSIDER: '内部用户',
+} as const
+
+export type ProvisionedRole = keyof typeof provisionedRoleLabels
+
+/** 服务端响应和本地保存的开户意图均须符合当前可发放角色。 */
+export function isProvisionedRole(value: unknown): value is ProvisionedRole {
+  return typeof value === 'string' && Object.hasOwn(provisionedRoleLabels, value)
+}
 
 /** 创建意图可用于重试，密码不进入任何持久缓存。 */
 export interface AccountCreateRequest {
   /** 同一次发放保持 UUID 不变。 */
   requestId: string
-  /** 只能发放普通用户或管理员。 */
+  /** 只能发放普通用户、管理员或内部用户。 */
   role: ProvisionedRole
   /** 仅管理员开户重新验证屋主当前密码。 */
   ownerPassword?: string
@@ -38,7 +49,7 @@ export function decodeAccountCreation(value: unknown): AccountCreation {
     typeof value.username !== 'string' ||
     !/^ph\d{6,18}$/.test(value.username) ||
     typeof value.nickname !== 'string' ||
-    !['USER', 'ADMIN'].includes(String(value.role)) ||
+    !isProvisionedRole(value.role) ||
     typeof value.firstDelivery !== 'boolean' ||
     (value.firstDelivery
       ? typeof value.initialPassword !== 'string' ||
@@ -50,7 +61,7 @@ export function decodeAccountCreation(value: unknown): AccountCreation {
     id: value.id,
     username: value.username,
     nickname: value.nickname,
-    role: value.role as ProvisionedRole,
+    role: value.role,
     firstDelivery: value.firstDelivery,
     initialPassword: value.initialPassword as string | null,
   }

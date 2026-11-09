@@ -38,7 +38,7 @@
 
 `ADMIN=30` 已在前后端识别；USER/INSIDER/OWNER 仍保留。管理授权不是比较数字大小：ADMIN 不能通过 INSIDER 高开销门槛，INSIDER 不能通过 ADMIN 管理门槛。
 
-`AccountAuthorizationPolicy` 已实现并测试精确动作矩阵：仅 OWNER 创建 USER/ADMIN；ADMIN 仅封禁 USER；OWNER 可封禁非 OWNER；仅 OWNER 解封、重置非 OWNER 密码与审核资源。**P2 已将创建策略用于真实开户接口；封禁、解封、重置和审核目前仍只是后续服务使用的授权函数。** 后续事务必须同时核对最新操作者/目标状态，不能拿页面角色或此静态函数代替数据库检查。
+`AccountAuthorizationPolicy` 按精确角色授权。OWNER 可创建 USER、ADMIN、INSIDER，封禁、解封或重置其他账号，并审核昵称和头像。ADMIN 仅查看和封禁 USER。INSIDER 保留高开销功能的资格，管理权限由独立策略判断。写事务核对最新操作者和目标状态。详见[权限矩阵](../plans/controlled-beta-account-management.md#32-权限矩阵s1s5s6-已确认)。
 
 ## 验证与隔离
 

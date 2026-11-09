@@ -104,7 +104,7 @@ class AccountProvisioningIntegrationTest {
     }
 
     @Test void onlyAllowedRolesAndCorrectAdminConfirmationCanCreate() throws Exception {
-        for (String role : List.of("OWNER", "INSIDER", "UNKNOWN")) {
+        for (String role : List.of("OWNER", "UNKNOWN")) {
             assertThat(createHttp(ownerToken, UUID.randomUUID().toString(), role, OWNER_PASSWORD).statusCode()).isIn(400, 403);
         }
         assertThat(createHttp(ownerToken, UUID.randomUUID().toString(), "ADMIN", null).statusCode()).isEqualTo(400);
@@ -117,6 +117,49 @@ class AccountProvisioningIntegrationTest {
         assertThat(result.get("role").asText()).isEqualTo("ADMIN");
         assertThat(result.get("initialPassword").asText()).matches("[A-Za-z2-9]{20}");
         assertThat(result.has("passwordHash")).isFalse();
+
+        String insiderRequest = UUID.randomUUID().toString();
+        var insider = createHttp(ownerToken, insiderRequest, "INSIDER", null);
+        assertThat(insider.statusCode()).isEqualTo(200);
+        assertThat(data(insider).get("role").asText()).isEqualTo("INSIDER");
+        assertThat(data(insider).get("initialPassword").asText()).matches("[A-Za-z2-9]{20}");
+        var lookup = call("GET", "/api/manage/accounts/creation?requestId=" + insiderRequest, ownerToken, null);
+        assertThat(lookup.statusCode()).isEqualTo(200);
+        assertThat(data(lookup).get("role").asText()).isEqualTo("INSIDER");
+        assertThat(data(lookup).get("initialPassword").isNull()).isTrue();
+    }
+
+    @Test void migrationKeepsExistingHistoryAndExpandsOnlyProvisionableRoles() throws Exception {
+        try (var migrationSandbox = new Sandbox();
+             var connection = DriverManager.getConnection(migrationSandbox.url, migrationSandbox.user, migrationSandbox.password);
+             var sql = connection.createStatement()) {
+            sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))");
+            sql.execute("ALTER TABLE sys_account_creation DROP CHECK chk_account_creation_role_v2");
+            sql.executeUpdate("""
+                    INSERT INTO sys_account_creation (actor_id, request_id, target_id, username, nickname, role)
+                    VALUES (1, 'aa111111-1111-1111-1111-111111111111', 2, 'ph000001', '原账号', 'USER')
+                    """);
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'"))
+                    .isInstanceOf(SQLException.class);
+
+            ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                    new FileSystemResource("sql/002_allow_insider_provisioning.sql"), StandardCharsets.UTF_8));
+
+            try (var result = sql.executeQuery("SELECT role FROM sys_account_creation WHERE target_id=2")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("role")).isEqualTo("USER");
+            }
+            assertThat(sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'")).isEqualTo(1);
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='OWNER'"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))"))
+                    .isInstanceOf(SQLException.class);
+            sql.executeUpdate("UPDATE sys_account_creation SET role='USER'");
+            sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))");
+            sql.execute("ALTER TABLE sys_account_creation DROP CHECK chk_account_creation_role_v2");
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'"))
+                    .isInstanceOf(SQLException.class);
+        }
     }
 
     @Test void concurrentIdenticalRequestsDeliverPasswordOnceAndRoleCannotBeChanged() throws Exception {
@@ -235,7 +278,7 @@ class AccountProvisioningIntegrationTest {
         Process browser = builder.redirectOutput(output.toFile()).start();
         if (!browser.waitFor(90, TimeUnit.SECONDS)) { browser.destroyForcibly(); throw new IllegalStateException("Browser verification timed out"); }
         assertThat(browser.exitValue()).as("See masked local p2-browser-result.log").isZero();
-        assertThat(count("sys_account_creation")).isEqualTo(2);
+        assertThat(count("sys_account_creation")).isEqualTo(3);
     }
 
     private AccountCreateDTO request(UserRoleEnum role) { return new AccountCreateDTO(UUID.randomUUID().toString(), role, role == UserRoleEnum.ADMIN ? OWNER_PASSWORD : null); }

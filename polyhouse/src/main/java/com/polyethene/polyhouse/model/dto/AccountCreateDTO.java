@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * 屋主只选择角色和创建意图；账号、昵称、权限状态及凭据均由服务端生成。
  * @param requestId 同一次创建/重试保持不变，防止网络超时后生成两个账号
- * @param role 仅 USER/ADMIN 由锁内授权策略放行
+ * @param role 仅 USER、ADMIN、INSIDER 由锁内授权策略放行
  * @param ownerPassword 创建管理员时再次确认当前屋主凭据，不持久保存
  */
 public record AccountCreateDTO(

@@ -11,9 +11,10 @@ public final class AccountAuthorizationPolicy {
         return actor == UserRoleEnum.ADMIN || actor == UserRoleEnum.OWNER;
     }
 
-    /** 屋主只能创建允许发放的两种角色，不能借网页再生成 OWNER。 */
+    /** 逐项列出可发放角色，避免新增角色后被自动开放或借网页再生成 OWNER。 */
     public static boolean canCreate(UserRoleEnum actor, UserRoleEnum target) {
-        return actor == UserRoleEnum.OWNER && (target == UserRoleEnum.USER || target == UserRoleEnum.ADMIN);
+        return actor == UserRoleEnum.OWNER
+                && (target == UserRoleEnum.USER || target == UserRoleEnum.ADMIN || target == UserRoleEnum.INSIDER);
     }
 
     /** 管理员只封禁 USER；屋主可封禁其他已知非屋主角色，自身保护由唯一 OWNER 自然满足。 */

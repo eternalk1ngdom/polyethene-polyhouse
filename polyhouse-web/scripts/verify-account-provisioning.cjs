@@ -108,6 +108,15 @@ for (const endpoint of [base, backend]) {
     await page.getByRole('button', { name: '查看开户详情' }).click()
     assert.equal(await passwordField.count(), 0, 'refresh and confirmation must not reveal password')
     await page.getByRole('button', { name: '已核对，结束本次操作' }).click()
+    phase = 'create-insider'
+    await page.locator('.el-radio').filter({ hasText: '内部用户' }).click()
+    assert.equal(await page.getByLabel('屋主当前密码（再次验证）').count(), 0)
+    await page.getByRole('button', { name: '创建并交付账号' }).click()
+    await page.getByRole('button', { name: '查看开户详情' }).click()
+    await page.locator('#creation-details').getByText('内部用户', { exact: true }).waitFor()
+    assert.equal(await passwordField.getAttribute('type'), 'password')
+    assert.equal(creations, 3)
+    await page.getByRole('button', { name: '已保存，清除本次凭据' }).click()
     phase = 'account-details'
     await page.getByRole('link', { name: '← 返回账号列表' }).click()
     const detailButton = page.getByRole('button', { name: `查看 ${username} 的详情`, exact: true })
@@ -151,7 +160,7 @@ for (const endpoint of [base, backend]) {
     await page.goto(`${base}#/manage/accounts`, { waitUntil: 'networkidle' })
     await page.getByRole('heading', { name: '仅屋主可创建账号' }).waitFor()
     assert.equal(errors.length, 0, 'browser must not raise uncaught errors')
-    console.log('P2 browser passed: OWNER USER/ADMIN creation, masked credentials, separate copy, account details, reload confirmation, first password change, USER denial, responsive viewports.')
+    console.log('P2 browser passed: OWNER USER/ADMIN/INSIDER creation, masked credentials, separate copy, account details, reload confirmation, first password change, USER denial, responsive viewports.')
   } catch (failure) {
     console.error(`Browser phase: ${phase}; error type: ${failure.name}`)
     if (activePage) await activePage.screenshot({ path: path.resolve('../polyhouse/target/p2-browser-failure.png'), fullPage: true, mask: [activePage.locator('input')] })

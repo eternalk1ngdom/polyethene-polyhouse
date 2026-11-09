@@ -140,11 +140,11 @@ CREATE TABLE `sys_account_creation` (
     `target_id` bigint NOT NULL COMMENT '成功创建的用户编号',
     `username` varchar(32) NOT NULL COMMENT '原始交付账号，注销后仍保留',
     `nickname` varchar(32) NOT NULL COMMENT '系统生成的初始昵称',
-    `role` varchar(16) NOT NULL COMMENT '创建时角色，限 USER 或 ADMIN',
+    `role` varchar(16) NOT NULL COMMENT '屋主发放的角色，限 USER、ADMIN、INSIDER',
     `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '成功提交时刻',
     PRIMARY KEY (`actor_id`, `request_id`),
     UNIQUE KEY `uk_account_creation_target` (`target_id`),
-    CONSTRAINT `chk_account_creation_role` CHECK (`role` IN ('USER', 'ADMIN'))
+    CONSTRAINT `chk_account_creation_role_v2` CHECK (`role` IN ('USER', 'ADMIN', 'INSIDER'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='开户成功事实；禁止保存初始明文密码';
 
 CREATE TABLE `sys_account_management_operation` (

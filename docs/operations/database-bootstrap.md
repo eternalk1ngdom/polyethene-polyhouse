@@ -9,6 +9,13 @@
 3. 确认 `SELECT DATABASE();` 返回预期库且 `SHOW TABLES;` 为空。用 MySQL 客户端的 `source` 执行 SQL 文件，或在 TiDB SQL Editor 执行同一文件。失败后核对目标库并修复原因，重新使用空库。DDL 可能分次提交。
 4. 检查 13 张表、`sys_owner_bootstrap.slot=1` 的空记录及 `sys_account_sequence.next_value=1`。用 `SHOW CREATE TABLE sys_user;` 核对头像字段、约束和唯一屋主索引，用 `SHOW CREATE TABLE sys_user_growth_reward;` 核对奖励流水外键。云端先在隔离库实测约束和应用连通，再切换后端连接。
 
+## 已有库允许创建内部用户
+
+发布支持内部用户开户的后端前，先备份已有目标库，用 `SELECT DATABASE();` 确认当前库，并用 `SHOW CREATE TABLE sys_account_creation;` 核对约束。旧库只有 `chk_account_creation_role` 时，执行 [002_allow_insider_provisioning.sql](../../polyhouse/sql/002_allow_insider_provisioning.sql)。脚本先添加允许三种发放角色的新约束，再移除旧约束。
+
+- 如果中断后新旧约束同时存在，只执行脚本的第二条。最终应只剩 `chk_account_creation_role_v2`，允许 `USER`、`ADMIN` 和 `INSIDER`。直接使用新版空库基线的环境已具备该约束。
+- 需要恢复旧约束时先停写，确认 `SELECT COUNT(*) FROM sys_account_creation WHERE role = 'INSIDER';` 为零，再添加 `chk_account_creation_role`（只允许 `USER`、`ADMIN`），随后删除 `chk_account_creation_role_v2`。如果已有内部用户开户记录，保留新版约束和历史数据。
+
 ## 创建首个屋主
 
 通过私有运行环境提供目标库的 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`。云端 JDBC 使用 TiDB 提供的证书验证配置。以下命令从 `polyhouse/` 运行，示例账号 `root` 是网站账号，和数据库连接账号独立。
