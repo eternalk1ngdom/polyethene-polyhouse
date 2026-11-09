@@ -6,6 +6,7 @@ import { ApiError } from '../api'
 import { newProfileRequestId } from '../api/auth'
 import {
   avatarSourceSize,
+  avatarWebpSourceSize,
   clampCrop,
   cropScale,
   initialCrop,
@@ -30,7 +31,9 @@ const userStore = useUserStore()
 const picker = ref<HTMLInputElement>()
 const canvas = ref<HTMLCanvasElement>()
 const image = shallowRef<ImageBitmap>()
-const crop = ref<AvatarCrop>(initialCrop(256, 256))
+const outputSize = 160
+const outputLimit = 20 * 1024
+const crop = ref<AvatarCrop>(initialCrop(outputSize, outputSize, outputSize))
 const error = ref('')
 const loading = ref(false)
 const saving = ref(false)
@@ -38,12 +41,14 @@ const fileName = ref('')
 const zoomLabel = computed(() => `${Math.round(crop.value.zoom * 100)}%`)
 let selection = 0
 let submissionRequestId = ''
+let submittedAvatar = ''
 let drag: { id: number; x: number; y: number; cropX: number; cropY: number } | undefined
 
 function releaseImage(): void {
   // 作废整个编辑过程，包括尚未结束的编码和上传；旧回调不能再修改新弹窗。
   selection += 1
   submissionRequestId = ''
+  submittedAvatar = ''
   image.value?.close()
   image.value = undefined
   drag = undefined
@@ -54,11 +59,11 @@ function releaseImage(): void {
 }
 
 function draw(): void {
-  const context = canvas.value?.getContext('2d')
+  const context = canvas.value?.getContext('2d', { alpha: false })
   if (!context || !image.value) return
   const scale = cropScale(crop.value)
   context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, 256, 256)
+  context.fillRect(0, 0, outputSize, outputSize)
   context.drawImage(
     image.value,
     crop.value.x,
@@ -74,19 +79,21 @@ async function choose(event: Event): Promise<void> {
   event.target.value = ''
   if (!file) return
   error.value = ''
-  if (!['image/jpeg', 'image/png'].includes(file.type)) {
-    error.value = '请选择 JPEG 或 PNG 静态图片，暂不支持动图和 SVG。'
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    error.value = '请选择 JPEG、PNG 或 WebP 静态图片。'
     return
   }
   if (file.size > 5 * 1024 * 1024) {
-    error.value = '原图不能超过 5 MB，请选择较小的图片。'
+    error.value = '原图不能超过 5 MiB，请选择较小的图片。'
     return
   }
   submissionRequestId = ''
   const current = ++selection
   loading.value = true
   try {
-    const dimensions = avatarSourceSize(new Uint8Array(await file.arrayBuffer()))
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const dimensions =
+      file.type === 'image/webp' ? avatarWebpSourceSize(bytes) : avatarSourceSize(bytes)
     if (
       !dimensions ||
       dimensions.width < 1 ||
@@ -108,13 +115,13 @@ async function choose(event: Event): Promise<void> {
     }
     image.value?.close()
     image.value = decoded
-    crop.value = initialCrop(decoded.width, decoded.height)
+    crop.value = initialCrop(decoded.width, decoded.height, outputSize)
     fileName.value = file.name
     await nextTick()
     draw()
   } catch {
     if (current === selection)
-      error.value = '图片无法读取或尺寸超过 4096×4096，请换一张 JPEG / PNG。'
+      error.value = '图片无法读取、是动图或尺寸超过 4096×4096，请换一张静态图片。'
   } finally {
     if (current === selection) loading.value = false
   }
@@ -129,7 +136,7 @@ function changeZoom(delta: number): void {
 function reset(): void {
   submissionRequestId = ''
   if (!image.value) return
-  crop.value = initialCrop(image.value.width, image.value.height)
+  crop.value = initialCrop(image.value.width, image.value.height, outputSize)
   draw()
 }
 
@@ -148,8 +155,14 @@ function startDrag(event: PointerEvent): void {
 }
 
 function moveDrag(event: PointerEvent): void {
-  if (!drag || drag.id !== event.pointerId || !(event.currentTarget instanceof HTMLElement)) return
-  const factor = 256 / event.currentTarget.getBoundingClientRect().width
+  if (
+    saving.value ||
+    !drag ||
+    drag.id !== event.pointerId ||
+    !(event.currentTarget instanceof HTMLElement)
+  )
+    return
+  const factor = outputSize / event.currentTarget.getBoundingClientRect().width
   crop.value = clampCrop({
     ...crop.value,
     x: drag.cropX + (event.clientX - drag.x) * factor,
@@ -182,6 +195,24 @@ function close(): void {
   if (!saving.value) emit('update:modelValue', false)
 }
 
+async function encodeAvatar(element: HTMLCanvasElement): Promise<string> {
+  // 优先保留 0.8 画质；只在超出实际字节预算时下调，无需为小图填充。
+  for (const quality of [0.8, 0.7, 0.6, 0.45, 0.3, 0.15]) {
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      element.toBlob(
+        (value) => (value ? resolve(value) : reject(new Error('头像编码失败，请重新选择图片。'))),
+        'image/webp',
+        quality,
+      )
+    })
+    if (blob.type !== 'image/webp') throw new Error('当前浏览器无法导出 WebP，请换用支持的浏览器。')
+    if (blob.size > 0 && blob.size <= outputLimit) {
+      return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())))
+    }
+  }
+  throw new Error('头像压缩后仍超过 20 KiB，请缩小裁剪范围或换一张图。')
+}
+
 async function save(): Promise<void> {
   if (!props.modelValue || !image.value || !canvas.value || saving.value || loading.value) return
   saving.value = true
@@ -193,18 +224,14 @@ async function save(): Promise<void> {
   error.value = ''
   let uploadStarted = false
   try {
-    const element = canvas.value
-    const blob = await new Promise<Blob>((resolve, reject) =>
-      element.toBlob(
-        (value) => (value ? resolve(value) : reject(new Error('encode'))),
-        'image/jpeg',
-        0.9,
-      ),
-    )
-    if (!isCurrent()) return
+    if (!submissionRequestId) {
+      const encoded = await encodeAvatar(canvas.value)
+      if (!isCurrent()) return
+      submissionRequestId = newProfileRequestId()
+      submittedAvatar = encoded
+    }
     uploadStarted = true
-    submissionRequestId ||= newProfileRequestId()
-    const result = await userStore.uploadAvatar(blob, submissionRequestId)
+    const result = await userStore.uploadAvatar(submittedAvatar, submissionRequestId)
     if (!isCurrent()) return
     if (!result) {
       emit('update:modelValue', false)
@@ -215,7 +242,7 @@ async function save(): Promise<void> {
   } catch (caught: unknown) {
     if (!isCurrent()) return
     if (!uploadStarted) {
-      error.value = '头像编码失败，请重新选择图片后重试。'
+      error.value = caught instanceof Error ? caught.message : '头像编码失败，请重新选择图片。'
       return
     }
     // 超时或服务端异常可能发生在提交之后，先核对资料，避免盲目重试消耗每日次数。
@@ -264,7 +291,7 @@ onBeforeUnmount(releaseImage)
         ref="picker"
         class="file-input"
         type="file"
-        accept="image/jpeg,image/png"
+        accept="image/jpeg,image/png,image/webp"
         aria-label="选择头像图片"
         :disabled="saving || loading"
         @change="choose"
@@ -282,7 +309,7 @@ onBeforeUnmount(releaseImage)
         @lostpointercapture="stopDrag"
         @keydown="keyboardMove"
       >
-        <canvas ref="canvas" width="256" height="256" aria-label="头像裁剪预览" />
+        <canvas ref="canvas" :width="outputSize" :height="outputSize" aria-label="头像裁剪预览" />
         <span class="circle-guide" aria-hidden="true" />
       </div>
       <div v-else class="empty-preview">
@@ -320,7 +347,7 @@ onBeforeUnmount(releaseImage)
         >{{ image ? '重新选择图片' : '选择图片' }}</ElButton
       >
       <p class="upload-rules">
-        JPEG / PNG · 原图不超过 5 MB、4096×4096<br />每天最多提交 5
+        JPEG / PNG / WebP · 原图不超过 5 MiB、4096×4096<br />每天最多提交 5
         次，驳回与替代也计次；取消不上传。
       </p>
       <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />

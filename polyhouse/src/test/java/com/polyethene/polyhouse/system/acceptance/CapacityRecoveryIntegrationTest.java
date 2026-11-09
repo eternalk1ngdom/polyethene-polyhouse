@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.polyethene.polyhouse.PolyhouseApplication;
 import com.polyethene.polyhouse.common.constant.RedisConstants;
-import com.polyethene.polyhouse.service.impl.LocalAvatarStorage;
+import com.polyethene.polyhouse.model.dto.RegisterDTO;
+import com.polyethene.polyhouse.service.AuthService;
+import com.polyethene.polyhouse.user.fixture.AvatarFixture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.slf4j.Logger;
@@ -12,14 +14,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -35,6 +35,8 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -67,10 +69,11 @@ class CapacityRecoveryIntegrationTest {
                 var redis = context.getBean(StringRedisTemplate.class);
                 String username = "cap_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
                 String password = UUID.randomUUID().toString();
-                JsonNode registered = post("/api/auth/register", Map.of("username", username, "password", password,
-                        "nickname", "隔离验收"), null, 200);
-                long userId = registered.path("data").path("id").asLong();
+                // 正式注册入口已关闭，隔离库通过服务层准备测试账号。
+                long userId = Long.parseLong(context.getBean(AuthService.class)
+                        .register(new RegisterDTO(username, password, "隔离验收")).id());
                 String sessionKey = RedisConstants.buildAuthTokenKey(userId, "PC");
+                LocalDate testDay = LocalDate.now(ZoneId.of("Asia/Shanghai"));
                 assertThat(redis.hasKey(sessionKey)).as("随机测试 ID 不能复用已有会话").isFalse();
                 // Redis 与开发实例共用服务，但只触碰本次随机雪花 ID 的精确键，绝不 FLUSH/SCAN。
                 try {
@@ -120,40 +123,24 @@ class CapacityRecoveryIntegrationTest {
                     awaitRecovery(token, "MySQL");
                     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user_growth_reward WHERE user_id = ?", Integer.class, userId)).isEqualTo(1);
 
-                    // 将本次私有头像目录变成同名普通文件，模拟实际不可写路径，不修改磁盘全局权限。
-                    Path pendingDirectory=sandbox.avatars.resolveSibling("avatars-pending");
-                    Files.createFile(pendingDirectory);
-                    upload(token, 503);
-                    assertThat(jdbc.queryForObject("SELECT JSON_EXTRACT(ext_json, '$.avatarUpload') FROM sys_user WHERE id = ?", String.class, userId)).isNull();
-                    Files.delete(pendingDirectory);
                     JsonNode avatar = upload(token, 200).path("data");
                     assertThat(avatar.path("remainingToday").asInt()).isEqualTo(4);
-                    HttpResponse<String> media = request("GET", "/api/profile-submissions/"+avatar.path("id").asText()+"/image", token, null);
+                    assertThat(jdbc.queryForObject("SELECT pending_avatar FROM sys_user WHERE id = ?", String.class, userId))
+                            .isEqualTo(AvatarFixture.webp("blue"));
+                    HttpResponse<String> media = request("GET", "/api/profile-submissions/"+avatar.path("id").asText()+"/image", null, token);
                     assertThat(media.statusCode()).isEqualTo(200);
                     assertThat(media.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
-
-                    // 真文件删除失败生成持久标记，新实例读取标记后能重试，模拟重启后的清理入口。
-                    String previousName = "b".repeat(32) + ".jpg";
-                    Files.createDirectories(sandbox.avatars);
-                    Path previous = sandbox.avatars.resolve(previousName);
-                    Files.createDirectory(previous);
-                    Path blocker = Files.writeString(previous.resolve("owned-fixture"), "fixture");
-                    var storage = context.getBean(LocalAvatarStorage.class);
-                    storage.deleteEventually("/api/media/avatars/" + previousName);
-                    Path marker = sandbox.avatars.resolve(".cleanup").resolve(previousName);
-                    assertThat(Files.exists(marker)).isTrue();
-                    Files.delete(blocker);
-                    new LocalAvatarStorage(sandbox.avatars.toString()).retryCleanup();
-                    assertThat(Files.exists(previous)).isFalse();
-                    assertThat(Files.exists(marker)).isFalse();
 
                     post("/api/auth/logout", Map.of("token", token), null, 200);
                     get("/api/auth/me", token, 401);
                     assertThat(redis.hasKey(sessionKey)).isFalse();
-                    LOGGER.info("RECOVERY redis/mysql reconnect, failed deregister rollback, avatar pending retry/private preview/cleanup, logout: passed");
+                    LOGGER.info("RECOVERY redis/mysql reconnect, failed deregister rollback, avatar database submission and private preview, logout: passed");
                 } finally {
                     sandbox.redis.block(false);
                     redis.delete(sessionKey);
+                    for (LocalDate day : List.of(testDay, testDay.plusDays(1))) {
+                        redis.delete("polyhouse:profile:avatar-quota:" + day + ":" + userId);
+                    }
                     assertThat(redis.hasKey(sessionKey)).isFalse();
                 }
             }
@@ -200,15 +187,8 @@ class CapacityRecoveryIntegrationTest {
     }
 
     private JsonNode upload(String token, int status) throws Exception {
-        String boundary = "fixture" + UUID.randomUUID().toString().replace("-", "");
-        var bytes = new ByteArrayOutputStream();
-        bytes.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fixture.png\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-        ImageIO.write(new BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB), "PNG", bytes);
-        bytes.write(("\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"requestId\"\r\n\r\n" + UUID.randomUUID() + "\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        var request = HttpRequest.newBuilder(URI.create(base + "/api/auth/avatar/submissions")).timeout(Duration.ofSeconds(8))
-                .header("Authorization", "Bearer " + token).header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build();
-        return decoded(http.send(request, HttpResponse.BodyHandlers.ofString()), status);
+        return post("/api/auth/avatar/submissions", Map.of("requestId", UUID.randomUUID().toString(),
+                "avatarBase64", AvatarFixture.webp("blue")), token, status);
     }
 
     /** 只有本进程明确创建成功的随机库允许删除，迁移脚本仅在这个库中执行。 */
@@ -218,7 +198,6 @@ class CapacityRecoveryIntegrationTest {
         private final String password = System.getenv("DB_PASSWORD");
         private final String direct;
         private final Path root = Path.of("target", name).toAbsolutePath().normalize();
-        private final Path avatars = root.resolve("avatars");
         private FaultProxy mysql;
         private FaultProxy redis;
         private boolean created;
@@ -236,12 +215,8 @@ class CapacityRecoveryIntegrationTest {
                     sql.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                     created = true;
                     connection.setCatalog(name);
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) {
-                        String source = Files.readString(Path.of("sql", migration));
-                        if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-                        source = source.replace("USE `polyhouse_db`;", "");
-                        ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
-                    }
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 }
                 String host = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
                 if (!List.of("localhost", "127.0.0.1", "::1").contains(host)) throw new IllegalArgumentException("Only local Redis is allowed");
@@ -261,8 +236,7 @@ class CapacityRecoveryIntegrationTest {
                     Map.entry("spring.datasource.hikari.maximum-pool-size", 4), Map.entry("spring.datasource.hikari.minimum-idle", 1),
                     Map.entry("spring.datasource.hikari.connection-timeout", 1000), Map.entry("spring.datasource.hikari.validation-timeout", 500),
                     Map.entry("spring.data.redis.host", "127.0.0.1"), Map.entry("spring.data.redis.port", redis.port()),
-                    Map.entry("spring.data.redis.timeout", "500ms"), Map.entry("spring.data.redis.connect-timeout", "500ms"),
-                    Map.entry("polyhouse.avatar.directory", avatars.toString()));
+                    Map.entry("spring.data.redis.timeout", "500ms"), Map.entry("spring.data.redis.connect-timeout", "500ms"));
         }
 
         /** 先关闭专用连接，再精确删除本次创建的库和 target 子目录；已有开发库不在删除范围。 */

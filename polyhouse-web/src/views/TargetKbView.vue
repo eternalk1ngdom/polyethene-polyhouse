@@ -7,7 +7,7 @@ import TargetKbPanel from '../components/TargetKbPanel.vue'
   <div class="targetkb-page">
     <RouterLink class="back" to="/">← 返回首页</RouterLink>
     <header>
-      <p class="eyebrow">TARGETKB / 图片体积</p>
+      <p class="eyebrow">TARGETKB / 图片处理</p>
       <h1>妙压<span class="workspace-label">本地图片工作台</span></h1>
       <p>让照片刚好装进那个限制。</p>
     </header>

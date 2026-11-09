@@ -1,88 +1,85 @@
 package com.polyethene.polyhouse.user.controller;
 
-import com.polyethene.polyhouse.controller.AvatarController;
-
-import com.polyethene.polyhouse.common.constant.UserRoleEnum;
-import com.polyethene.polyhouse.config.WebMvcConfig;
-import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
 import com.polyethene.polyhouse.common.constant.*;
-import java.time.LocalDateTime;
+import com.polyethene.polyhouse.config.WebMvcConfig;
+import com.polyethene.polyhouse.controller.AvatarController;
+import com.polyethene.polyhouse.model.dto.AvatarSubmitDTO;
+import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
 import com.polyethene.polyhouse.service.AvatarService;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+
+import java.time.LocalDateTime;
+
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/** 检查真实 DTO 绑定、普通用户认证和受限图片读取，不连接 MySQL 或 Redis。 */
+/** 验证 JSON 绑定、长度边界和旧上传入口关闭，无需连接数据库。 */
 @WebMvcTest(AvatarController.class)
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @Import(WebMvcConfig.class)
 class AvatarWebMvcTest {
-    @TempDir static Path directory;
+    private static final String PATH = "/api/auth/avatar/submissions";
+    private static final String ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     @Autowired private MockMvc mvc;
     @MockBean private AvatarService avatars;
     @MockBean private AuthService auth;
-    private static final String NAME = "a".repeat(32) + ".jpg";
 
-    @DynamicPropertySource
-    static void configureDirectory(DynamicPropertyRegistry registry) {
-        registry.add("polyhouse.avatar.directory", () -> directory.toString());
+    @Test
+    void acceptsJsonWithoutExposingPendingContent() throws Exception {
+        authenticate();
+        var dto = new AvatarSubmitDTO("UklGRg==", ID);
+        var now = LocalDateTime.now();
+        when(avatars.upload(dto, "fixture")).thenReturn(new ProfileSubmissionVO(
+            "123","42","fixture",ProfileField.AVATAR,ProfileReviewStatus.PENDING,"1",ID,
+            null,null,now,now.plusDays(7),4));
+        mvc.perform(post(PATH).contentType("application/json").content(body(dto.avatarBase64()))
+                .header("Authorization","Bearer fixture"))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
+            .andExpect(jsonPath("$.data.status").value("PENDING"))
+            .andExpect(jsonPath("$.data.avatarBase64").doesNotExist())
+            .andExpect(jsonPath("$.data.remainingToday").value(4));
+        verify(avatars).upload(dto,"fixture");
     }
 
     @Test
-    void ordinaryUserCanUploadOwnFileWithoutAcceptingUserId() throws Exception {
-        when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42", "fixture", "居民", null, UserRoleEnum.USER, "10", 1, "1"));
-        when(avatars.upload(any(), eq("fixture"))).thenReturn(new ProfileSubmissionVO("123","42","fixture",ProfileField.AVATAR,ProfileReviewStatus.PENDING,"1","aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",null,null,LocalDateTime.now(),LocalDateTime.now().plusDays(7),4));
-        mvc.perform(multipart("/api/auth/avatar/submissions").file(new MockMultipartFile("file", new byte[]{1}))
-                        .param("userId", "99").param("requestId","aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee").header("Authorization", "Bearer fixture"))
-                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.status").value("PENDING")).andExpect(jsonPath("$.data.avatar").doesNotExist()).andExpect(jsonPath("$.data.remainingToday").value(4));
-        verify(avatars).upload(any(), eq("fixture"));
-    }
-
-    @Test
-    void anonymousCannotUploadAndMissingFileIsBadRequest() throws Exception {
-        mvc.perform(multipart("/api/auth/avatar/submissions").file(new MockMultipartFile("file", new byte[]{1})))
-                .andExpect(status().isUnauthorized());
-        when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42", "fixture", "居民", null, UserRoleEnum.USER, "10", 1, "1"));
-        mvc.perform(multipart("/api/auth/avatar/submissions").header("Authorization", "Bearer fixture"))
-                .andExpect(status().isBadRequest());
+    void requiresSessionAndBoundsPayloadBeforeService() throws Exception {
+        mvc.perform(post(PATH).contentType("application/json").content(body("UklGRg==")))
+            .andExpect(status().isUnauthorized());
+        authenticate();
+        mvc.perform(post(PATH).contentType("application/json").content(body("A".repeat(60_001)))
+                .header("Authorization","Bearer fixture")).andExpect(status().isBadRequest());
+        mvc.perform(multipart(PATH).header("Authorization","Bearer fixture"))
+            .andExpect(status().isUnsupportedMediaType());
         verifyNoInteractions(avatars);
     }
 
     @Test
-    void avatarResourceIsPublicButPrivateMarkersAndOtherNamesAreNotServed() throws Exception {
-        Files.write(directory.resolve(NAME), new byte[]{1, 2, 3});
-        Files.writeString(directory.resolve("private.txt"), "fixture");
-        mvc.perform(get("/api/media/avatars/" + NAME)).andExpect(status().isOk())
-                .andExpect(content().contentType("image/jpeg"))
-                .andExpect(header().string("Cache-Control", "max-age=86400, public"));
-        mvc.perform(get("/api/media/avatars/private.txt")).andExpect(status().isNotFound());
-        mvc.perform(get("/api/media/avatars/.cleanup/" + NAME)).andExpect(status().isNotFound());
-        verifyNoInteractions(auth, avatars);
-    }
-    @Test
-    void legacyImmediateUploadPathIsClosedEvenWithValidIdentity() throws Exception {
-        when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("42","fixture","居民",null,UserRoleEnum.USER,"0",1,"0"));
-        mvc.perform(multipart("/api/auth/avatar").file(new MockMultipartFile("file",new byte[]{1})).header("Authorization","Bearer fixture"))
+    void legacyImmediateUploadAndFilesystemMediaAreClosed() throws Exception {
+        authenticate();
+        mvc.perform(post("/api/auth/avatar").header("Authorization","Bearer fixture"))
             .andExpect(status().isConflict());
+        mvc.perform(get("/api/media/avatars/"+"a".repeat(32)+".jpg")).andExpect(status().isNotFound());
         verifyNoInteractions(avatars);
+    }
+
+    private void authenticate() {
+        when(auth.getCurrentUser("fixture")).thenReturn(
+            new UserProfileVO("42","fixture","居民",null,UserRoleEnum.USER,"10",1,"1"));
+    }
+
+    private String body(String payload) {
+        return """
+            {"avatarBase64":"%s","requestId":"%s"}
+            """.formatted(payload,ID);
     }
 }

@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.model.vo;
 
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.model.entity.User;
+import com.polyethene.polyhouse.utils.AvatarImageUtils;
 
 import java.util.Objects;
 
@@ -11,7 +12,7 @@ import java.util.Objects;
  * @param id 以字符串输出雪花 ID，避免 JavaScript number 丢失 bigint 精度
  * @param username 当前用户自己的登录账号，不包含联系方式
  * @param nickname 供右上角个人卡片展示的昵称
- * @param avatar 头像地址，允许现有数据库中的空值
+ * @param avatar 已公开的 WebP data URL，默认头像为 null
  * @param role 以 USER/ADMIN/INSIDER/OWNER 语义字符串输出的身份
  * @param experience 累计经验以十进制字符串输出，避免 JavaScript 大整数精度损失
  * @param level 成长等级从 1 到 6，不授予任何角色权限
@@ -48,7 +49,7 @@ public record UserProfileVO(String id, String username, String nickname, String 
         }
         return new UserProfileVO(id.toString(),
                 Objects.requireNonNull(user.getUsername(), "persisted username must not be null"),
-                user.getNickname(), user.getAvatar(),
+                user.getNickname(), AvatarImageUtils.displaySource(user.getAvatar()),
                 Objects.requireNonNull(user.getRole(), "persisted user role must not be null"),
                 experience.toString(), level, coins.toString(),
                 Objects.requireNonNull(user.getPasswordChangeRequired(), "persisted password state must not be null"));

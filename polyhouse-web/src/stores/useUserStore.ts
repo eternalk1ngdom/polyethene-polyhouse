@@ -70,7 +70,7 @@ export const useUserStore = defineStore('user', () => {
   function cacheProfile(): void {
     try {
       localStorage.setItem(TOKEN_KEY, token.value)
-      localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+      localStorage.setItem(USER_KEY, JSON.stringify(user.value && { ...user.value, avatar: null }))
     } catch {
       storageAvailable.value = false
       // 缓存只写了一半时清掉属于当前会话的片段，页面仍可使用已验证的内存身份。
@@ -219,13 +219,16 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /** 旧上传不能污染后来登录的账号；申请成功只作废旧读取，不抢先发布新头像。 */
-  async function uploadAvatar(file: Blob, requestId?: string): Promise<AvatarChange | null> {
+  async function uploadAvatar(
+    avatarBase64: string,
+    requestId?: string,
+  ): Promise<AvatarChange | null> {
     if (!isLoggedIn.value || !user.value) throw new ApiError('请先登录再修改头像', 401)
     if (requiresPasswordChange.value) throw new ApiError('请先修改初始密码', 403, 40301)
     const submittedToken = token.value
     const submittedRevision = revision
     const submittedId = user.value.id
-    const change = await uploadAvatarImage(file, submittedToken, requestId)
+    const change = await uploadAvatarImage(avatarBase64, submittedToken, requestId)
     if (
       revision !== submittedRevision ||
       token.value !== submittedToken ||

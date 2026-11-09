@@ -4,11 +4,11 @@
 
 ## 数据迁移与运行顺序
 
-1. 备份数据库；空库先按顺序执行 `001`～`004`，已有库保留原数据。
-2. 人工执行 [005_account_security.sql](../../polyhouse/sql/005_account_security.sql)，再启动新版后端与前端。应用不会自动修改表。
-3. 核对两列及审计表：`sys_user.credential_version` 为非负 bigint、默认 0；`password_change_required` 为 0/1、默认 0；`sys_account_audit` 存成功改密事实，不存凭据。
+空库按[数据库初始化说明](database-bootstrap.md)建表。已有库先备份，再依据实际结构选择历史迁移或增量脚本。
 
-迁移可以重跑，不清零已有安全状态；同名列已存在时跳过，不自动修正其他环境中不同的列定义。MySQL DDL 隐式提交，不能把整份迁移视为可事务回滚。
+核对两列及审计表。`sys_user.credential_version` 是默认值为 0 的非负 bigint。`password_change_required` 仅允许 0 或 1，默认 0。`sys_account_audit` 只记录成功改密事实。
+
+以下为 2026-10-29 的 P1 迁移记录。
 
 本机本轮迁移前已生成完整数据库备份，位于 Git 忽略的 `.local-backups/p1-account-security-20261029-175944.sql`，不提交、不公开。005 已在开发库执行并重跑；原有用户数量、唯一屋主及既有密码哈希/昵称/角色/状态/成长字段校验一致，新安全字段均为默认值。没有修改真实账号密码或授予 ADMIN；沿用原私有预设及运行密钥重启后端。
 
@@ -38,7 +38,7 @@
 
 `ADMIN=30` 已在前后端识别；USER/INSIDER/OWNER 仍保留。管理授权不是比较数字大小：ADMIN 不能通过 INSIDER 高开销门槛，INSIDER 不能通过 ADMIN 管理门槛。
 
-`AccountAuthorizationPolicy` 已实现并测试精确动作矩阵：仅 OWNER 创建 USER/ADMIN；ADMIN 仅封禁 USER；OWNER 可封禁非 OWNER；仅 OWNER 解封、重置非 OWNER 密码与审核资源。**P2 已将创建策略用于真实开户接口；封禁、解封、重置和审核目前仍只是后续服务使用的授权函数。** 后续事务必须同时核对最新操作者/目标状态，不能拿页面角色或此静态函数代替数据库检查。
+`AccountAuthorizationPolicy` 按精确角色授权。OWNER 可创建 USER、ADMIN、INSIDER，封禁、解封或重置其他账号，并审核昵称和头像。ADMIN 仅查看和封禁 USER。INSIDER 保留高开销功能的资格，管理权限由独立策略判断。写事务核对最新操作者和目标状态。详见[权限矩阵](../plans/controlled-beta-account-management.md#32-权限矩阵s1s5s6-已确认)。
 
 ## 验证与隔离
 
@@ -48,9 +48,9 @@
 .\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify -AccountSecurityOnly
 ```
 
-该入口复用忽略的本机预设，限制本机 MySQL/Redis，需要数据库创建临时库权限；创建随机 `polyhouse_security_*` 独立库，执行 001～005。HTTP 测试使用随机端口、隔离随机签名密钥和精确账号会话，结束删除本次库与夹具；不在真实开发库制造 OWNER，不执行旧的全量 OWNER 夹具。
+该入口复用忽略的本机预设，限制本机 MySQL/Redis，需要数据库创建临时库权限；创建随机 `polyhouse_security_*` 独立库，执行统一空库基线。HTTP 测试使用随机端口、隔离随机签名密钥和精确账号会话，结束删除本次库与夹具；不在真实开发库制造 OWNER，不执行旧的全量 OWNER 夹具。
 
-真实验收覆盖：迁移重跑/旧 Token、三端撤销与其他账号隔离、首次限制及 multipart 头像绕过、错误/重复密码、两个改密并发仅一份成功、审计失败回滚、Redis 删除后失败回滚、恢复旧 jti 仍不能复活。普通测试另核对角色矩阵、拦截器上下文、声明类型与前端换号/跨标签旧回调。密码弹窗运行真实 Vue setup/watch/卸载测试，未将组件测试记作实际浏览器点击验收。
+真实验收覆盖旧 Token、三端撤销与其他账号隔离、首次限制及 multipart 头像绕过、错误/重复密码、两个改密并发仅一份成功、审计失败回滚、Redis 删除后失败回滚、恢复旧 jti 仍不能复活。普通测试另核对角色矩阵、拦截器上下文、声明类型与前端换号/跨标签旧回调。密码弹窗运行真实 Vue setup/watch/卸载测试，未将组件测试记作实际浏览器点击验收。
 
 ## 后续与回退边界
 

@@ -107,7 +107,7 @@ function mountEditor(upload) {
     }
     editor.image.value = bitmap
     editor.canvas.value = {
-      toBlob: (callback) => callback(new Blob(['fixture'], { type: 'image/jpeg' })),
+      toBlob: (callback) => callback(new Blob(['fixture'], { type: 'image/webp' })),
     }
     return bitmap
   }
@@ -135,20 +135,29 @@ test('当前上传明确拒绝后保留裁剪图，可以重试成功且只提�
 
 test('旧上传失败不能污染重开的编辑器，也不能解除新上传的保存状态', async (t) => {
   const old = deferred(),
-    current = deferred()
+    current = deferred(),
+    oldStarted = deferred(),
+    currentStarted = deferred()
   let attempts = 0
-  const fixture = mountEditor(() => (++attempts === 1 ? old.promise : current.promise))
+  const fixture = mountEditor(() => {
+    if (++attempts === 1) {
+      oldStarted.resolve()
+      return old.promise
+    }
+    currentStarted.resolve()
+    return current.promise
+  })
   t.after(fixture.unmount)
   fixture.image()
   const previousSave = fixture.editor.save()
-  await nextTick()
+  await oldStarted.promise
   fixture.open.value = false
   await nextTick()
   fixture.open.value = true
   await nextTick()
   fixture.image()
   const currentSave = fixture.editor.save()
-  await nextTick()
+  await currentStarted.promise
   assert.equal(attempts, 2)
   old.reject(new ApiError('旧请求失败', 503))
   await previousSave
@@ -161,11 +170,15 @@ test('旧上传失败不能污染重开的编辑器，也不能解除新上传�
 
 test('换号后的旧成功响应不能关闭新弹窗或显示旧账号保存成功', async (t) => {
   const pending = deferred()
-  const fixture = mountEditor(() => pending.promise)
+  const started = deferred()
+  const fixture = mountEditor(() => {
+    started.resolve()
+    return pending.promise
+  })
   t.after(fixture.unmount)
   fixture.image()
   const saving = fixture.editor.save()
-  await nextTick()
+  await started.promise
   fixture.store.token = 'another-fixture'
   await nextTick()
   fixture.open.value = true
@@ -244,10 +257,14 @@ test('网络故障或服务异常提示结果未确认，保留图像和当前�
 
 test('离开页面释放图片，迟到的上传失败不再产生界面提示', async () => {
   const pending = deferred()
-  const fixture = mountEditor(() => pending.promise)
+  const started = deferred()
+  const fixture = mountEditor(() => {
+    started.resolve()
+    return pending.promise
+  })
   const image = fixture.image()
   const saving = fixture.editor.save()
-  await nextTick()
+  await started.promise
   fixture.unmount()
   pending.reject(new ApiError('迟到的服务异常', 503))
   await saving
@@ -262,4 +279,30 @@ test('离开页面释放图片，迟到的上传失败不再产生界面提示',
 test('未知上传结果的显式重试沿用同一申请编号，避免多计额度',async(t)=>{
  const ids=[];const f=mountEditor(async(_blob,id)=>{ids.push(id);if(ids.length===1)throw new ApiError('offline',0);return{status:'PENDING',remainingToday:4}})
  t.after(f.unmount);f.image();await f.editor.save();await f.editor.save();assert.equal(ids.length,2);assert.equal(ids[0],ids[1]);assert.match(ids[0],/^[0-9a-f-]{36}$/)
+})
+
+test('头像以 0.8 起步，超出 20 KiB 降画质，同次重试复用原始 JSON 图片', async (t) => {
+  const uploads = []
+  const qualities = []
+  const fixture = mountEditor(async (payload, requestId) => {
+    uploads.push({ payload, requestId })
+    if (uploads.length === 1) throw new ApiError('网络异常')
+    return { status: 'PENDING', remainingToday: 4 }
+  })
+  t.after(fixture.unmount)
+  fixture.image()
+  fixture.editor.canvas.value = {
+    toBlob: (callback, type, quality) => {
+      assert.equal(type, 'image/webp')
+      qualities.push(quality)
+      const bytes = quality === 0.8 ? new Uint8Array(20 * 1024 + 1) : 'webp-fixture'
+      callback(new Blob([bytes], { type }))
+    },
+  }
+  await fixture.editor.save()
+  await fixture.editor.save()
+  assert.deepEqual(qualities, [0.8, 0.7])
+  assert.equal(uploads.length, 2)
+  assert.deepEqual(uploads[0], uploads[1])
+  assert.equal(atob(uploads[0].payload), 'webp-fixture')
 })

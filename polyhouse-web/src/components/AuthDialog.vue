@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
   ElAlert,
   ElButton,
@@ -13,6 +13,7 @@ import {
   type InputInstance,
 } from 'element-plus'
 import { ApiError } from '../api'
+import { usesExternalLoginApi, waitForLoginService } from '../api/loginReadiness'
 import { useUserStore } from '../stores/useUserStore'
 import { passwordError, usernameError } from '../utils/authValidation'
 
@@ -39,6 +40,9 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 const userStore = useUserStore()
 const submitting = ref(false)
+const waitingForService = ref(false)
+const canClose = computed(() => !submitting.value || waitingForService.value)
+let activeProbe: AbortController | undefined
 const errorMessage = ref('')
 const formRef = ref<FormInstance>()
 const usernameInput = ref<InputInstance>()
@@ -67,25 +71,40 @@ function clearPasswords(): void {
 }
 
 function closeDialog(): void {
-  if (!submitting.value) emit('update:modelValue', false)
+  if (!canClose.value) return
+  activeProbe?.abort()
+  emit('update:modelValue', false)
 }
 
 async function submit(): Promise<void> {
   if (submitting.value || !formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
-  if (!valid || submitting.value) return
+  if (!valid || submitting.value || !props.modelValue) return
   submitting.value = true
   errorMessage.value = ''
+  let probe: AbortController | undefined
   try {
+    if (usesExternalLoginApi()) {
+      probe = activeProbe = new AbortController()
+      waitingForService.value = true
+      await waitForLoginService(probe.signal)
+      if (probe.signal.aborted || !props.modelValue) return
+      activeProbe = undefined
+      waitingForService.value = false
+    }
     if (await userStore.login({ username: form.username, password: form.password })) {
       emit('update:modelValue', false)
     } else {
       errorMessage.value = '登录状态已变化，请重新操作'
     }
   } catch (error: unknown) {
-    errorMessage.value = error instanceof ApiError ? error.message : '暂时无法完成操作，请稍后重试'
+    if (!probe?.signal.aborted && props.modelValue) {
+      errorMessage.value = error instanceof ApiError ? error.message : '暂时无法完成操作，请稍后重试'
+    }
   } finally {
+    activeProbe = undefined
     clearPasswords()
+    waitingForService.value = false
     submitting.value = false
   }
 }
@@ -97,10 +116,23 @@ watch(
     errorMessage.value = ''
     formRef.value?.clearValidate()
     if (!open) {
+      activeProbe?.abort()
       form.username = ''
     }
   },
 )
+
+// 等待期间其他标签页可能已建立新会话，旧表单不再继续提交。
+watch(
+  () => userStore.token,
+  () => {
+    if (!activeProbe) return
+    activeProbe.abort()
+    errorMessage.value = '登录状态已变化，请重新操作'
+  },
+  { flush: 'sync' },
+)
+onBeforeUnmount(() => activeProbe?.abort())
 </script>
 
 <template>
@@ -113,16 +145,24 @@ watch(
       class="auth-dialog"
       align-center
       destroy-on-close
-      :close-on-click-modal="!submitting"
-      :close-on-press-escape="!submitting"
-      :show-close="!submitting"
+      :close-on-click-modal="canClose"
+      :close-on-press-escape="canClose"
+      :show-close="canClose"
       :before-close="closeDialog"
       @opened="usernameInput?.focus()"
       @update:model-value="emit('update:modelValue', $event)"
     >
       <div class="auth-content">
         <p class="auth-eyebrow">POLYHOUSE / 聚妙屋</p>
-        <p class="auth-intro">登录屋主发放的账号，继续探索日常里的新可能。</p>
+        <p class="auth-intro" role="status">
+          {{
+            waitingForService
+              ? '正在连接服务，连接后会继续登录。'
+              : submitting
+                ? '正在验证账号，请稍候。'
+                : '登录屋主发放的账号，继续探索日常里的新可能。'
+          }}
+        </p>
         <ElAlert
           v-if="errorMessage"
           :title="errorMessage"

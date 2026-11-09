@@ -38,6 +38,9 @@ const { userDisplayName, userRoleLabel, avatarInitial, formatAccountNumber } = a
 )
 const { AuthCommandError, login, getCurrentUser } = await import(authUrl)
 const { ApiError, apiClient, apiRequest, setUnauthorizedHandler, setPasswordChangeRequiredHandler } = await import(apiUrl)
+const { usesExternalLoginApi, waitForLoginService } = await import(
+  await moduleUrl('../../src/api/loginReadiness.ts', { './index': apiUrl })
+)
 const { usernameError, passwordError, nicknameError } = await import(
   await moduleUrl('../../src/utils/authValidation.ts')
 )
@@ -86,8 +89,118 @@ beforeEach(() => {
     removeItem: (key) => storage.delete(key),
   }
   apiClient.defaults.adapter = async (config) => success(config)
+  apiClient.defaults.baseURL = '/api'
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
   setPasswordChangeRequiredHandler((token) => useUserStore().requirePasswordChange(token))
+})
+
+test('仅外部 API 启用登录探测，登录有独立超时且网络结果未知时只提交一次', async () => {
+  assert.equal(usesExternalLoginApi(), false)
+  apiClient.defaults.baseURL = 'https://api.example.invalid/api'
+  assert.equal(usesExternalLoginApi(), true)
+  const calls = []
+  apiClient.defaults.adapter = async (config) => {
+    calls.push([config.method, config.url, config.timeout])
+    if (config.url === '/auth/login') throw new AxiosError('fixture-network-error', 'ECONNABORTED', config)
+    return success(config, profile)
+  }
+  await assert.rejects(login({ username: 'fixture', password: 'fixture-password' }), {
+    message: '本次登录未收到结果，请稍后重试',
+  })
+  await getCurrentUser('fixture-token')
+  assert.deepEqual(calls, [['post', '/auth/login', 30_000], ['get', '/auth/me', 12_000]])
+})
+
+test('启动页和临时错误不会触发密码请求，只有匿名业务 401 表明登录服务已响应', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const replies = [
+    [200, '<html>starting</html>'],
+    [503, null],
+    [401, { code: 40100 }],
+  ]
+  const probe = new AbortController()
+  apiClient.defaults.adapter = async (config) => {
+    assert.equal(config.method, 'get')
+    assert.equal(config.url, '/auth/me')
+    assert.equal(config.timeout, 6_000)
+    assert.equal(config.headers.get('Authorization'), undefined)
+    assert.equal(config.data, undefined)
+    const [status, data] = replies.shift()
+    return { ...success(config), status, data }
+  }
+  const waiting = waitForLoginService(probe.signal)
+  for (const remaining of [2, 1]) {
+    await new Promise(setImmediate)
+    assert.equal(replies.length, remaining)
+    t.mock.timers.tick(3_000)
+  }
+  await waiting
+  assert.equal(replies.length, 0)
+})
+
+test('退出等待会取消后续探测，收到明确限流时也不轮询', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const probe = new AbortController()
+  let count = 0
+  apiClient.defaults.adapter = async (config) => {
+    count += 1
+    return { ...success(config), status: 503 }
+  }
+  const pending = assert.rejects(waitForLoginService(probe.signal), { name: 'AbortError' })
+  await new Promise(setImmediate)
+  probe.abort()
+  await pending
+  t.mock.timers.tick(3_000)
+  assert.equal(count, 1)
+
+  apiClient.defaults.adapter = async (config) => ({ ...success(config), status: 429 })
+  await assert.rejects(waitForLoginService(new AbortController().signal), { status: 429 })
+})
+
+test('等待预算到期后停止，最后一次请求只能使用剩余预算', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let now = 0
+  t.mock.method(performance, 'now', () => now)
+  const timeouts = []
+  apiClient.defaults.adapter = async (config) => {
+    timeouts.push(config.timeout)
+    now = timeouts.length === 1 ? 86_000 : 90_000
+    return timeouts.length === 1
+      ? { ...success(config), status: 503 }
+      : { ...success(config), status: 401, data: { code: 40100 } }
+  }
+  const pending = assert.rejects(waitForLoginService(new AbortController().signal), {
+    message: '等待服务启动超时，请稍后重试',
+  })
+  await new Promise(setImmediate)
+  now = 89_000
+  t.mock.timers.tick(3_000)
+  await pending
+  assert.deepEqual(timeouts, [6_000, 1_000])
+})
+
+test('网页登录按浏览器环境发送 PC 或 H5，触屏电脑仍使用 PC', async (t) => {
+  const clients = [
+    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0', 10, 'PC'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 0, 'PC'],
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Mobile/15E148 Safari/604.1', 5, 'H5'],
+    ['Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Mobile Safari/537.36', 5, 'H5'],
+    ['Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Safari/537.36', 5, 'H5'],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 5, 'H5'],
+    ['', 0, 'PC'],
+  ]
+  let navigator
+  t.mock.getter(globalThis, 'navigator', () => navigator)
+  const request = { username: 'fixture', password: 'fixture-password' }
+  for (const [userAgent, maxTouchPoints, clientType] of clients) {
+    navigator = { userAgent, maxTouchPoints }
+    apiClient.defaults.adapter = async (config) => {
+      assert.equal(config.url, '/auth/login')
+      assert.deepEqual(JSON.parse(config.data), { ...request, clientType })
+      return success(config, loginResult())
+    }
+    await login(request)
+  }
 })
 
 test('ADMIN 和首次改密状态来自真实响应，缺少布尔状态的响应拒绝', async () => {
@@ -133,7 +246,7 @@ test('明确的首次改密拒绝保留会话，不允许头像或注销；普�
   assert.equal(store.isLoggedIn, true)
   assert.equal(store.requiresPasswordChange, true)
   assert.equal(useAccountUiStore().canDeregister, false)
-  await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), (error) => error.code === 40301)
+  await assert.rejects(store.uploadAvatar('Zml4dHVyZQ=='), (error) => error.code === 40301)
   store.setSession('new-credential', profile)
   store.requirePasswordChange('fixture-credential')
   assert.equal(store.requiresPasswordChange, false)
@@ -187,12 +300,12 @@ test('上传只发送小图、请求号和当前 Bearer，待审内容不提前�
       })
     assert.equal(config.url, '/auth/avatar/submissions')
     assert.equal(config.headers.Authorization, 'Bearer fixture-credential')
-    assert.ok(config.data instanceof FormData)
-    assert.deepEqual([...config.data.keys()], ['file', 'requestId'])
-    return success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 })
+    assert.equal(JSON.parse(config.data).avatarBase64, 'Zml4dHVyZQ==')
+    assert.deepEqual(Object.keys(JSON.parse(config.data)), ['avatarBase64', 'requestId'])
+    return success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 })
   }
   const restoring = store.restoreSession()
-  await store.uploadAvatar(new Blob(['fixture'], { type: 'image/jpeg' }))
+  await store.uploadAvatar('Zml4dHVyZQ==')
   finishRestore()
   await restoring
   assert.equal(store.user.avatar, null)
@@ -205,9 +318,9 @@ test('换号后的旧上传结果不能修改新用户，错误或非法图片�
   let finish
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
-      finish = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+      finish = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
     })
-  const pending = store.uploadAvatar(new Blob(['fixture']))
+  const pending = store.uploadAvatar('Zml4dHVyZQ==')
   store.setSession('new-credential', { ...profile, id: '99', avatar: null })
   finish()
   assert.equal(await pending, null)
@@ -218,7 +331,7 @@ test('换号后的旧上传结果不能修改新用户，错误或非法图片�
     { avatar: avatarPath, remainingToday: 9 },
   ]) {
     apiClient.defaults.adapter = async (config) => success(config, value)
-    await assert.rejects(store.uploadAvatar(new Blob(['fixture'])), ApiError)
+    await assert.rejects(store.uploadAvatar('Zml4dHVyZQ=='), ApiError)
     assert.equal(store.user.avatar, null)
   }
 })
@@ -231,10 +344,10 @@ test('头像变更不会取消同一会话已经发出的退出意图', async ()
   apiClient.defaults.adapter = (config) =>
     new Promise((resolve) => {
       if (config.url === '/auth/avatar/submissions')
-        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
       else finishLogout = () => resolve(success(config))
     })
-  const uploading = store.uploadAvatar(new Blob(['fixture']))
+  const uploading = store.uploadAvatar('Zml4dHVyZQ==')
   const loggingOut = store.logout()
   finishUpload()
   await uploading
@@ -251,11 +364,11 @@ test('上传返回前另一标签已换号时，不等待存储事件也不能�
   apiClient.defaults.adapter = (config) => {
     if (config.url === '/auth/avatar/submissions')
       return new Promise((resolve) => {
-        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: config.data.get('requestId'), status: 'PENDING', remainingToday: 4 }))
+        finishUpload = () => resolve(success(config, { id: '123', kind: 'AVATAR', requestId: JSON.parse(config.data).requestId, status: 'PENDING', remainingToday: 4 }))
       })
     return Promise.resolve(success(config, { ...profile, id: '99' }))
   }
-  const pending = store.uploadAvatar(new Blob(['fixture']))
+  const pending = store.uploadAvatar('Zml4dHVyZQ==')
   storage.set('polyhouse_token', 'other-tab-credential')
   finishUpload()
   assert.equal(await pending, null)

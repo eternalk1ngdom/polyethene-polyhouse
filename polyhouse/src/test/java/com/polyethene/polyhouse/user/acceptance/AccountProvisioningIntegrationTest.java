@@ -23,6 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -103,7 +105,7 @@ class AccountProvisioningIntegrationTest {
     }
 
     @Test void onlyAllowedRolesAndCorrectAdminConfirmationCanCreate() throws Exception {
-        for (String role : List.of("OWNER", "INSIDER", "UNKNOWN")) {
+        for (String role : List.of("OWNER", "UNKNOWN")) {
             assertThat(createHttp(ownerToken, UUID.randomUUID().toString(), role, OWNER_PASSWORD).statusCode()).isIn(400, 403);
         }
         assertThat(createHttp(ownerToken, UUID.randomUUID().toString(), "ADMIN", null).statusCode()).isEqualTo(400);
@@ -116,6 +118,58 @@ class AccountProvisioningIntegrationTest {
         assertThat(result.get("role").asText()).isEqualTo("ADMIN");
         assertThat(result.get("initialPassword").asText()).matches("[A-Za-z2-9]{20}");
         assertThat(result.has("passwordHash")).isFalse();
+
+        String insiderRequest = UUID.randomUUID().toString();
+        var insider = createHttp(ownerToken, insiderRequest, "INSIDER", null);
+        assertThat(insider.statusCode()).isEqualTo(200);
+        assertThat(data(insider).get("role").asText()).isEqualTo("INSIDER");
+        assertThat(data(insider).get("initialPassword").asText()).matches("[A-Za-z2-9]{20}");
+        var lookup = call("GET", "/api/manage/accounts/creation?requestId=" + insiderRequest, ownerToken, null);
+        assertThat(lookup.statusCode()).isEqualTo(200);
+        assertThat(data(lookup).get("role").asText()).isEqualTo("INSIDER");
+        assertThat(data(lookup).get("initialPassword").isNull()).isTrue();
+    }
+
+    @Test void migrationKeepsExistingHistoryAndExpandsOnlyProvisionableRoles() throws Exception {
+        try (var migrationSandbox = new Sandbox();
+             var connection = DriverManager.getConnection(migrationSandbox.url, migrationSandbox.user, migrationSandbox.password);
+             var sql = connection.createStatement()) {
+            sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))");
+            sql.execute("ALTER TABLE sys_account_creation DROP CHECK chk_account_creation_role_v2");
+            sql.executeUpdate("""
+                    INSERT INTO sys_account_creation (actor_id, request_id, target_id, username, nickname, role)
+                    VALUES (1, 'aa111111-1111-1111-1111-111111111111', 2, 'ph000001', '原账号', 'USER')
+                    """);
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'"))
+                    .isInstanceOf(SQLException.class);
+
+            // 验证运维从建库文件复制的升级语句，避免测试与手动执行的 SQL 分叉。
+            String schema = Files.readString(Path.of("sql/001_schema.sql"), StandardCharsets.UTF_8);
+            String migrationMarker = "/* EXISTING_DATABASE_INSIDER_MIGRATION";
+            int markerStart = schema.indexOf(migrationMarker);
+            assertThat(markerStart).isGreaterThanOrEqualTo(0);
+            int migrationStart = markerStart + migrationMarker.length();
+            int migrationEnd = schema.indexOf("*/", migrationStart);
+            assertThat(migrationEnd).isGreaterThan(migrationStart);
+            String migration = schema.substring(migrationStart, migrationEnd);
+            ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                    new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
+
+            try (var result = sql.executeQuery("SELECT role FROM sys_account_creation WHERE target_id=2")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("role")).isEqualTo("USER");
+            }
+            assertThat(sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'")).isEqualTo(1);
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='OWNER'"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))"))
+                    .isInstanceOf(SQLException.class);
+            sql.executeUpdate("UPDATE sys_account_creation SET role='USER'");
+            sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))");
+            sql.execute("ALTER TABLE sys_account_creation DROP CHECK chk_account_creation_role_v2");
+            assertThatThrownBy(() -> sql.executeUpdate("UPDATE sys_account_creation SET role='INSIDER'"))
+                    .isInstanceOf(SQLException.class);
+        }
     }
 
     @Test void concurrentIdenticalRequestsDeliverPasswordOnceAndRoleCannotBeChanged() throws Exception {
@@ -172,21 +226,11 @@ class AccountProvisioningIntegrationTest {
         assertThat(provisioning.create(request, ownerToken).username()).isEqualTo("ph000001");
     }
 
-    @Test void migrationRetainsLegacyNamesAndSkipsDeletedNamesWithoutTruncatingDigits() throws Exception {
-        var legacy = auth.register(new RegisterDTO("ph000123", OWNER_PASSWORD, "历史账号"));
-        jdbc.update("UPDATE sys_user SET deleted=1 WHERE id=?", legacy.id());
-        jdbc.update("DELETE FROM sys_account_sequence WHERE slot=1");
-        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
-            sandbox.migrate(connection, "006_account_provisioning.sql");
-            assertThat(sequence()).isEqualTo(124);
-            provisioning.create(request(UserRoleEnum.USER), ownerToken);
-            sandbox.migrate(connection, "006_account_provisioning.sql");
-            assertThat(sequence()).isEqualTo(125);
-        }
-        // 迁移后独立导入的历史名也不能复用，数据库唯一索引覆盖软删除。
-        var collided = auth.register(new RegisterDTO("ph000125", OWNER_PASSWORD, "保留原名"));
+    @Test void allocatorSkipsDeletedNamesWithoutTruncatingDigits() {
+        assertThat(sequence()).isEqualTo(1);
+        var collided = auth.register(new RegisterDTO("ph000001", OWNER_PASSWORD, "保留原名"));
         jdbc.update("UPDATE sys_user SET deleted=1 WHERE id=?", collided.id());
-        assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph000126");
+        assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph000002");
         jdbc.update("UPDATE sys_account_sequence SET next_value=999999 WHERE slot=1");
         assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph999999");
         assertThat(provisioning.create(request(UserRoleEnum.USER), ownerToken).username()).isEqualTo("ph1000000");
@@ -244,7 +288,7 @@ class AccountProvisioningIntegrationTest {
         Process browser = builder.redirectOutput(output.toFile()).start();
         if (!browser.waitFor(90, TimeUnit.SECONDS)) { browser.destroyForcibly(); throw new IllegalStateException("Browser verification timed out"); }
         assertThat(browser.exitValue()).as("See masked local p2-browser-result.log").isZero();
-        assertThat(count("sys_account_creation")).isEqualTo(2);
+        assertThat(count("sys_account_creation")).isEqualTo(3);
     }
 
     private AccountCreateDTO request(UserRoleEnum role) { return new AccountCreateDTO(UUID.randomUUID().toString(), role, role == UserRoleEnum.ADMIN ? OWNER_PASSWORD : null); }
@@ -289,18 +333,13 @@ class AccountProvisioningIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) migrate(connection, migration);
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
                 }
             }
-        }
-        private void migrate(Connection connection, String migration) throws Exception {
-            String source = Files.readString(Path.of("sql", migration));
-            if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-            source = source.replace("USE `polyhouse_db`;", "");
-            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
         }
         /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
         @Override

@@ -1,0 +1,64 @@
+server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
+  shutdown: graceful
+  tomcat:
+    # 容器限额下控制工作线程、任务排队和保持连接占用。
+    threads:
+      max: 16
+      min-spare: 2
+      max-queue-capacity: 32
+    max-connections: 64
+    accept-count: 16
+    connection-timeout: 5s
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 8s
+  threads:
+    virtual:
+      enabled: false
+  datasource:
+    # 生产同时校验数据库证书信任链和主机名。
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:4000}/${DB_NAME:polyhouse}?sslMode=VERIFY_IDENTITY&connectTimeout=3000&socketTimeout=5000&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 3000
+      validation-timeout: 1000
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      database: 0
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+      connect-timeout: 3s
+      timeout: 3s
+
+polyhouse:
+  # 单实例初始预算，允许短突发；持续速率和并发分别约束流量与在途工作。
+  api-limits:
+    api:
+      requests-per-minute: 480
+      burst: 16
+      concurrent: 6
+    login:
+      requests-per-minute: 30
+      burst: 3
+      concurrent: 1
+    sensitive:
+      requests-per-minute: 60
+      burst: 4
+      concurrent: 2
+  jwt:
+    secret: ${POLYHOUSE_JWT_SECRET:}
+
+logging:
+  level:
+    root: INFO
+    com.zaxxer.hikari: WARN

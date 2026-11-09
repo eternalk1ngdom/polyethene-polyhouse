@@ -14,6 +14,8 @@ import io.jsonwebtoken.JwtException;
 import jakarta.validation.Validator;
 import org.slf4j.*;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -24,49 +26,62 @@ import java.time.*;
 import java.util.*;
 import java.util.function.Supplier;
 
-/** 单独管理资料申请、精确版本审核/下架、配额与文件补偿，不接管登录、成长或账号封禁。 */
+/** 单独管理资料申请、精确版本审核/下架、配额与数据库持久化，不接管登录、成长或账号封禁。 */
 @Service public class ProfileModerationService {
     private static final Logger LOG=LoggerFactory.getLogger(ProfileModerationService.class);
     private static final ZoneId ZONE=ZoneId.of("Asia/Shanghai");
     private final UserMapper users; private final ProfileModerationMapper records;
     private final AuthRedisStore sessions;private final JwtProperties jwt;private final Validator validator;
-    private final PrivateProfileImages images;private final AvatarStorage publicImages;
+    private static final int AVATAR_LIMIT=5;
+    private static final int AVATAR_NONE=0,AVATAR_PENDING=1,AVATAR_REJECTED=2;
+    // 已提交事务的回调可能乱序，只推进次数。
+    private static final DefaultRedisScript<Long> ADVANCE_QUOTA=new DefaultRedisScript<>("""
+        local current = tonumber(redis.call('GET', KEYS[1])) or 0
+        local nextCount = tonumber(ARGV[1])
+        if nextCount > current then
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', 86400)
+        end
+        return 1
+        """,Long.class);
+    private final StringRedisTemplate redis;
     private final Clock clock;private final TransactionTemplate transaction;
-    /** 复用用户锁/会话契约；文件补偿通过事务回调处理，不能假装文件系统参与 MySQL 事务。 */
+    /** 复用用户锁和会话；Redis 只记录已提交次数，数据库保障并发与回滚。 */
     public ProfileModerationService(UserMapper users,ProfileModerationMapper records,AuthRedisStore sessions,
-        JwtProperties jwt,Validator validator,PrivateProfileImages images,AvatarStorage publicImages,Clock clock,
+        JwtProperties jwt,Validator validator,StringRedisTemplate redis,Clock clock,
         PlatformTransactionManager manager) {
         this.users=users;this.records=records;this.sessions=sessions;this.jwt=jwt;this.validator=validator;
-        this.images=images;this.publicImages=publicImages;this.clock=clock;transaction=new TransactionTemplate(manager);
+        this.redis=redis;this.clock=clock;transaction=new TransactionTemplate(manager);
     }
     /** 昵称提交只写申请，不回写公开字段；相同请求不重复计次。 */
     public ProfileSubmissionVO submitNickname(NicknameSubmissionDTO dto,String token) {
         validate(dto);return submit(ProfileField.NICKNAME,dto.requestId(),dto.nickname(),null,token);
     }
-    /* 仅同包头像入口可交付已重新编码的字节，防止成为公开的任意图片写入方法。 */
-    ProfileSubmissionVO submitAvatar(AvatarUploadDTO dto,byte[] jpeg,String token) {
-        validate(dto);return submit(ProfileField.AVATAR,dto.requestId(),null,jpeg,token);
+    /* 通过会话检查后再验证和散列有界图像。 */
+    ProfileSubmissionVO submitAvatar(AvatarSubmitDTO dto,String token) {
+        validate(dto);return submit(ProfileField.AVATAR,dto.requestId(),null,dto.avatarBase64(),token);
     }
-    private ProfileSubmissionVO submit(ProfileField kind,String requestId,String value,byte[] jpeg,String token) {
-        var claims=claims(token);String hash=digest(jpeg==null?value.getBytes(StandardCharsets.UTF_8):jpeg);
+    private ProfileSubmissionVO submit(ProfileField kind,String requestId,String value,String avatar,String token) {
+        var claims=claims(token);
         return tx(()->{
             User user=lockUser(claims.userId());requireActor(user,claims,false);
+            String hash=digest(avatar==null?value.getBytes(StandardCharsets.UTF_8):AvatarImageUtils.decode(avatar));
             var previous=records.byRequest(user.getId(),requestId);
             if(previous!=null) {
                 if(previous.kind()!=kind || !previous.contentHash().equals(hash))conflict();
                 return view(previous,user,remaining(user,kind));
             }
-            var state=state(user,kind);int remaining=remaining(user,kind);
+            var now=now();
+            var state=state(user,kind);int remaining=remaining(user,kind,now.toLocalDate());
             if(remaining<=0)throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,"今日该资料提交次数已用完");
             long version=Math.addExact(state.version(),1);
-            // 只在提交完成后删被替代图；新文件/数据库失败时旧待审申请仍可继续审核。
+            // 申请、字节和审计同一事务，任何一步失败都保留原待审图。
             for(var old:records.pending(user.getId(),kind))terminal(old,ProfileReviewStatus.SUPERSEDED,"已被新申请替代",user);
-            String key=jpeg==null?null:images.save(jpeg);
-            if(key!=null)afterRollback(()->images.deleteEventually(key));
+            if(avatar!=null)changed(records.setPendingAvatar(user.getId(),avatar,AVATAR_PENDING));
             changed(records.advance(user.getId(),kind,version));
-            var now=now();var s=new ProfileSubmission(IdWorker.getId(),user.getId(),user.getUsername(),kind,
-                ProfileReviewStatus.PENDING,version,requestId,value,hash,key,null,now,now.plusDays(7),null,null,user.getCredentialVersion());
+            var s=new ProfileSubmission(IdWorker.getId(),user.getId(),user.getUsername(),kind,
+                ProfileReviewStatus.PENDING,version,requestId,value,hash,null,now,now.plusDays(7),null,null,user.getCredentialVersion());
             changed(records.insert(s));audit(user,user.getId(),kind,s.id(),"SUBMIT",version,"提交资料审核");
+            if(avatar!=null)recordQuotaAfterCommit(user.getId(),now.toLocalDate(),AVATAR_LIMIT-remaining+1);
             return ProfileSubmissionVO.from(s,remaining-1);
         });
     }
@@ -93,9 +108,12 @@ import java.util.function.Supplier;
         return tx(()->{
             var pair=lockPair(claims.userId(),before.userId());User actor=pair[0],target=pair[1];requireActor(actor,claims,false);
             if(actor.getId()!=before.userId() && actor.getRole()!=UserRoleEnum.OWNER)throw new BusinessException(ErrorCode.FORBIDDEN);
-            var s=records.locked(id.id());if(s==null || s.kind()!=ProfileField.AVATAR || effective(s,target)!=ProfileReviewStatus.PENDING
-                || s.privateKey()==null)throw new BusinessException(ErrorCode.NOT_FOUND);
-            return images.read(s.privateKey());
+            var s=records.locked(id.id());
+            if(s==null || s.kind()!=ProfileField.AVATAR || effective(s,target)!=ProfileReviewStatus.PENDING)
+                throw new BusinessException(ErrorCode.NOT_FOUND);
+            String avatar=records.pendingAvatar(target.getId());
+            if(avatar==null)throw new BusinessException(ErrorCode.NOT_FOUND);
+            return AvatarImageUtils.decode(avatar);
         });
     }
     /** 仅从有效申请发布其已提交内容；过期、重复与旧版本审核返回冲突，绝不重复发布。 */
@@ -109,9 +127,9 @@ import java.util.function.Supplier;
             if(dto.approve()) {
                 String value=s.proposedValue();
                 if(s.kind()==ProfileField.AVATAR) {
-                    value=publicImages.save(AvatarImageUtils.reencode(images.read(s.privateKey())));
-                    String next=value,previous=target.getAvatar();afterRollback(()->publicImages.deleteEventually(next));
-                    afterCommit(()->deletePublicIfUnused(previous));
+                    value=records.pendingAvatar(target.getId());
+                    if(value==null)conflict();
+                    AvatarImageUtils.decode(value);
                 }
                 changed(records.updatePublic(target.getId(),s.kind(),value));
                 changed(records.publish(target.getId(),s.kind(),s.id()));
@@ -137,6 +155,7 @@ import java.util.function.Supplier;
             var pair=lockPair(claims.userId(),id.id());User actor=pair[0],target=pair[1];requireActor(actor,claims,true);
             if(target==null)throw new BusinessException(ErrorCode.NOT_FOUND);
             var state=state(target,dto.kind());String current=dto.kind()==ProfileField.AVATAR?target.getAvatar():target.getNickname();
+            if(dto.kind()==ProfileField.AVATAR)current=AvatarImageUtils.displaySource(current);
             if(state.version()!=dto.expectedVersion() || !Objects.equals(current,dto.expectedValue()))conflict();
             long version=state.version();
             if(dto.action()==ProfilePublicAction.KEEP) { if(state.verified())conflict(); }
@@ -144,7 +163,6 @@ import java.util.function.Supplier;
                 version=Math.addExact(version,1);String value=dto.kind()==ProfileField.AVATAR?null:defaultNickname(target);
                 for(var old:records.pending(target.getId(),dto.kind()))terminal(old,ProfileReviewStatus.INVALIDATED,"公开资料已下架，请重新提交",actor);
                 changed(records.advance(target.getId(),dto.kind(),version));changed(records.updatePublic(target.getId(),dto.kind(),value));
-                if(dto.kind()==ProfileField.AVATAR) { String previous=current;afterCommit(()->deletePublicIfUnused(previous)); }
                 current=value;
             }
             changed(records.publish(target.getId(),dto.kind(),dto.action()==ProfilePublicAction.KEEP?state.currentId():null));
@@ -152,7 +170,7 @@ import java.util.function.Supplier;
             return new PublishedProfileVO(Long.toString(target.getId()),target.getUsername(),dto.kind(),current,Long.toString(version),true,target.getStatus(),target.getRole());
         });
     }
-    /** 每分钟有限失效清理；查询缺表/数据库故障只安全记录，不删除可能仍在使用的文件。 */
+    /** 每分钟有限失效清理；清除待审字节和状态时继续使用同一事务和锁顺序。 */
     @Scheduled(initialDelay=60000,fixedDelay=60000)
     public void maintain() {
         try {
@@ -167,7 +185,6 @@ import java.util.function.Supplier;
                     return Boolean.TRUE;
                 });
             }
-            images.sweep(key->records.privateReferences(key)>0);
         } catch(RuntimeException e) { LOG.warn("Profile cleanup deferred: type={}",e.getClass().getSimpleName()); }
     }
     private ProfileSubmissionVO view(ProfileSubmission s,User user,int remaining) {
@@ -182,14 +199,21 @@ import java.util.function.Supplier;
     }
     private void terminal(ProfileSubmission s,ProfileReviewStatus status,String why,User actor) {
         changed(records.terminal(s.id(),status,why,now(),actor==null?null:actor.getId()));
-        if(s.privateKey()!=null)afterCommit(()->images.deleteEventually(s.privateKey()));
+        if(s.kind()==ProfileField.AVATAR) {
+            changed(records.setPendingAvatar(s.userId(),null,status==ProfileReviewStatus.REJECTED?AVATAR_REJECTED:AVATAR_NONE));
+        }
     }
     private ProfileFieldState state(User user,ProfileField kind) {
         records.initialize(user.getId(),kind,kind==ProfileField.AVATAR && user.getAvatar()==null);
         var state=records.state(user.getId(),kind);if(state==null)throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);return state;
     }
     private int remaining(User user,ProfileField kind) {
-        var today=LocalDate.ofInstant(clock.instant(),ZONE);int limit=kind==ProfileField.AVATAR?5:2;
+        return remaining(user,kind,now().toLocalDate());
+    }
+    private int remaining(User user,ProfileField kind,LocalDate today) {
+        int limit=kind==ProfileField.AVATAR?AVATAR_LIMIT:2;
+        // 缓存只用于已满额的快速拒绝。任何仍有余量的写入都由数据库计次约束。
+        if(kind==ProfileField.AVATAR && quotaExhausted(user.getId(),today))return 0;
         long used=records.used(user.getId(),kind,today.atStartOfDay(),today.plusDays(1).atStartOfDay());
         // 升级当天沿用旧头像成功次数，不能借新表把当日额度清零；不改写旧 ext_json 设置。
         if(kind==ProfileField.AVATAR && user.getExtJson()!=null && user.getExtJson().get("avatarUpload") instanceof Map<?,?> old
@@ -238,15 +262,23 @@ import java.util.function.Supplier;
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
         catch(NoSuchAlgorithmException e) { throw new IllegalStateException("SHA-256 unavailable",e); }
     }
-    private void deletePublicIfUnused(String value) { if(value!=null && records.publicReferences(value)==0)publicImages.deleteEventually(value); }
-    private void afterCommit(Runnable action) { after(true,action); }
-    private void afterRollback(Runnable action) { after(false,action); }
-    private void after(boolean committed,Runnable action) {
+    private String quotaKey(long userId,LocalDate date) { return "polyhouse:profile:avatar-quota:"+date+":"+userId; }
+    private boolean quotaExhausted(long userId,LocalDate date) {
+        try {
+            return Integer.toString(AVATAR_LIMIT).equals(redis.opsForValue().get(quotaKey(userId,date)));
+        } catch(DataAccessException e) {
+            LOG.warn("Avatar quota cache unavailable: type={}",e.getClass().getSimpleName());
+            return false;
+        }
+    }
+    private void recordQuotaAfterCommit(long userId,LocalDate date,int used) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCompletion(int status) {
-                // UNKNOWN 可能已经提交，不做破坏性补偿；私有孤儿在宽限后对照引用回收。
-                if(status==(committed?STATUS_COMMITTED:STATUS_ROLLED_BACK))try { action.run(); }
-                catch(RuntimeException e) { LOG.warn("Profile file cleanup deferred: type={}",e.getClass().getSimpleName()); }
+            @Override public void afterCommit() {
+                try {
+                    redis.execute(ADVANCE_QUOTA,List.of(quotaKey(userId,date)),Integer.toString(used));
+                } catch(DataAccessException e) {
+                    LOG.warn("Avatar quota cache update deferred: type={}",e.getClass().getSimpleName());
+                }
             }
         });
     }
