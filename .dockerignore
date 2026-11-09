@@ -1,0 +1,11 @@
+# 仅发送编译所需的源码及已确认的资源，避免带入本机配置、凭据和构建产物。
+**
+!polyhouse/pom.xml
+!polyhouse/src/main/java/**/*.java
+!polyhouse/src/main/resources/application.yml
+!polyhouse/src/main/resources/application-prod.yml
+!polyhouse/src/main/resources/redis/auth_remove_session.lua
+!polyhouse/src/test/java/**/*.java
+!polyhouse/src/test/resources/avatar/*.base64
+**/.*/**
+**/target/**

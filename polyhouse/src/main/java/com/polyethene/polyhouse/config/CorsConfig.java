@@ -5,6 +5,8 @@ import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.result.Result;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.ServerHttpResponse;
@@ -24,12 +26,18 @@ public class CorsConfig {
 
     /** 在 MVC 鉴权前处理预检，拒绝跨域时仍使用统一 JSON，禁止浏览器携带 Cookie 凭据。 */
     @Bean
-    public CorsFilter apiCorsFilter(ObjectMapper mapper) {
+    public CorsFilter apiCorsFilter(ObjectMapper mapper, Environment environment) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("https://eternalk1ngdom.github.io"));
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://127.0.0.1:5173",
-                "chrome-extension://*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        String pagesOrigin = "https://eternalk1ngdom.github.io";
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            configuration.setAllowedOrigins(List.of(pagesOrigin, "http://localhost:5173", "http://localhost:3000"));
+            configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        } else {
+            configuration.setAllowedOrigins(List.of(pagesOrigin));
+            configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://127.0.0.1:5173",
+                    "chrome-extension://*"));
+            configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        }
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setAllowCredentials(false);
         // 只缓存浏览器预检许可一小时，不缓存实际请求的登录状态或角色判断。

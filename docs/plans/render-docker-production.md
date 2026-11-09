@@ -1,6 +1,6 @@
 # Render 后端生产适配与容器化计划
 
-2026-11-09 完成方案审阅，本轮交付计划和交接，待在新会话实施。
+2026-11-09 完成方案审阅。实施及实测结果见 [dev.13](../dev-log/v1.0-dev.13.md)。
 
 项目根目录 `E:\project\java\polyethene-polyhouse`，后端位于 `polyhouse/`。规划基线为 `feature/avatar-compression-db` 的 `21347b1`，`dev` 和 `main` 均为 `0c353c3`。新会话先核对实际状态。当前特性分支包含数据库头像、统一建表、屋主初始化及双端登录，可以直接作为本地容器验收的基础。
 
@@ -23,7 +23,7 @@
 ### JVM 和端口
 
 - 使用 JSON 形式的 `ENTRYPOINT` 直接启动 Java，容器可以把停止信号交给 JVM。由 Spring 绑定运行时端口，`EXPOSE 8080` 只记录镜像默认端口。Render 默认通过 `PORT=10000` 转发，也要验证自定义端口。 [Dockerfile 启动语义](https://docs.docker.com/reference/dockerfile/#entrypoint) · [Render 端口绑定](https://render.com/docs/web-services#port-binding)
-- 初始参数为 `-Xms64m -Xmx224m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:MaxMetaspaceSize=128m -Xss512k -Dspring.profiles.active=prod`。原提议的 65% 堆上限约为 333 MiB，与 128 MiB 元空间上限相加后留给堆外的预算太窄。实际通过容器峰值判断是否需要调整堆或 JVM 直接内存上限。线程栈、JIT、直接缓冲区和原生分配均计入验收。 [JDK 21 JVM 参数](https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html)
+- 参数为 `-Xms64m -Xmx224m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:TieredStopAtLevel=1 -XX:MaxMetaspaceSize=128m -Xss512k -Dspring.profiles.active=prod`。224 MiB 堆为元空间、线程栈、JIT、直接缓冲区及其他原生分配留出预算。一级 JIT 限制冷启动时的编译开销，依据见 [dev.13](../dev-log/v1.0-dev.13.md)。容器验收读取内核记录的总内存峰值。 [JDK 21 JVM 参数](https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html)
 - 生产 profile 先关闭虚拟线程，让 Tomcat 工作线程限制生效。建议从最大 16、最小空闲 2 开始，同时控制连接和等待队列。Hikari 先用最大 3、最小空闲 1。连接池等待、JDBC 建连与读超时、Redis 命令超时分别验证。连接最大寿命按 TiDB 实际断开策略和测试结果确定，避免无依据地每三分钟换连接。 [Spring Boot 3.3 配置](https://docs.spring.io/spring-boot/3.3/appendix/application-properties/) · [HikariCP 参数](https://github.com/brettwooldridge/HikariCP#frequently-used)
 
 ### 外部连接和凭据
@@ -33,7 +33,7 @@
 | `PORT` | Render 注入容器的监听端口。本地容器缺省用 8080。 |
 | `DB_HOST`、`DB_PORT`、`DB_NAME` | TiDB 连接面板提供的主机和端口，默认端口 4000，目标数据库为 `polyhouse`。 |
 | `DB_USERNAME`、`DB_PASSWORD` | 沿用项目已有变量命名。使用完整 TiDB 用户名及应用运行凭据，和网站屋主、数据库初始化权限分开。 |
-| `REDIS_HOST`、`REDIS_PORT`、`REDIS_USERNAME`、`REDIS_PASSWORD` | Upstash 的原生 Redis TCP 连接信息。生产启用 TLS，按控制台要求填写用户名，并使用可写 Token。 |
+| `REDIS_HOST`、`REDIS_PORT`、`REDIS_USERNAME`、`REDIS_PASSWORD` | Upstash 的原生 Redis TCP 连接信息。生产启用 TLS，端口缺省 6379，用户名缺省 `default`。按控制台要求填写并使用可写 Token。 |
 | `POLYHOUSE_JWT_SECRET` | 生产签名密钥，按现有契约使用 32 字节随机值的标准 Base64。生产启动时验证，实例重启复用同一密钥。 |
 
 - TiDB 使用 JDBC `sslMode=VERIFY_IDENTITY`，同时校验 CA 和主机名。确认实际镜像信任链和目标端点，不在构建镜像时连接数据库。Upstash 使用已有 Lettuce 客户端，验证 TLS、写入、删除、Lua 会话撤销和 TTL。 [TiDB JDBC](https://docs.pingcap.com/developer/dev-guide-sample-application-java-jdbc/) · [Upstash TCP 连接](https://upstash.com/docs/redis/howto/connect-client)
@@ -42,7 +42,7 @@
 ### CORS、请求体与健康检查
 
 - 生产 CORS 使用精确来源 `https://eternalk1ngdom.github.io`、`http://localhost:5173` 和 `http://localhost:3000`，允许 `GET, POST, PUT, DELETE, OPTIONS` 以及 `Authorization`、`Content-Type`、`Accept`。确认合法的预检在鉴权前完成，未知来源被拒绝，实际受保护请求仍需 Token。当前登录使用 Bearer，建议保留 `allowCredentials=false`。Cookie 登录如有明确需求，再评估单独的凭据与跨站安全契约。 [现有 CORS 实现](../../polyhouse/src/main/java/com/polyethene/polyhouse/config/CorsConfig.java) · [Fetch 跨域规范](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials)
-- 保留关闭 multipart 的现状。头像上传和审核已经使用 JSON，先清点最大合法请求，再定生产请求体上限。若实现生产请求体限制，要在 JSON 解析前拒绝超限并返回 413，同时覆盖带 `Content-Length` 与分块传输，保留正常 CORS 和现有 Base64 字段校验。
+- 保留关闭 multipart 的现状。生产 `/api/*` 请求体上限为 384 KiB，覆盖最大 60,023 字符字段的 JSON 转义和其他字段。CORS 先处理预检，体积检查随后在 JSON 解析前拒绝超限并返回 413，覆盖带 `Content-Length` 与分块传输，保留 Base64 字段校验。
 - Render 首次启动可用默认 TCP 健康检查验证监听。若需要 HTTP 就绪检查，使用低成本的专用路径并验收实际语义。TiDB 与 Redis 连通性通过独立冒烟核对，避免每次探活都调用外部服务。 [Render 健康检查](https://render.com/docs/health-checks)
 
 ## 3. 本地验收
@@ -51,6 +51,18 @@
 2. 从仓库根运行 `docker build -t polyhouse:prod .`。使用 `--memory=512m --memory-swap=512m --cpus=0.1` 和临时凭据运行镜像。验证默认端口、覆盖 `PORT=10000`、有效 profile、非 root 用户和正常停止。核对缺失或无效生产配置时的提示，并检查日志是否包含敏感值。
 3. 用隔离实例实测 CORS 正反例和手机/电脑登录、单端退出、头像提交和审核、Redis 会话和额度。分别测容器冷启动、重复重启、正常并发及异常大请求的表现。记录总内存峰值、启动时间、响应耗时、退出码及容器 `OOMKilled` 状态。高位持续贴近上限或出现 OOM、重启、长时间阻塞时先调整预算和并发再验。
 4. Docker 引擎或隔离外部服务不可用时，保留可完成的测试证据并标明阻塞。容器在 512 MB 限额下的运行结果必须实际测得。
+
+在仓库根目录构建镜像。以下示例要求先准备同一 Docker 网络上的隔离 MySQL 和 Redis、临时凭据及受信任的 TLS 证书。使用本机测试 CA 时，运行期间只读挂载含该 CA 的 Java 信任库，并用 `JAVA_TOOL_OPTIONS` 指定路径。
+
+```powershell
+git check-ignore .env.render.local
+docker build -t polyhouse:prod .
+docker run -d --name polyhouse-prod-smoke --network polyhouse-smoke --memory=512m --memory-swap=512m --cpus=0.1 --env-file .env.render.local -e PORT=10000 -p 127.0.0.1:10000:10000 polyhouse:prod
+docker exec polyhouse-prod-smoke sh -c 'cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.swap.max /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.peak'
+docker stop -t 12 polyhouse-prod-smoke
+docker inspect -f '{{.State.ExitCode}} {{.State.OOMKilled}}' polyhouse-prod-smoke
+docker rm polyhouse-prod-smoke
+```
 
 ## 4. 线上验证与回退
 
