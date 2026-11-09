@@ -8,7 +8,7 @@
 
 - Render 新加坡免费 Web Service 运行 Spring Boot，按 0.1 CPU、512 MB 的实例预算验收。连接 TiDB Cloud 和 Upstash Redis 的新加坡实例，前端继续由 GitHub Pages 托管。免费层以小范围试用为目标，冷启动和服务配额属于实际验收条件。
 - 本地开发继续读取现有 `application.yml` 与私有运行预设。当前没有 `application-dev.yml` 或显式默认 `dev`，保留这个行为。生产覆盖项单独放在 `polyhouse/src/main/resources/application-prod.yml`，容器启动时激活。
-- 延用现有 JDK、Maven 项目和依赖版本。用户已核对 TiDB Cloud 的 21 条 CHECK，云端屋主初始化日志显示提交成功。上线工作复用现有云库，数据或初始化变更需另行授权。
+- 沿用现有 JDK、Maven 项目和依赖版本。用户后续仅批准内嵌 Tomcat 升至 10.1.61。用户已核对 TiDB Cloud 的 21 条 CHECK，云端屋主初始化日志显示提交成功。上线工作复用现有云库，数据或初始化变更需另行授权。
 - 本地实现、实际容器验证、远端部署、前端切换分步推进。推送、PR、合并、远端设置变更、云资源操作和发布分别按用户授权执行。其他 P5 项目仍沿用原批准边界。
 
 ## 2. 构建与生产配置
