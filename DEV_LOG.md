@@ -3,7 +3,7 @@
 更新时间：2026-11-09（Asia/Shanghai）。**v1.0 开发中，未正式发布**。
 
 - 当前：[v1.0-dev.13 云端架构与头像改造](docs/dev-log/v1.0-dev.13.md)，先读“当前摘要”。
-- 基线：从 dev `0c353c3` 建立 `feature/avatar-compression-db`；GitHub Pages 已部署前端，云后端待验收。
+- 基线：候选版本已合入 dev `9606cd4`。GitHub Pages 根站已发布并配置 Render API，待用户实测线上登录和开户。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
 - 入口：[AGENTS.md](AGENTS.md) / [README.md](README.md) / [设计索引](docs/design/blueprint-index.md) / [计划索引](docs/plans/README.md)。不批量加载历史。
