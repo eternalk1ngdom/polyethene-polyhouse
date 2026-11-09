@@ -2,6 +2,8 @@
 
 当前架构与已完成事项见 [v1.0-dev.13](v1.0-dev.13.md)。本清单替代早期主机采购和本机穿透方案。
 
+本地容器实施和分阶段放行见 [Render 后端生产适配计划](../plans/render-docker-production.md)。
+
 - [x] GitHub Pages 已通过 Actions 构建前端。静态资源使用仓库路径，页面使用 Hash 路由。
 - [ ] Render 部署 Spring Boot，验证监听 `PORT`、冷启动与应用内存；核对计划、用量上限和休眠规则。凭据经服务端环境变量注入。
 - [ ] 使用证书校验的 TLS 连接目标 TiDB Cloud。按[数据库初始化说明](../operations/database-bootstrap.md)预检 CHECK/外键，执行统一建表脚本，在隔离云库验证唯一屋主、登录、头像审批与记录追溯。保留已有云库，确认切换目标后再更新 Render 连接。

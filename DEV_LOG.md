@@ -25,7 +25,7 @@
 - 本机库已备份、试还原并重建。用户已核对 TiDB Cloud 的 21 条 CHECK，云端屋主初始化日志显示提交成功。[空库基线与屋主初始化](docs/operations/database-bootstrap.md)
 - 妙压页眉分类统一为“图片处理”。本轮浏览器复核两工具下载与主要页面入口，前端 336 项、后端 368 项通过。
 - 网页登录按电脑和移动浏览器发送 `PC` / `H5`，复用现有独立会话，隔离 HTTP 验证两端可同时在线。
-- 下一步：按上线验收清单准备 Render、TiDB Cloud 与 Upstash，实际云环境验证和发布按授权执行。
+- 下一步：[Render 生产适配与容器化计划](docs/plans/render-docker-production.md)已整理，待本地实施和限额验收，远端发布另行授权。
 
 ## 历史索引（按需）
 
