@@ -25,7 +25,7 @@
 - 本机库已备份、试还原并重建。用户已核对 TiDB Cloud 的 21 条 CHECK，云端屋主初始化日志显示提交成功。[空库基线与屋主初始化](docs/operations/database-bootstrap.md)
 - 妙压页眉分类统一为“图片处理”。本轮浏览器复核两工具下载与主要页面入口，前端 336 项、后端 368 项通过。
 - 网页登录按电脑和移动浏览器发送 `PC` / `H5`，复用现有独立会话，隔离 HTTP 验证两端可同时在线。
-- Render 候选后端已通过屋主登录和刷新恢复。用户在等待实例空闲后再次登录成功，体感约一分钟，实际唤醒待日志确认。GitHub Pages 接入及其余放行项目见[上线清单](docs/dev-log/launch-preparation.md)。
+- Render 候选后端已通过屋主登录和刷新恢复。空闲测试登录成功，体感约一分钟，日志确认新实例启动，触发原因待核对。GitHub Pages 接入及其余放行项目见[上线清单](docs/dev-log/launch-preparation.md)。
 
 ## 历史索引（按需）
 
