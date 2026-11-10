@@ -6,6 +6,7 @@
 
 - [x] 项目子路径已由 main `aaa4ddc` 重新发布，构建注入 Render API 地址。已核对公开页面和脚本。[项目站发布记录](https://github.com/eternalk1ngdom/polyethene-polyhouse/actions/runs/42801238519)
 - [x] 独立 GitHub Pages 根站固定构建 dev `9606cd4`，注入 Render API 地址，公开首页返回 HTTP 200。[根站发布记录](https://github.com/eternalk1ngdom/eternalk1ngdom.github.io/actions/runs/42626230039)
+- [x] Render 已上线 main `aaa4ddc`。用户确认部署为 Live，发布后账号列表正常。[主线合并与发布记录](v1.0-dev.13.md#候选版本合入-main2026-11-10)
 - [ ] Render 部署 Spring Boot，验证监听 `PORT`、冷启动与应用内存；核对计划、用量上限和休眠规则。凭据经服务端环境变量注入。
 - [ ] 验证 Render 入站代理覆盖可信来源标识，来源限流能抵抗伪造转发头和直连绕过。基于[单实例限额](../plans/render-docker-production.md#单实例-api-限额)实测共享地址、正常突发和超限恢复，校准公网配额。Tomcat 10.1.61 候选镜像已在本地验证，上线时核对 Render 实际运行版本。
 - [ ] 使用证书校验的 TLS 连接目标 TiDB Cloud。按[数据库初始化说明](../operations/database-bootstrap.md)预检 CHECK/外键，执行统一建表脚本，在隔离云库验证唯一屋主、登录、头像审批与记录追溯。保留已有云库，确认切换目标后再更新 Render 连接。
