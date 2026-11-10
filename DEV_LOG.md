@@ -2,7 +2,7 @@
 
 更新时间：2026-11-10（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[v1.0-dev.13 云端架构与头像改造](docs/dev-log/v1.0-dev.13.md)，先读“当前摘要”。
+- 当前：[v1.0-dev.14 框架优化与文档重塑](docs/dev-log/v1.0-dev.14.md)。先读当前摘要和[阶段计划](docs/plans/framework-optimization.md)，首项是 README。
 - 基线：候选版本经试用后由 dev `9606cd4` 合入 main `aaa4ddc`。Render 已部署该提交，用户确认公开前端可登录且账号列表正常。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
@@ -32,6 +32,7 @@
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.13](docs/dev-log/v1.0-dev.13.md) | 头像入库、云端适配及 Render 与 GitHub Pages 发布验收 |
 | [dev.12](docs/dev-log/v1.0-dev.12.md) | 上线前质量收敛、前端回归与阶段合并 |
 | [dev.11](docs/dev-log/v1.0-dev.11.md) | 妙压 T1～T4、取消保护、隔离集成与 Git 同步 |
 | [dev.10](docs/dev-log/v1.0-dev.10.md) | 妙替 R1～R7、独立复审与主线同步 |

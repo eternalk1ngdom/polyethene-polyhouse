@@ -4,14 +4,15 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
+| [框架优化与文档重塑](framework-optimization.md) | 计划已拟定，下个会话先做 F1 README。结构试点待证据与确认 | [dev.14](../dev-log/v1.0-dev.14.md) |
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
 | [P5 前：个人中心与管理工作台整理](pre-p5-account-workspace-ui.md) | U0～U4 已收口；普通构建/测试与真实隔离页面组合验收通过；不代表 P5/部署完成 | [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
 | [妙替功能深化：本地词库、分享与命中预览](poly-replace-deepening.md) | R1～R7 已完成并独立复审，草稿历史保护已修复；R4 不合并，R5 确认来源，R6 全文统计与有界定位；R7 文件/目录统一勾选，500 候选、无默认排除、处理限额不变 | [v1.0-dev.10](../dev-log/v1.0-dev.10.md) |
 | [妙压：图片体积卡位（TargetKB）](target-kb-compression.md) | T1～T4 已完成；独立取消保护修复已提交，隔离试合与验证完成，2026-11-03 经用户确认已合入/同步 main；T5 已否决 | [v1.0-dev.11](../dev-log/v1.0-dev.11.md) |
 | [上线前质量收敛](prelaunch-quality-hardening.md) | 阶段成果已合入 dev；验收边界见阶段日志 | [dev.12](../dev-log/v1.0-dev.12.md) |
-| [Render 后端生产适配与容器化](render-docker-production.md) | 本地实施及容器限额验收见日志，云端验证与发布待授权 | [dev.13](../dev-log/v1.0-dev.13.md) |
-| [云端上线验收](../dev-log/launch-preparation.md) | GitHub Pages 已部署，云后端待验收 | [dev.13](../dev-log/v1.0-dev.13.md) |
+| [Render 后端生产适配与容器化](render-docker-production.md) | 本地容器和主线部署已完成，云端专项状态见验收清单 | [dev.13](../dev-log/v1.0-dev.13.md) |
+| [云端上线验收](../dev-log/launch-preparation.md) | GitHub Pages 已发布，Render 主线部署和账号列表已验收 | [dev.13](../dev-log/v1.0-dev.13.md) |
 
 2026-10-31 决定：上线/部署相关计划整体搁置，后端依赖升级方案已被用户否定。2026-11-01：U4、文档治理与主线整合完成，妙替 R1～R3 已独立验收。2026-11-02：R4 导出及仅替换全部导入分别批准、独立验收；用户明确不需要合并。后续 R5 按三项交互选择独立交付；R6 两个闭环已交付当前/整批逐条统计、有界高亮/删除标记与前后定位；R7 已按三项选择交付统一手选清单，500 候选且无默认排除；不恢复上线。
 
