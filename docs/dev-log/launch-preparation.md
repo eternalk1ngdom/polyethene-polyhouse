@@ -4,7 +4,7 @@
 
 本地容器实施和分阶段放行见 [Render 后端生产适配计划](../plans/render-docker-production.md)。
 
-- [x] GitHub Pages 已通过 Actions 构建前端。静态资源使用仓库路径，页面使用 Hash 路由。
+- [x] 项目子路径已由 main `aaa4ddc` 重新发布，构建注入 Render API 地址。已核对公开页面和脚本。[项目站发布记录](https://github.com/eternalk1ngdom/polyethene-polyhouse/actions/runs/42801238519)
 - [x] 独立 GitHub Pages 根站固定构建 dev `9606cd4`，注入 Render API 地址，公开首页返回 HTTP 200。[根站发布记录](https://github.com/eternalk1ngdom/eternalk1ngdom.github.io/actions/runs/42626230039)
 - [ ] Render 部署 Spring Boot，验证监听 `PORT`、冷启动与应用内存；核对计划、用量上限和休眠规则。凭据经服务端环境变量注入。
 - [ ] 验证 Render 入站代理覆盖可信来源标识，来源限流能抵抗伪造转发头和直连绕过。基于[单实例限额](../plans/render-docker-production.md#单实例-api-限额)实测共享地址、正常突发和超限恢复，校准公网配额。Tomcat 10.1.61 候选镜像已在本地验证，上线时核对 Render 实际运行版本。
