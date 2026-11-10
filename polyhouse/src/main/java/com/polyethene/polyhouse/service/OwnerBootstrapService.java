@@ -1,11 +1,13 @@
 package com.polyethene.polyhouse.service;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.mapper.OwnerBootstrapMapper;
 import com.polyethene.polyhouse.model.entity.OwnerBootstrapRecord;
 import com.polyethene.polyhouse.model.entity.OwnerBootstrapTarget;
+import com.polyethene.polyhouse.utils.PasswordUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,10 +45,7 @@ public class OwnerBootstrapService {
     @Transactional(rollbackFor = Exception.class)
     public boolean initialize(long userId, String username, String operator) {
         validate(userId, username);
-        if (operator == null || operator.isBlank() || operator.length() > 128
-                || operator.codePoints().anyMatch(Character::isISOControl)) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "缺少有效的操作系统执行人信息");
-        }
+        validateOperator(operator);
         try {
             schema();
             OwnerBootstrapRecord record = mapper.lockRecord();
@@ -68,13 +67,39 @@ public class OwnerBootstrapService {
         }
     }
 
+    /** 空库开户与首次审计同事务提交。新账号没有旧会话，无需调用 Redis。 */
+    @Transactional(rollbackFor = Exception.class)
+    public long create(String username, String password, String operator) {
+        long id = IdWorker.getId();
+        validate(id, username);
+        validateOperator(operator);
+        String hash = PasswordUtils.hashPassword(password);
+        try {
+            schema();
+            OwnerBootstrapRecord record = mapper.lockRecord();
+            if (record == null) throw unavailable();
+            if (record.userId() != null || mapper.lockFirstUserId() != null) {
+                throw new BusinessException(ErrorCode.CONFLICT, "仅允许在没有用户和初始化记录的空库创建屋主");
+            }
+            if (mapper.insertOwner(id, username, hash, "屋主", UserRoleEnum.OWNER) != 1
+                    || mapper.recordInitialization(id, username, UserRoleEnum.OWNER, operator) != 1) {
+                throw unavailable();
+            }
+            return id;
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ErrorCode.CONFLICT, "账号或屋主槽位已被占用");
+        } catch (DataAccessException exception) {
+            throw unavailable();
+        }
+    }
+
     private void schema() {
         String expression = mapper.guardExpression();
         // MySQL 元数据还会转义字符串引号；只规范已知展示格式后精确比较，不能放宽为“存在同名列”即可。
         String normalized = expression == null ? "" : expression.replaceAll("[\\s`()]+", "")
                 .replace("_utf8mb4", "").replace("\\'", "'");
         if (mapper.uniqueGuardCount() != 1 || !normalized.equalsIgnoreCase("casewhenrole='OWNER'then1elseNULLend")) {
-            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "屋主数据库保障未就绪，请先核对 004 迁移");
+            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "屋主数据库保障未就绪，请核对唯一槽位和索引");
         }
     }
 
@@ -100,6 +125,13 @@ public class OwnerBootstrapService {
         // 注册后数据库账号固定为小写 ASCII；拒绝自动裁剪或纠正，避免运维误认目标。
         if (userId <= 0 || username == null || !username.matches("[a-z0-9_]{4,32}")) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "编号必须为正整数，用户名须按个人中心的小写账号原样填写");
+        }
+    }
+
+    private static void validateOperator(String operator) {
+        if (operator == null || operator.isBlank() || operator.length() > 128
+                || operator.codePoints().anyMatch(Character::isISOControl)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "缺少有效的操作系统执行人信息");
         }
     }
 

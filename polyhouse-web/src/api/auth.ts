@@ -132,16 +132,33 @@ function decodeLogin(value: unknown): LoginResponse {
   }
 }
 
-/** 浏览器统一使用 PC 会话，屏幕尺寸变化不切换服务端终端编号。 */
+/** 登录时选择会话槽位，缩放窗口不改变设备类别。移动端标识只用于会话分组。 */
+function browserClientType(): 'PC' | 'H5' {
+  const { userAgent = '', maxTouchPoints = 0 } = globalThis.navigator ?? {}
+  // iPad Safari 可能使用 Mac UA。多点触控仅作为这个兼容场景的提示。
+  const mobile = /\b(?:Android|iPhone|iPad|iPod|Mobile)\b/i.test(userAgent)
+  const desktopModeIPad = /\bMacintosh\b/i.test(userAgent) && maxTouchPoints > 1
+  return mobile || desktopModeIPad ? 'H5' : 'PC'
+}
+
+/** 两类浏览器分别占用现有 PC / H5 会话，默认仍是 PC。 */
 export async function login(request: LoginRequest): Promise<LoginResponse> {
   try {
     return await apiRequest(
-      { method: 'POST', url: '/auth/login', data: { ...request, clientType: 'PC' } },
+      {
+        method: 'POST',
+        url: '/auth/login',
+        // 首笔登录可能还要建立存储连接，等待预算仅对登录请求放宽。
+        timeout: 30_000,
+        data: { ...request, clientType: browserClientType() },
+      },
       decodeLogin,
     )
   } catch (error: unknown) {
     if (error instanceof ApiError && error.sessionExpired)
       throw new ApiError('账号或密码错误，请重新输入', 401, error.code)
+    if (error instanceof ApiError && error.status === 0)
+      throw new ApiError('本次登录未收到结果，请稍后重试')
     throw error
   }
 }
@@ -173,9 +190,13 @@ export interface AvatarChange {
   /** 今日剩余提交额度。 */
   remainingToday: number
 }
-/** 公开头像地址仅允许本项目版本化资源。 */
-export function isAvatarPath(value: unknown): value is string {
-  return typeof value === 'string' && /^\/api\/media\/avatars\/[a-f0-9]{32}\.jpg$/.test(value)
+/** 只允许服务端生成的有界 WebP data URL。 */
+export function isAvatarSource(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 27_331 &&
+    /^data:image\/webp;base64,UklGR[A-Za-z0-9+/]+={0,2}$/.test(value)
+  )
 }
 /** UUID 由浏览器安全随机源产生，支持普通 IP 的开发上下文。 */
 export function newProfileRequestId(): string {
@@ -186,15 +207,20 @@ export function newProfileRequestId(): string {
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
+interface AvatarSubmitRequest {
+  /** 裁剪后的 WebP 字节，按标准 Base64 编码。 */
+  avatarBase64: string
+  /** 同一意图重试使用同一个编号。 */
+  requestId: string
+}
+
 /** 同一图像意图沿用请求号；旧响应没有申请字段时拒绝，不能误报已发布。 */
 export function uploadAvatar(
-  file: Blob,
+  avatarBase64: string,
   token: string,
   requestId = newProfileRequestId(),
 ): Promise<AvatarChange> {
-  const data = new FormData()
-  data.append('file', file, 'avatar.jpg')
-  data.append('requestId', requestId)
+  const data: AvatarSubmitRequest = { avatarBase64, requestId }
   return apiRequest(
     { method: 'POST', url: '/auth/avatar/submissions', data },
     (value) => {

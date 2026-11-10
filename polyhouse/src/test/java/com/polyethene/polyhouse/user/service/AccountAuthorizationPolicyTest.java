@@ -20,7 +20,7 @@ class AccountAuthorizationPolicyTest {
             for (UserRoleEnum target : values()) {
                 assertThat(AccountAuthorizationPolicy.canBan(actor, target)).isEqualTo(bans.get(actor).contains(target));
                 assertThat(AccountAuthorizationPolicy.canCreate(actor, target))
-                        .isEqualTo(actor == OWNER && Set.of(USER, ADMIN).contains(target));
+                        .isEqualTo(actor == OWNER && Set.of(USER, ADMIN, INSIDER).contains(target));
                 assertThat(AccountAuthorizationPolicy.canRecoverAccount(actor, target))
                         .isEqualTo(actor == OWNER && target != OWNER);
             }

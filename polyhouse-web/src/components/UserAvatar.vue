@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElAvatar } from 'element-plus'
 import { computed } from 'vue'
-import { isAvatarPath } from '../api/auth'
+import { isAvatarSource } from '../api/auth'
 import { avatarInitial } from '../utils/userPresentation'
 
 /** 仅加载本项目已处理的头像；空值、旧第三方默认图和加载失败都显示昵称首字。 */
@@ -14,7 +14,7 @@ interface Props {
   src?: string | null
 }
 const props = withDefaults(defineProps<Props>(), { size: 48, src: null })
-const safeSource = computed(() => (isAvatarPath(props.src) ? props.src : undefined))
+const safeSource = computed(() => (isAvatarSource(props.src) ? props.src : undefined))
 </script>
 
 <template>

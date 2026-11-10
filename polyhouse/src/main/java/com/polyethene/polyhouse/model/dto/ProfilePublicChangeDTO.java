@@ -1,6 +1,7 @@
 package com.polyethene.polyhouse.model.dto;
 import com.polyethene.polyhouse.common.constant.*;
 import jakarta.validation.constraints.*;
+import com.polyethene.polyhouse.utils.AvatarImageUtils;
 /** 历史保留或下架必须精确匹配当前展示，避免旧清单处置新内容。
  * @param kind 仅 NICKNAME/AVATAR
  * @param expectedVersion 管理列表中的字段版本
@@ -9,5 +10,5 @@ import jakarta.validation.constraints.*;
  * @param reason 必填必要原因
  */
 public record ProfilePublicChangeDTO(@NotNull ProfileField kind, @NotNull @PositiveOrZero Long expectedVersion,
-        @Size(max=255) String expectedValue, @NotNull ProfilePublicAction action,
+        @Size(max=AvatarImageUtils.MAX_BASE64_LENGTH + 23) String expectedValue, @NotNull ProfilePublicAction action,
         @NotBlank @Size(max=200) String reason) { }

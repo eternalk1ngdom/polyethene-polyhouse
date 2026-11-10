@@ -37,7 +37,16 @@ public class User {
 
     private String nickname;
 
+    /** 生效头像的原始 WebP Base64；旧路径仅供离线迁移核对。 */
     private String avatar;
+
+    /** 待审图片只由审核查询读取，避免进入常规账号查询和认证响应。 */
+    @TableField(select = false, insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private String pendingAvatar;
+
+    /** 0 表示没有待审，1 表示待审，2 表示最近一次被驳回。 */
+    @TableField(select = false, insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Integer avatarStatus;
 
     /** 使用已有枚举的 @EnumValue 存取语义字符串，不能将权限权重写入 role 列。 */
     private UserRoleEnum role;

@@ -3,12 +3,13 @@ package com.polyethene.polyhouse.mapper;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.model.entity.OwnerBootstrapRecord;
 import com.polyethene.polyhouse.model.entity.OwnerBootstrapTarget;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-/** 只为本机运维命令提供绑定参数的最小读写，不暴露 HTTP 入口。 */
+/** 为独立运维命令提供绑定参数的最小读写，不暴露 HTTP 入口。 */
 @Mapper
 public interface OwnerBootstrapMapper {
     /** 必须是预期的单列唯一索引；同名的普通/组合索引不能冒充唯一性保障。 */
@@ -49,6 +50,16 @@ public interface OwnerBootstrapMapper {
     /** 普通快照可能在等待初始化锁前形成；实际执行使用当前读核对最新屋主。 */
     @Select("SELECT id FROM sys_user WHERE owner_slot = 1 FOR UPDATE")
     Long lockOwnerId();
+
+    /** 检查是否有任意用户，软删除账号也表示此库已使用。 */
+    @Select("SELECT id FROM sys_user ORDER BY id LIMIT 1 FOR UPDATE")
+    Long lockFirstUserId();
+
+    /** 初始屋主只写账号和哈希，成长、头像和账号状态使用与其他用户相同的表默认值。 */
+    @Insert("INSERT INTO sys_user (id, username, password_hash, nickname, role) "
+            + "VALUES (#{id}, #{username}, #{passwordHash}, #{nickname}, #{role})")
+    int insertOwner(@Param("id") long id, @Param("username") String username, @Param("passwordHash") String passwordHash,
+                    @Param("nickname") String nickname, @Param("role") UserRoleEnum role);
 
     /** 只修改角色，既有资料、密码及成长余额均不覆盖；唯一索引兜底其他写入路径。 */
     @Update("UPDATE sys_user SET role = #{ownerRole} WHERE id = #{id} AND role = #{previousRole} "

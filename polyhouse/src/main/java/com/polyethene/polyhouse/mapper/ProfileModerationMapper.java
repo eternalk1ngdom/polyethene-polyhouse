@@ -10,7 +10,7 @@ import java.util.List;
 @Mapper public interface ProfileModerationMapper {
     /** 内部固定投影不含密码/IP/扩展 JSON。 */
     String SELECT = "SELECT s.id,s.user_id,u.username,s.kind,s.status,s.version,s.request_id,s.proposed_value,"
-        + "s.content_hash,s.private_key,s.reason,s.created_at,s.expires_at,s.reviewed_at,s.reviewer_id,s.credential_version "
+        + "s.content_hash,s.reason,s.created_at,s.expires_at,s.reviewed_at,s.reviewer_id,s.credential_version "
         + "FROM sys_profile_submission s JOIN sys_user u ON u.id=s.user_id ";
     /** 队列与计数共用有效性条件，封禁再解封也无法恢复旧申请。 */
     String QUEUE = "<where> s.status='PENDING' AND s.expires_at &gt; #{now} AND u.deleted=0 AND u.status=1 "
@@ -41,11 +41,11 @@ import java.util.List;
     @Select("SELECT COUNT(*) FROM sys_profile_submission WHERE user_id=#{uid} AND kind=#{kind} AND created_at >= #{start} AND created_at < #{end}")
     long used(@Param("uid") long uid,@Param("kind") ProfileField kind,@Param("start") LocalDateTime start,@Param("end") LocalDateTime end);
     /** 申请与审计同事务，指纹只用于同意图校验，不可替代鉴权。 */
-    @Insert("INSERT INTO sys_profile_submission(id,user_id,kind,status,version,request_id,proposed_value,content_hash,private_key,created_at,expires_at,credential_version) "
-        + "VALUES(#{s.id},#{s.userId},#{s.kind},#{s.status},#{s.version},#{s.requestId},#{s.proposedValue},#{s.contentHash},#{s.privateKey},#{s.createdAt},#{s.expiresAt},#{s.credentialVersion})")
+    @Insert("INSERT INTO sys_profile_submission(id,user_id,kind,status,version,request_id,proposed_value,content_hash,created_at,expires_at,credential_version) "
+        + "VALUES(#{s.id},#{s.userId},#{s.kind},#{s.status},#{s.version},#{s.requestId},#{s.proposedValue},#{s.contentHash},#{s.createdAt},#{s.expiresAt},#{s.credentialVersion})")
     int insert(@Param("s") ProfileSubmission submission);
-    /** 终态不能二次发布；移除文件引用后才允许提交完成回调清理私有图。 */
-    @Update("UPDATE sys_profile_submission SET status=#{status},private_key=null,reason=#{reason},reviewed_at=#{now},reviewer_id=#{actor} WHERE id=#{id} AND status='PENDING'")
+    /** 终态不能二次发布；头像字节由用户行在同一事务内清除。 */
+    @Update("UPDATE sys_profile_submission SET status=#{status},reason=#{reason},reviewed_at=#{now},reviewer_id=#{actor} WHERE id=#{id} AND status='PENDING'")
     int terminal(@Param("id") long id,@Param("status") ProfileReviewStatus status,@Param("reason") String reason,
         @Param("now") LocalDateTime now,@Param("actor") Long actor);
     /** 本人只读取最多十条，接口不允许指定他人编号。 */
@@ -59,8 +59,12 @@ import java.util.List;
     /** CASE 字段由枚举绑定决定，永不拼接客户端 SQL。 */
     @Update("<script>UPDATE sys_user SET <choose><when test='kind.name() == &quot;AVATAR&quot;'>avatar=#{value}</when><otherwise>nickname=#{value}</otherwise></choose> WHERE id=#{uid} AND deleted=0</script>")
     int updatePublic(@Param("uid") long uid,@Param("kind") ProfileField kind,@Param("value") String value);
-    /** 不删除仍被其他用户引用的已公开文件，包括尚未清理的软删除账号。 */
-    @Select("SELECT COUNT(*) FROM sys_user WHERE avatar=#{avatar}") long publicReferences(@Param("avatar") String avatar);
+    /** 只在本人或屋主通过待审鉴权后，读取用户行上的唯一待审图片。 */
+    @Select("SELECT pending_avatar FROM sys_user WHERE id=#{uid} FOR UPDATE")
+    String pendingAvatar(@Param("uid") long uid);
+    /** 与申请状态同事务写入或释放图片，逻辑删除账号也能清除待审字节。 */
+    @Update("UPDATE sys_user SET pending_avatar=#{image}, avatar_status=#{status} WHERE id=#{uid}")
+    int setPendingAvatar(@Param("uid") long uid,@Param("image") String image,@Param("status") int status);
     /** 成功审计与实际动作提交/回滚一致；原因不包含全文请求或图片路径。 */
     @Insert("INSERT INTO sys_profile_audit(id,actor_id,actor_role,target_id,kind,submission_id,action,version,reason,created_at) "
         + "VALUES(#{id},#{actor},#{role},#{target},#{kind},#{submission},#{action},#{version},#{reason},#{now})")
@@ -84,7 +88,4 @@ import java.util.List;
     List<Long> obsolete(@Param("now") LocalDateTime now);
     /** 清理软删除目标也必须先锁物理用户行，不能因 TableLogic 过滤而失去串行纪律。 */
     @Select("SELECT id FROM sys_user WHERE id=#{uid} FOR UPDATE") Long lockPhysical(@Param("uid") long uid);
-    /** 崩溃后无引用文件才可回收，绝不按文件名或年龄直接删除仍被待审引用的图。 */
-    @Select("SELECT COUNT(*) FROM sys_profile_submission WHERE private_key=#{key} AND status='PENDING'")
-    long privateReferences(@Param("key") String key);
 }

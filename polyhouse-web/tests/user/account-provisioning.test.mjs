@@ -17,7 +17,7 @@ const { ApiError } = await import(apiUrl)
 const realApiUrl = await compile('../../src/api/accountProvisioning.ts', { './index': apiUrl })
 const { decodeAccountCreation } = await import(realApiUrl)
 const userUrl = url('let store; export const useUserStore=()=>store; export const install=value=>{store=value}')
-const provisioningUrl = url('let create, confirm; export const install=(a,b)=>{create=a; confirm=b}; export const createAccount=(...args)=>create(...args); export const confirmAccountCreation=(...args)=>confirm(...args)')
+const provisioningUrl = url(`export { isProvisionedRole } from '${realApiUrl}'; let create, confirm; export const install=(a,b)=>{create=a; confirm=b}; export const createAccount=(...args)=>create(...args); export const confirmAccountCreation=(...args)=>confirm(...args)`)
 const { install: installStore } = await import(userUrl)
 const { install: installApi } = await import(provisioningUrl)
 const { useAccountProvisioning } = await import(await compile('../../src/composables/useAccountProvisioning.ts', {
@@ -53,15 +53,18 @@ test('重复点击只发一次请求，密码只驻留内存，确认后清除',
 })
 
 test('网络结果未知和刷新继续复用原意图，核对不重新交付密码', async (t) => {
+  const insider = { ...credential, role: 'INSIDER', firstDelivery: false, initialPassword: null }
   let firstId
   const f = fixture(async (request) => { firstId = request.requestId; throw new ApiError('offline', 0) })
+  f.controller.role.value = 'INSIDER'
   await f.controller.create()
   assert.equal(f.controller.attempted.value, true)
   const storage = f.storage; f.unmount()
-  const reopened = fixture(async (request) => { assert.equal(request.requestId, firstId); return { ...credential, firstDelivery: false, initialPassword: null } },
-    async (requestId) => { assert.equal(requestId, firstId); return { ...credential, firstDelivery: false, initialPassword: null } }, storage)
+  const reopened = fixture(async (request) => { assert.equal(request.requestId, firstId); return insider },
+    async (requestId) => { assert.equal(requestId, firstId); return insider }, storage)
   t.after(reopened.unmount)
   assert.equal(reopened.controller.attempted.value, true)
+  assert.equal(reopened.controller.role.value, 'INSIDER')
   await reopened.controller.confirm()
   assert.equal(reopened.controller.result.value.initialPassword, null)
 })
@@ -117,6 +120,7 @@ test('确认暂未找到不换请求号，显式重试沿用同一编号', async
 
 test('响应解码拒绝重放携带密码、首次缺少密码和非法账号角色', () => {
   assert.deepEqual(decodeAccountCreation(credential), credential)
+  assert.equal(decodeAccountCreation({ ...credential, role: 'INSIDER' }).role, 'INSIDER')
   for (const invalid of [{ ...credential, firstDelivery: false }, { ...credential, initialPassword: null }, { ...credential, role: 'OWNER' }, { ...credential, id: 42 }]) {
     assert.throws(() => decodeAccountCreation(invalid), ApiError)
   }

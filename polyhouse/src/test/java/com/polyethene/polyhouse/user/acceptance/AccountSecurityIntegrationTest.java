@@ -27,7 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.support.EncodedResource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -41,8 +42,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.Duration;
@@ -109,14 +108,8 @@ class AccountSecurityIntegrationTest {
     static void dropOnlyCreatedSandbox() throws Exception { if (sandbox != null) sandbox.close(); }
 
     @Test
-    void shouldRepeatMigrationPreserveLegacyTokenThenPermanentlyInvalidateItOnChange() throws Exception {
+    void shouldAcceptLegacyTokenThenPermanentlyInvalidateItOnChange() throws Exception {
         long id = fixture(false, UserRoleEnum.USER);
-        String username = username(id);
-        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
-            sandbox.migrate(connection, "005_account_security.sql");
-            sandbox.migrate(connection, "005_account_security.sql");
-        }
-        assertThat(username(id)).isEqualTo(username);
         Instant now = Instant.now();
         String legacy = Jwts.builder().setHeaderParam(Header.TYPE, Header.JWT_TYPE).setIssuer("polyhouse")
                 .setAudience("polyhouse-api").setSubject(Long.toString(id)).setId(UUID.randomUUID().toString())
@@ -265,14 +258,9 @@ class AccountSecurityIntegrationTest {
         return call("POST", "/api/auth/password/change", token, Map.of("currentPassword", current, "newPassword", next));
     }
     private HttpResponse<String> initialAvatar(String token) throws Exception {
-        // 使用实际上传协议才能进入已映射方法的认证拦截器；JSON 请求只会在路由阶段得到 415。
-        String boundary = "p1-avatar-fixture";
-        String body = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fixture.jpg\"\r\n"
-                + "Content-Type: image/jpeg\r\n\r\nfixture\r\n--" + boundary + "--\r\n";
-        return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/avatar"))
-                .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + token)
-                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+        // 合法 JSON 请求应进入认证拦截器，临时凭据无法提交待审。
+        return call("POST", "/api/auth/avatar/submissions", token,
+                Map.of("avatarBase64", "UklGRg==", "requestId", UUID.randomUUID().toString()));
     }
     private HttpResponse<String> call(String method, String path, String token, Map<String, String> body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(10));
@@ -309,18 +297,13 @@ class AccountSecurityIntegrationTest {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
                 connection.setCatalog(name);
                 try {
-                    for (String migration : List.of("001_init.sql", "002_user_growth.sql", "003_daily_growth_rewards.sql", "004_owner_bootstrap.sql", "005_account_security.sql", "006_account_provisioning.sql", "007_account_management.sql", "008_profile_moderation.sql")) migrate(connection, migration);
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
                 }
             }
-        }
-        private void migrate(Connection connection, String migration) throws Exception {
-            String source = Files.readString(Path.of("sql", migration));
-            if (migration.startsWith("001")) source = source.substring(source.indexOf("CREATE TABLE `"));
-            source = source.replace("USE `polyhouse_db`;", "");
-            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(source.getBytes(StandardCharsets.UTF_8)));
         }
         /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
         @Override

@@ -2,13 +2,13 @@
 
 本材料于 2026-11-01 从根 README 后半部分迁入，按需学习，不是默认必读或新的工程契约。[返回运行入口](../../README.md)。
 
-**执行边界**：下文保留历史原理与专项命令，不表示每轮都要运行。当前已有正式 OWNER；含 OWNER 夹具的全量 `Invoke-LocalAuth.ps1 -Action Verify` 禁止在开发库执行，必须按[屋主隔离说明](../operations/owner-bootstrap.md)准备独立环境；优先使用根 README 的四种隔离专项。迁移按 001～008 的实际状态追加，不能照旧示例重复初始化；权限/接口以[当前计划状态](../plans/README.md)及对应运维说明为准。历史通过不构成本轮验收，私有值不复制进文档。
+**执行边界**：下文保留历史原理与专项命令，不表示每轮都要运行。当前已有正式 OWNER；含 OWNER 夹具的全量 `Invoke-LocalAuth.ps1 -Action Verify` 禁止在开发库执行，必须按[屋主隔离说明](../operations/owner-bootstrap.md)准备独立环境；优先使用根 README 的四种隔离专项。建库和增量升级见[数据库初始化说明](../operations/database-bootstrap.md)；权限/接口以[当前计划状态](../plans/README.md)及对应运维说明为准。历史通过不构成本轮验收，私有值不复制进文档。
 
 ## 用户模型与本地 MySQL
 
 ### 唯一屋主与运维入口
 
-公共自助注册已关闭；屋主通过独立开户页创建 USER/ADMIN。唯一屋主通过 `polyhouse/scripts/Initialize-Owner.ps1 -UserId "编号" -Username "小写账号"` 只读检查，再显式加 `-Apply` 首次授予；不是网页或数据库命令。先执行追加迁移 [004_owner_bootstrap.sql](../../polyhouse/sql/004_owner_bootstrap.sql)，已完成的库不要重放初始化基线。脚本只连接本机，复用忽略的私有预设，不要求网站密码，不随服务启动运行，不提供 HTTP 授权接口。
+公共自助注册已关闭；屋主通过独立开户页创建 USER/ADMIN。唯一屋主通过 `polyhouse/scripts/Initialize-Owner.ps1 -UserId "编号" -Username "小写账号"` 只读检查，再显式加 `-Apply` 首次授予；不是网页或数据库命令。新库直接通过[空库屋主命令](../operations/database-bootstrap.md)开户。脚本只连接本机，复用忽略的私有预设，不要求网站密码，不随服务启动运行，不提供 HTTP 授权接口。
 
 数据库唯一槽位防止多个 OWNER，单行锁串行初始化并保留首次目标/执行人/时间；重复执行同一屋主不改首次记录，清理旧会话后重新登录。历史记录冲突或已有其他屋主会拒绝，普通注销接口对屋主返回 403，正常退出仍可用。详细操作、失败回滚、部署权限边界及测试隔离见 [屋主初始化与部署说明](../../docs/operations/owner-bootstrap.md)。正式授予后，全量 OWNER 测试须放在独立测试数据库，不能为测试清空真实屋主。
 
@@ -18,16 +18,9 @@
 
 `UserProfileVO.from(user)` 仅保留 `id/username/nickname/avatar/role/experience/level/coins/passwordChangeRequired`，不返回密码哈希、凭据版本、状态、登录 IP、软删除标记或任意扩展 JSON。雪花 ID、累计经验和整数硬币余额以十进制字符串传给前端，避免 JavaScript 数字精度丢失；等级为整数。登录、当前用户 HTTP 接口复用这些安全模型；屋主开户使用独立 `AccountCreationVO`，不把初始密码混入用户资料。
 
-初始化基线位于 [polyhouse/sql/001_init.sql](../../polyhouse/sql/001_init.sql)，按只读策划书归档四张表的结构，不自动执行。现有数据库无需重新初始化；该文件仅供空环境人工建表，不能当作迁移脚本反复执行。账号唯一索引与软删除并存，因此删除后账号仍占用，后续注册不得默认允许复用。
+空库统一执行 [001_schema.sql](../../polyhouse/sql/001_schema.sql)，应用启动时不自动执行。账号唯一索引与软删除并存，因此删除后账号仍占用。
 
-成长字段由追加迁移 [polyhouse/sql/002_user_growth.sql](../../polyhouse/sql/002_user_growth.sql) 提供，奖励流水由 [polyhouse/sql/003_daily_growth_rewards.sql](../../polyhouse/sql/003_daily_growth_rewards.sql) 提供。空环境依次执行 `001`、`002`、`003`；已完成 `002` 的数据库只追加 `003`，必须在运行新版应用或实例测试之前完成，不由应用启动自动改表。使用已有个人配置连接本机 `polyhouse_db` 后，可在 MySQL 客户端执行所需迁移（示例为当前仓库路径，不包含凭据）：
-
-```sql
-source E:/project/java/polyethene-polyhouse/polyhouse/sql/002_user_growth.sql
-source E:/project/java/polyethene-polyhouse/polyhouse/sql/003_daily_growth_rewards.sql
-```
-
-迁移为 `sys_user` 追加 `experience bigint NOT NULL DEFAULT 0`、`level int NOT NULL DEFAULT 1`、`coins bigint NOT NULL DEFAULT 0`，包括非负经验/余额和至少 1 级的数据库约束，旧账号也自动取得初值。每列存在时跳过，重复执行不会清零余额；不会修正其他环境中已存在但定义不一致的同名列，升级时仍需核对结构。MySQL DDL 隐式提交，不能假定失败时可整批事务回滚；迁移支持中断后重跑。
+成长字段和奖励流水随空库基线建立。用户默认 0 经验、1 级、0 硬币，数据库约束防止负数经验、负余额和小于 1 的等级。
 
 三项由**独立成长服务**管理：`UserGrowthService.rewardDailyLogin` 是每日结算入口，认证重载同时核对凭据版本；`UserGrowthRules` 集中管理奖励和等级曲线，`UserGrowthConfig` 提供服务端时钟，`UserGrowthMapper` 记录流水。Controller 不接受奖励数值，不新增直接加经验/加币的公开接口。注册/登录 DTO 的额外成长字段不生效；通用实体插入使用数据库初值，通用实体更新跳过这些字段，避免旧资料覆盖余额。等级与 `USER/ADMIN/INSIDER/OWNER` 权限独立，不进入 JWT；前端已接入真实数值及成长状态展示。
 

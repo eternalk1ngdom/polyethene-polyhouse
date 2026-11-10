@@ -89,13 +89,13 @@ test('仅 OWNER 加载审核页，旧查询结果不能覆盖新身份',async(t)
 })
 test('审核只在确认时发送一次，未知结果强制刷新而不盲目重发',async(t)=>{
  let calls=0;const wait=deferred();const f=fixture('review',{decide:async()=>{calls++;return wait.promise}});t.after(f.unmount)
- f.c.openDecision(record,true);assert.equal(calls,0);f.c.reason.value='已核对';const a=f.c.submit(),b=f.c.submit();assert.equal(calls,1)
- wait.reject(new ApiError('offline',0));await Promise.all([a,b]);assert.equal(f.c.uncertain.value,true);await f.c.submit();assert.equal(calls,1)
+ f.c.openDecision(record);assert.equal(calls,0);f.c.reason.value='已核对';const a=f.c.submit(true),b=f.c.submit(true);assert.equal(calls,1)
+ wait.reject(new ApiError('offline',0));await Promise.all([a,b]);assert.equal(f.c.uncertain.value,true);await f.c.submit(true);assert.equal(calls,1)
  f.c.close();await f.c.load();assert.equal(calls,1)
 })
 test('409 审核冲突不伪报成功，旧成功响应不能改变换号后的界面',async(t)=>{
  const f=fixture('review',{decide:async()=>{throw new ApiError('changed',409)}});t.after(f.unmount)
- f.c.openDecision(record,false);f.c.reason.value='驳回原因';await f.c.submit();assert.equal(f.c.uncertain.value,true);assert.equal(f.c.notice.value,'')
+ f.c.openDecision(record);f.c.reason.value='驳回原因';await f.c.submit(false);assert.equal(f.c.uncertain.value,true);assert.equal(f.c.notice.value,'')
 })
 test('私有预览 URL 在换图和卸载时释放，旧 Blob 不串入新身份',async()=>{
  const first=deferred(),second=deferred();let calls=0,created=0;const revoked=[]
@@ -141,7 +141,7 @@ test('审核只读当前分区，旧分区响应丢弃，各自筛选页码保�
 
 test('审核结果未知后切换/返回只查询，不能重复发送决定',async(t)=>{
  let writes=0;const f=fixture('review',{decide:async()=>{writes++;throw new ApiError('offline',0)}});t.after(f.unmount)
- f.c.openDecision(record,true);f.c.reason.value='核对过内容';await f.c.submit()
+ f.c.openDecision(record);f.c.reason.value='核对过内容';await f.c.submit(true)
  assert.equal(f.c.uncertain.value,true);f.c.close();f.section.value='published';await nextTick();f.section.value='pending';await nextTick()
  assert.equal(writes,1);assert.equal(f.c.selection.value,null)
 })
@@ -149,9 +149,37 @@ test('审核结果未知后切换/返回只查询，不能重复发送决定',as
 test('审核中切换分区只结算一次并刷新当前列表，同 Token 换号立即清理',async(t)=>{
  const wait=deferred();let writes=0,publicReads=0
  const f=fixture('review',{decide:async()=>{writes++;return wait.promise},published:async()=>{publicReads++;return {...page,items:[]}}});t.after(f.unmount)
- f.c.openDecision(record,true);f.c.reason.value='审核原因';const operation=f.c.submit()
+ f.c.openDecision(record);f.c.reason.value='审核原因';const operation=f.c.submit(true)
  f.section.value='published';await nextTick();const before=publicReads;wait.resolve(record);await operation
  assert.equal(writes,1);assert.equal(publicReads,before+1);assert.equal(f.c.selection.value,null)
  f.c.openPublic({userId:'2',username:'fixture'},'KEEP');f.c.reason.value='原账号私有原因';f.store.user.id='9'
  assert.equal(f.c.selection.value,null);assert.equal(f.c.reason.value,'');assert.equal(f.c.notice.value,'')
+})
+
+test('头像和昵称预览不提交，通过可留空，驳回必须填写并能清除旧提示', async (t) => {
+  const writes = []
+  const f = fixture('review', { decide: async (item, approve, reason) => writes.push({ item, approve, reason }) })
+  t.after(f.unmount)
+  const avatar = { ...record, kind: 'AVATAR', proposedValue: null }
+  f.c.openDecision(avatar)
+  await f.c.submit()
+  await f.c.submit(false)
+  assert.equal(writes.length, 0)
+  assert.match(f.c.dialogError.value, /请填写/)
+  f.c.reason.value = '  头像内容不合适  '
+  assert.equal(f.c.dialogError.value, '')
+  await f.c.submit(false)
+  f.c.openDecision(avatar)
+  await f.c.submit(true)
+  f.c.openDecision(record)
+  await f.c.submit()
+  await f.c.submit(false)
+  assert.equal(writes.length, 2)
+  assert.match(f.c.dialogError.value, /请填写/)
+  await f.c.submit(true)
+  assert.deepEqual(writes.map(({ item, approve, reason }) => [item.kind, approve, reason]), [
+    ['AVATAR', false, '  头像内容不合适  '],
+    ['AVATAR', true, '通过头像审核'],
+    ['NICKNAME', true, '通过昵称审核'],
+  ])
 })

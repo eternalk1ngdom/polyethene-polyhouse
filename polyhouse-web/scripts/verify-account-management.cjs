@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { chromium } = require(process.env.POLYHOUSE_PLAYWRIGHT_MODULE || 'playwright')
-const base = 'http://127.0.0.1:5173'
+const base = 'http://127.0.0.1:5173/polyethene-polyhouse/'
 const backend = process.env.POLYHOUSE_BROWSER_API_BASE_URL
 const password = process.env.POLYHOUSE_BROWSER_OWNER_PASSWORD
 assert.ok(backend && new URL(backend).hostname === '127.0.0.1' && new URL(backend).port !== '8080')
@@ -19,11 +19,12 @@ let phase = 'startup'
   })
   const page = await context.newPage();const errors=[];page.on('pageerror',()=>errors.push('page error'))
   let writes=0;page.on('request',r=>{if(r.method()==='POST' && /\/(ban|unban|password\/reset)$/.test(new URL(r.url()).pathname))writes++})
-  async function login(username,pwd=password) {
+  async function login(username,pwd=password,requiresPasswordChange=false) {
    await page.goto(base,{waitUntil:'networkidle'});await page.locator('.login-trigger').click()
    const dialog=page.locator('.auth-dialog');await dialog.getByLabel('账号',{exact:true}).fill(username)
    await dialog.getByLabel('密码',{exact:true}).fill(pwd);await dialog.getByRole('button',{name:'登录，回到小屋'}).click()
-   await page.getByRole('button',{name:'打开账号菜单'}).waitFor()
+   if(requiresPasswordChange) await page.getByRole('dialog',{name:'修改密码'}).waitFor()
+   else await page.getByRole('button',{name:'打开账号菜单'}).waitFor()
   }
   async function logout(){await page.getByRole('button',{name:'打开账号菜单'}).click();await page.getByRole('button',{name:'退出登录',exact:true}).click()}
   phase='owner-list';await login('p3_owner');await page.getByRole('button',{name:'打开账号菜单'}).click();await page.getByRole('link',{name:'屋主工作台'}).click()
@@ -48,7 +49,7 @@ let phase = 'startup'
   await dialog.getByText('原密码不能再次取回。若未保存，请结束核对，确认最新账号后显式重新重置。',{exact:true}).waitFor()
   assert.equal(await dialog.locator('input[readonly]').count(),0);assert.equal(writes,1)
   await dialog.getByRole('button',{name:'已核对，清除本次结果'}).click();await logout()
-  phase='first-password';await login('p3_user',temporary)
+  phase='first-password';await login('p3_user',temporary,true)
   const change=page.getByRole('dialog',{name:'修改密码'});await change.getByLabel('当前密码',{exact:true}).fill(temporary)
   const next='P3-browser-personal-fixture!';await change.getByLabel('新密码',{exact:true}).fill(next);await change.getByLabel('确认新密码',{exact:true}).fill(next)
   await change.getByRole('button',{name:'保存并重新登录'}).click();await change.waitFor({state:'hidden'})
@@ -56,15 +57,16 @@ let phase = 'startup'
   await page.goto(base,{waitUntil:'networkidle'});const auth=page.locator('.auth-dialog')
   if(!await auth.isVisible())await page.locator('.login-trigger').click()
   await auth.getByLabel('账号',{exact:true}).fill('p3_user');await auth.getByLabel('密码',{exact:true}).fill(next);await auth.getByRole('button',{name:'登录，回到小屋'}).click()
-  await page.getByRole('button',{name:'打开账号菜单'}).waitFor();await page.goto(`${base}/manage`,{waitUntil:'networkidle'})
+  await page.getByRole('button',{name:'打开账号菜单'}).waitFor();await page.goto(`${base}#/manage`,{waitUntil:'networkidle'})
   await page.getByRole('heading',{name:'需要管理权限'}).waitFor();await logout()
   phase='admin-ban';await login('p3_admin');await page.getByRole('button',{name:'打开账号菜单'}).click();await page.getByRole('link',{name:'管理中心'}).click()
   await page.locator('.account-row').filter({hasText:'p3_user'}).waitFor();assert.equal(await page.locator('.account-row').count(),1)
   assert.equal(await page.getByRole('button',{name:/重置密码 p3_/}).count(),0)
+  assert.equal(await page.getByRole('button',{name:'查看 p3_user 的详情'}).count(),0)
   await page.getByRole('button',{name:'封禁 p3_user',exact:true}).click();await dialog.getByLabel('操作原因（必填）').fill('隔离封禁验收')
   await dialog.getByRole('button',{name:'确认封禁账号'}).click();await dialog.getByText('已成功记录：p3_user · 封禁',{exact:true}).waitFor()
   await dialog.getByRole('button',{name:'已核对，清除本次结果'}).click();await logout()
-  phase='owner-unban';await login('p3_owner');await page.goto(`${base}/manage`,{waitUntil:'networkidle'})
+  phase='owner-unban';await login('p3_owner');await page.goto(`${base}#/manage`,{waitUntil:'networkidle'})
   await page.getByRole('button',{name:'解封 p3_user',exact:true}).click();await dialog.getByLabel('操作原因（必填）').fill('隔离解封验收')
   await dialog.getByRole('button',{name:'确认解封账号'}).click();await dialog.getByText('已成功记录：p3_user · 解封',{exact:true}).waitFor();await dialog.getByRole('button',{name:'已核对，清除本次结果'}).click()
   for(const width of [320,375,600,601,768,1024,1440]){await page.setViewportSize({width,height:1050});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))}
