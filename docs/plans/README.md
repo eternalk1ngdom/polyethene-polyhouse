@@ -4,7 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [框架优化与文档重塑](framework-optimization.md) | F1 文档和部分验收已完成，WSL/Redis 已恢复，浏览器验收待补。F2 未开始 | [dev.14](../dev-log/v1.0-dev.14.md) |
+| [框架优化与文档重塑](framework-optimization.md) | F1 文档及隔离首次运行验收完成，下一步 F2 基线与架构评估 | [dev.14](../dev-log/v1.0-dev.14.md) |
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
 | [P5 前：个人中心与管理工作台整理](pre-p5-account-workspace-ui.md) | U0～U4 已收口；普通构建/测试与真实隔离页面组合验收通过；不代表 P5/部署完成 | [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |

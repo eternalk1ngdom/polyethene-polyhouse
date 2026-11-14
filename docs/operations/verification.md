@@ -43,3 +43,16 @@ npm run lint:check
 ```
 
 编译通过和 Spring 上下文启动成功不等于数据库或 Redis 已完成连接验证；实际数据读写需要另行集成测试。普通测试不会执行 MySQL 查询，MySQL 和 Redis 实例测试默认跳过。
+
+## 自动化浏览器访问本机服务
+
+开发终端显示 Vite `ready`，只说明进程完成启动。浏览器连接超时时，先在实际运行浏览器的宿主机终端检查监听和 HTTP 响应，避免把不同隔离环境的结果混用：
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen
+curl.exe --noproxy '*' --max-time 8 -o NUL -w '%{http_code}' http://127.0.0.1:5173/polyethene-polyhouse/
+```
+
+本轮 Windows 验收中，受限沙箱启动的 Vite 在宿主机可见监听，但宿主机 HTTP 请求和内置浏览器都无法连接。停止那一次验收进程，改在宿主机终端进入隔离副本的 `polyhouse-web/`，执行 `npm run dev -- --host 127.0.0.1 --strictPort` 后，同端口请求返回 200，内置浏览器也正常加载。工具启动时按其权限流程允许这次本机服务运行；这是运行环境边界处理，无需修改 Vite 配置、切换浏览器或关闭防火墙。详细实测见[dev.14](../dev-log/v1.0-dev.14.md#f1-浏览器验收收口2026-11-14)。
+
+若端口属于其他任务，先识别进程归属，再给本轮验收选空闲端口。后端也应在能连到本机 MySQL/Redis、且前端代理可达的环境中启动。结束后停止本轮进程并清理本轮隔离资源。
