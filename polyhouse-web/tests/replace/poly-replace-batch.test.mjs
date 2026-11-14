@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import ts from 'typescript'
+import { typeScriptModuleUrl } from './helpers/typescript-module.mjs'
 
-async function sourceUrl(path, replacements = {}) {
-  const source = await readFile(new URL(path, import.meta.url), 'utf8')
-  let code = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  for (const [from, to] of Object.entries(replacements)) code = code.replaceAll(from, to)
-  return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-}
-const coreUrl = await sourceUrl('../../src/core/acReplacer.ts')
-const batchUrl = await sourceUrl('../../src/core/polyReplaceBatch.ts', {
+const coreUrl = await typeScriptModuleUrl(new URL('../../src/core/acReplacer.ts', import.meta.url))
+const batchUrl = await typeScriptModuleUrl(new URL('../../src/core/polyReplaceBatch.ts', import.meta.url), {
   "'./acReplacer'": JSON.stringify(coreUrl),
 })
 const { replaceBatch, validateBatch } = await import(batchUrl)
@@ -161,7 +152,7 @@ test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
   const oldSelf = globalThis.self
   globalThis.self = { postMessage: (value) => replies.push(value) }
   try {
-    const workerUrl = await sourceUrl('../../src/workers/polyReplace.worker.ts', {
+    const workerUrl = await typeScriptModuleUrl(new URL('../../src/workers/polyReplace.worker.ts', import.meta.url), {
       "'fflate'": JSON.stringify(import.meta.resolve('fflate')),
       "'../core/polyReplaceBatch'": JSON.stringify(batchUrl),
     })

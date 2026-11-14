@@ -23,6 +23,8 @@
 
 前端 `npm test` 递归发现全部业务目录；在 `polyhouse-web/` 可定向执行 `node --test "tests/user/*.test.mjs"` 、`node --test "tests/replace/*.test.mjs"` 或 `node --test "tests/target-kb/*.test.mjs"`。后端仍按类名选择，例如在 `polyhouse/` 执行 `mvn -q '-Dtest=AuthControllerTest' test`；现有隔离脚本按类名定位，不因业务目录迁移改用未隔离的全量实例测试。重排测试包后须清理旧编译测试类，避免 Maven 把旧、新包都发现为测试。
 
+妙替部分测试共用 [TypeScript 模块加载帮助文件](../../polyhouse-web/tests/replace/helpers/typescript-module.mjs)，只集中编译设置和地址替换，不缓存模块或共享模拟状态；它不是测试发现入口，仍使用上面的原命令。
+
 U4 页面组合验收可显式使用 `Invoke-LocalAuth.ps1 -Action Verify -ProfileModerationOnly -WorkspaceBrowser`；配合独立 5175 Vite 和本机 5190 桥接，由受控浏览器操作当前界面/真实隔离接口，结束后核对数据库事实并清理，步骤与边界见[资料审核的 U4 验收入口](../../docs/operations/profile-moderation.md#u4-当前页面组合验收受控浏览器)。
 
 有限负载与故障恢复可单独执行 `.\polyhouse\scripts\Test-CapacityRecovery.ps1`：复用 Git 忽略的私有预设，仅选择隔离验收类，需要本机 MySQL 创建临时库权限及 Ubuntu WSL Redis。它创建并清理随机临时库和 `target` 头像目录，只断开测试专用转发连接，不停止数据库/Redis，不运行 OWNER 夹具或修改开发库。普通验收不启用此测试。妙替完整本地流水线基准在 `polyhouse-web/` 执行 `node benchmarks/poly-replace-pipeline.mjs`，结果写入忽略的 `polyhouse/target/polyreplace-pipeline-results.json`；它测量 Node Worker 进程而非浏览器峰值内存。方法、实测和限制见[容量与恢复验收](../../docs/operations/capacity-recovery-2026-10-28.md)。
