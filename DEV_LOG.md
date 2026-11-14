@@ -2,7 +2,7 @@
 
 更新时间：2026-11-14（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[v1.0-dev.14 框架优化与文档重塑](docs/dev-log/v1.0-dev.14.md)。F1 文档及隔离首次运行验收完成，内置浏览器已通过工具处理/下载、登录、刷新和账号列表。下一步 F2 基线与架构评估，先读摘要与[阶段计划](docs/plans/framework-optimization.md)。
+- 当前：[v1.0-dev.14 框架优化与文档重塑](docs/dev-log/v1.0-dev.14.md)。F1 上手验收与 F2 基线/架构评估完成。[评估结果](docs/design/framework-assessment.md)决定保留现有分层，下一步 F3 小批清理空壳，再试点测试整理；先读摘要与[阶段计划](docs/plans/framework-optimization.md)。
 - 基线：候选版本经试用后由 dev `9606cd4` 合入 main `aaa4ddc`。Render 已部署该提交，用户确认公开前端可登录且账号列表正常。
 - Q0/Q1首个布局闭环完成：统一1320px/900px断点，修复妙压长名称撑宽。原目录/工作树和其他修改保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
