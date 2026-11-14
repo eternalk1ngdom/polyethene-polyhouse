@@ -6,7 +6,7 @@
 
 1. 本机停写并备份后，在 MySQL 客户端执行 `CREATE DATABASE polyhouse_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;`。使用 `USE polyhouse_db;` 选中目标。TiDB Cloud 使用控制台给出的 TLS 参数连接并明确选中目标空库。
 2. TiDB 执行前查看 `SHOW GLOBAL VARIABLES WHERE Variable_name IN ('tidb_enable_check_constraint','tidb_enable_foreign_key');` 和 `SELECT @@foreign_key_checks;`。要求三项均启用。TiDB 的 CHECK 默认关闭，由有权限的运维人员在目标实例按需启用。若实例无法启用，暂停导入并核对该实例的限制。[TiDB CHECK 说明](https://docs.pingcap.com/tidbcloud/constraints/) · [TiDB 外键说明](https://docs.pingcap.com/tidbcloud/foreign-key/)
-3. 确认 `SELECT DATABASE();` 返回预期库且 `SHOW TABLES;` 为空。用 MySQL 客户端的 `source` 执行 SQL 文件，或在 TiDB SQL Editor 执行同一文件。失败后核对目标库并修复原因，重新使用空库。DDL 可能分次提交。
+3. 确认 `SELECT DATABASE();` 返回预期库且 `SHOW TABLES;` 为空。MySQL 客户端连接加 `--default-character-set=utf8mb4`，再用 `source` 执行 SQL 文件；TiDB 可用 SQL Editor 执行同一文件。客户端 GBK 默认值可能改变生成表达式元数据，使首次屋主校验拒绝。失败后核对目标库并修复原因，重新使用空库。DDL 可能分次提交。
 4. 检查 13 张表、`sys_owner_bootstrap.slot=1` 的空记录及 `sys_account_sequence.next_value=1`。用 `SHOW CREATE TABLE sys_user;` 核对头像字段、约束和唯一屋主索引，用 `SHOW CREATE TABLE sys_user_growth_reward;` 核对奖励流水外键。云端先在隔离库实测约束和应用连通，再切换后端连接。
 
 ## 已有库允许创建内部用户

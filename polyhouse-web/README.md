@@ -1,48 +1,8 @@
 # polyhouse-web
 
-This template should help get you started developing with Vue 3 in Vite.
+聚妙屋 Vue 3、TypeScript、Vite 前端。[根 README](../README.md)提供项目介绍、在线体验和前端快速开始。
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+- 完整本地环境、后端和账号初始化见[首次运行](../docs/operations/getting-started.md)。
+- IDE、浏览器调试工具、分支与 PR 见[贡献指南](../CONTRIBUTING.md)。
+- 构建、类型检查、测试和只检查的 ESLint 命令见[验证入口](../docs/operations/verification.md)。
+- `.vue` 类型使用项目内 `vue-tsc` 检查，配置以 [Vite 配置](vite.config.ts)和 [package.json](package.json)为准。`npm run lint` 会自动修复，提交前只检查请用 `npm run lint:check`。
