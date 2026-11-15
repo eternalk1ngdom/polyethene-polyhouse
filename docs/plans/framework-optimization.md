@@ -108,7 +108,7 @@ F2 已于 2026-11-14 完成，[基线与架构取舍](../design/framework-assess
 
 2026-11-15 本地累计影响核对完成，随后用户明确授权推送和创建 dev PR，已完成并开放 [PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4)。各闭环验证、延后边界和继承提交范围统一查阶段日志；尚未合并或部署。
 
-同日用户另行确认合并 PR #4，已用 merge commit `be1a108` 合入 dev，文件树与已验候选一致；详见[合并记录](../dev-log/v1.0-dev.14.md#pr-4-合入-dev2026-11-15)。本次合并记录本地提交，待后续获批候选携带；main 与部署仍未更新。
+同日用户另行确认合并 PR #4，已用 merge commit `be1a108` 合入 dev，文件树与已验候选一致；详见[合并记录](../dev-log/v1.0-dev.14.md#pr-4-合入-dev2026-11-15)。其合并记录 `cfcf294` 随后已通过 PR #5 进入远端 dev；最新基线与交接见[当前摘要](../dev-log/v1.0-dev.14.md#当前摘要)，main 与部署仍未更新。
 
 ## 9. 新对话起步
 

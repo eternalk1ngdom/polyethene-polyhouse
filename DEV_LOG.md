@@ -2,7 +2,7 @@
 
 更新时间：2026-11-15（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.14 框架优化](docs/dev-log/v1.0-dev.14.md)已通过 [PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4) 合入 dev `be1a108`：前端 346 项/构建、后端编译/34 项相关测试通过。[评估](docs/design/framework-assessment.md)保留分层，F5 跳过；main 与部署未更新。
+- 当前：[dev.14](docs/dev-log/v1.0-dev.14.md) 框架整理已经 PR #4 合入 dev；视觉命名及前次合并记录经 [PR #5](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/5) 合入 dev `c7d391f`。历史代码验收：前端 346 项/构建、后端编译/34 项通过；本轮仅文档检查。[评估](docs/design/framework-assessment.md)保留分层，F5 跳过；本次交接记录仅本地提交，main/部署未更新。
 - 基线：候选版本经试用后由 dev `9606cd4` 合入 main `aaa4ddc`。Render 已部署该提交，用户确认公开前端可登录且账号列表正常。
 - Q0/Q1布局完成：统一1320px/900px断点，修复妙压长名称撑宽；原目录/工作树及其他修改保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
