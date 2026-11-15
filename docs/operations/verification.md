@@ -16,14 +16,16 @@
 
 | 测试根目录 | 当前归类 |
 | --- | --- |
-| [前端 tests](../../polyhouse-web/tests) | `user/`：认证、账号/管理工作台、资料与成长；`replace/`：妙替内核、批处理、词库与草稿；`target-kb/`：妙压内核、协议、文件与任务生命周期 |
+| [前端 tests](../../polyhouse-web/tests) | `common/`：文件入口与核心隔离规则；`user/`：认证、账号/管理工作台、资料与成长；`replace/`：妙替内核、批处理、词库与草稿；`target-kb/`：妙压内核、协议、文件与任务生命周期 |
 | [后端 Java 测试根](../../polyhouse/src/test/java/com/polyethene/polyhouse) | `user/`：用户业务，内部沿用 controller/service 等分层；`common/`：公共契约；`system/`：应用启动、Redis 连接与跨模块容量恢复 |
 
 后端三个测试保留生产代码同包位置：`ops/OwnerBootstrapCommandTest` 测试包可见命令解析，`service/AvatarServiceTest` 调用包可见审核方法，`service/impl/AuthServiceImplTest` 使用包可见时钟构造器；不为目录归类扩大接口。校验夹具 `model/dto/ValidationProbeDTO`、`model/vo/ValidationProbeVO` 保留 DTO/VO 契约包，其他夹具随业务归类。
 
 前端 `npm test` 递归发现全部业务目录；在 `polyhouse-web/` 可定向执行 `node --test "tests/user/*.test.mjs"` 、`node --test "tests/replace/*.test.mjs"` 或 `node --test "tests/target-kb/*.test.mjs"`。后端仍按类名选择，例如在 `polyhouse/` 执行 `mvn -q '-Dtest=AuthControllerTest' test`；现有隔离脚本按类名定位，不因业务目录迁移改用未隔离的全量实例测试。重排测试包后须清理旧编译测试类，避免 Maven 把旧、新包都发现为测试。
 
-妙替部分测试共用 [TypeScript 模块加载帮助文件](../../polyhouse-web/tests/replace/helpers/typescript-module.mjs)，只集中编译设置和地址替换，不缓存模块或共享模拟状态；它不是测试发现入口，仍使用上面的原命令。
+妙替部分测试共用 [TypeScript 模块加载帮助文件](../../polyhouse-web/tests/replace/helpers/typescript-module.mjs)，只集中编译设置和地址替换，不额外缓存模块或共享模拟状态；它不是测试发现入口，仍使用上面的原命令。
+
+`npm run lint:check` 已包含 `core/`、`workers/` 的局部隔离检查：拒绝 UI/响应式/页面状态层的直接依赖及主线程对象访问，保留 Worker 编码与消息能力。规则写在现有 [ESLint 配置](../../polyhouse-web/eslint.config.ts)，[回归样例](../../polyhouse-web/tests/common/core-boundary.test.mjs)只在内存解析，不写临时源文件。它检查可静态识别的依赖地址和常见全局写法，不是传递依赖分析或安全沙箱；原工程约束继续有效。使用现有 [导入限制](https://eslint.org/docs/latest/rules/no-restricted-imports)、[语法限制](https://eslint.org/docs/latest/rules/no-restricted-syntax)和全局/属性限制能力，未安装新插件。
 
 U4 页面组合验收可显式使用 `Invoke-LocalAuth.ps1 -Action Verify -ProfileModerationOnly -WorkspaceBrowser`；配合独立 5175 Vite 和本机 5190 桥接，由受控浏览器操作当前界面/真实隔离接口，结束后核对数据库事实并清理，步骤与边界见[资料审核的 U4 验收入口](../../docs/operations/profile-moderation.md#u4-当前页面组合验收受控浏览器)。
 
