@@ -2,7 +2,7 @@
 
 更新时间：2026-11-15（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.14 框架优化](docs/dev-log/v1.0-dev.14.md)已收口：前端 346 项/构建、后端编译/34 项相关测试通过。[评估](docs/design/framework-assessment.md)保留分层，F5 跳过；[dev PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4) 最终自审未发现阻塞项，待确认合并，未部署。
+- 当前：[dev.14 框架优化](docs/dev-log/v1.0-dev.14.md)已通过 [PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4) 合入 dev `be1a108`：前端 346 项/构建、后端编译/34 项相关测试通过。[评估](docs/design/framework-assessment.md)保留分层，F5 跳过；main 与部署未更新。
 - 基线：候选版本经试用后由 dev `9606cd4` 合入 main `aaa4ddc`。Render 已部署该提交，用户确认公开前端可登录且账号列表正常。
 - Q0/Q1布局完成：统一1320px/900px断点，修复妙压长名称撑宽；原目录/工作树及其他修改保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
@@ -11,7 +11,7 @@
 ## 已实现与边界
 
 - 认证、Redis 多端会话、唯一 OWNER、每日成长、P0～P4 账号/资料审核及 U1～U4 整理已完成。公共注册关闭，屋主可创建 USER、ADMIN、INSIDER，TiDB 已核对新版开户约束。ADMIN 仅管理 USER，昵称/头像先审后发，历史资料仍待人工核对。
-- 前端暂定方案二：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
+- 前端视觉基线 1.0（原方案二）：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。仅统一称呼，方案一及选型历史保留。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
 - 妙替 R1～R7、妙压 T1～T4 已完成：浏览器本机文本替换、词库/草稿/分享和图片体积卡位/DPI/ZIP。完整编码、容量和恢复规则见[使用指南](docs/guides/features.md)，历史验收见 dev.10/11；T5换底/PDF/云预设已否决。
 - **本机已有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，不复制/输出；Redis 启动检查不是运行期监控。
 - **后端依赖版本继续冻结**，本次仅批准内嵌 Tomcat 升至 10.1.61，候选镜像本地验证通过。AI、云模板未接入，3D/社交不在范围。服务器与公网操作须具体授权。
