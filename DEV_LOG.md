@@ -11,7 +11,7 @@
 ## 已实现与边界
 
 - 认证、Redis 多端会话、唯一 OWNER、每日成长、P0～P4 账号/资料审核及 U1～U4 整理已完成。公共注册关闭，屋主可创建 USER、ADMIN、INSIDER，TiDB 已核对新版开户约束。ADMIN 仅管理 USER，昵称/头像先审后发，历史资料仍待人工核对。
-- 前端暂定方案二：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
+- 前端视觉基线 1.0（原方案二）：白底墨色与个人小窗/空间、“开门小屋”SVG；保留首页特色效果。仅统一称呼，方案一及选型历史保留。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
 - 妙替 R1～R7、妙压 T1～T4 已完成：浏览器本机文本替换、词库/草稿/分享和图片体积卡位/DPI/ZIP。完整编码、容量和恢复规则见[使用指南](docs/guides/features.md)，历史验收见 dev.10/11；T5换底/PDF/云预设已否决。
 - **本机已有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，不复制/输出；Redis 启动检查不是运行期监控。
 - **后端依赖版本继续冻结**，本次仅批准内嵌 Tomcat 升至 10.1.61，候选镜像本地验证通过。AI、云模板未接入，3D/社交不在范围。服务器与公网操作须具体授权。
