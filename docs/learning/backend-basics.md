@@ -263,3 +263,14 @@ mvn -q '-Dpolyhouse.redis.integration=true' test
 7. 在数据源控制台执行 `PING`，预期得到 `PONG`。如树中看不到数据库 `0`，在数据源的 `Schemas` 页勾选；测试键会自动清理，因此看不到测试键是正常现象。
 
 这些操作参考 [JetBrains Redis 连接说明](https://www.jetbrains.com/help/idea/redis.html)。IDEA 数据源设置属于个人环境，已由根 `.gitignore` 的 `.idea/` 规则排除。
+
+
+## 公共层响应约定
+
+成功响应为 HTTP 200，JSON 字段固定为 `code`、`message`、`data`，成功业务码为 `0`。失败响应保留相同 JSON 结构，`data` 为 `null`。
+
+业务失败通过 `BusinessException(ErrorCode)` 声明。`ErrorCode` 集中定义业务码、默认文案和 HTTP 状态，例如参数错误为 400、未登录为 401、权限不足为 403、资源不存在为 404、冲突为 409、未知异常为 500。
+
+框架产生的 HTTP 错误保留原状态和必要响应头，例如 405 的 `Allow`。错误体固定为 `application/json`，即使客户端请求了不支持的响应格式，也能收到 406 及统一错误体。请求输入、原始异常消息和异常链不进入错误响应；未知异常日志只记录异常类型及应用代码位置。
+
+MyBatis 的 SQL 和绑定参数日志默认关闭。认证拦截器在请求开始、认证失败、正常/异常完成及异步切换时清理 `UserContext`；线程变量不会自动传递到异步任务。

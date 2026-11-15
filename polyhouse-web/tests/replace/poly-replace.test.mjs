@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import ts from 'typescript'
-const source = await readFile(new URL('../../src/core/acReplacer.ts', import.meta.url), 'utf8')
-const compiled = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText
-const { replaceText: actualReplaceText, createTextReplacer: actualCreate } = await import(
-  `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
-)
+import { typeScriptModuleUrl } from './helpers/typescript-module.mjs'
+
+const coreUrl = await typeScriptModuleUrl(new URL('../../src/core/acReplacer.ts', import.meta.url))
+const { replaceText: actualReplaceText, createTextReplacer: actualCreate } = await import(coreUrl)
 function directPositions(input, rules) {
   const ordered = rules
     .map((rule, index) => ({ ...rule, index }))
@@ -229,9 +224,7 @@ test('输出坐标、连续删除、500 处上限和全文计数独立', () => {
 })
 
 test('预览截断不拆 emoji，位置与数组副本不污染后续文件', async () => {
-  const { getPreviewText } = await import(
-    `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
-  )
+  const { getPreviewText } = await import(coreUrl)
   assert.equal(getPreviewText('x'.repeat(9999) + '😀尾'), 'x'.repeat(9999))
   const apply = actualCreate([{ search: 'a', replace: '😀' }])
   assert.deepEqual(apply('x'.repeat(9999) + 'a').previewHits, [])
