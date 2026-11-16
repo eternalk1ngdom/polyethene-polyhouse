@@ -7,6 +7,7 @@ Verify -AccountManagementOnly：只在随机隔离库执行 P3 管理验收。
 Verify -AccountProvisioningOnly：只在随机隔离库执行开户验收，包含本测试专属屋主。
 Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Verify -ProfileModerationOnly -WorkspaceBrowser：U4 保留随机后端与本机桥接，等待显式完成后校验并清理。
+Verify -TrendOnly：只验技术雷达随机两表库，不创建账号或连接 Redis。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
@@ -25,12 +26,14 @@ param(
     # P4 审核只在临时库和本次专属图片目录验收。
     [switch]$ProfileModerationOnly,
     # U4 显式保留隔离 HTTP 服务，供 CUA 浏览器验收；普通验证不会等待人工操作。
-    [switch]$WorkspaceBrowser
+    [switch]$WorkspaceBrowser,
+    # 技术雷达只运行自己的随机库专项，不能落入默认全量 OWNER 夹具。
+    [switch]$TrendOnly
 )
 
 $ErrorActionPreference = 'Stop'
-if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
 if ($WorkspaceBrowser -and (-not $ProfileModerationOnly -or $Action -ne 'Verify')) { throw '工作台浏览器验收必须同时选择 Verify -ProfileModerationOnly。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
@@ -146,7 +149,9 @@ try {
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($ProfileModerationOnly) {
+        if ($TrendOnly) {
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+        } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test
             } else {
@@ -163,6 +168,7 @@ try {
                 '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
         }
         if ($LASTEXITCODE -ne 0) {
+            if ($TrendOnly) { throw '技术雷达隔离验收失败，请检查 Surefire 汇总。' }
             if ($ProfileModerationOnly) { throw '资料审核隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountManagementOnly) { throw '账号管理隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountProvisioningOnly) { throw '账号开户隔离验收失败，请检查 Surefire 汇总。' }

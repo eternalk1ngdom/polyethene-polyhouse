@@ -46,6 +46,10 @@ mybatis-plus:
 
 # 聚妙屋自定义安全配置
 polyhouse:
+  # 默认关闭技术雷达；启用前追加 010 迁移，密钥只由运行环境注入。
+  trend:
+    enabled: ${POLYHOUSE_TREND_ENABLED:false}
+    github-token: ${POLYHOUSE_GITHUB_TOKEN:}
   jwt:
     # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}

@@ -2,7 +2,7 @@
 
 更新时间：2026-11-16（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达方案](docs/plans/github-tech-radar.md)及 S1～S4 已批准：日榜/中文 AI/历史、公开阅读、屋主更新、月预算 10 元以内。尚未实现，下一步 G0 后端设计；前端另行设计。本轮仅文档检查。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)首批后端采集、基础归档及公开查询已实现，编译/本轮50项通过；默认关闭，开发库未迁移。下一步 G2 AI/预算，屋主任务、定时和前端尚未实现；前端另行设计。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 合并 `c7d391f` 及交接。main/部署未变，线上调度、远端操作另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：统一1320px/900px断点，修复妙压长名称撑宽；原目录/工作树及其他修改保留。

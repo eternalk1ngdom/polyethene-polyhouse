@@ -28,6 +28,12 @@
     </properties>
 
     <dependencies>
+        <!-- 仅解析有大小边界的 GitHub HTML，不使用 Cleaner 或加载外部页面资源。 -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.24.1</version>
+        </dependency>
         <!-- Spring Web & Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
