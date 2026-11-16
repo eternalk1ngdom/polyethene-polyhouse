@@ -27,5 +27,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Probe application within the daily window
-        run: python3 polyhouse/scripts/Invoke-TrendWake.py
+        run: java --source 21 polyhouse/scripts/com/polyethene/polyhouse/ops/trend/TrendWake.java
