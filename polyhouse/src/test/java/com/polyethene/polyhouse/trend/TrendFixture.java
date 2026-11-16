@@ -2,6 +2,8 @@ package com.polyethene.polyhouse.trend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
+import com.polyethene.polyhouse.model.entity.User;
+import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
 import com.polyethene.polyhouse.service.trend.GithubTrendingParser;
 
@@ -16,6 +18,11 @@ import java.util.UUID;
 final class TrendFixture {
     private TrendFixture() { }
     static ObjectMapper json() { return new ObjectMapper().findAndRegisterModules(); }
+    /** 只构造内存身份用于模拟验证，从不向数据库插入OWNER。 */
+    static User owner() {
+        var user = new User(); user.setId(42L); user.setRole(UserRoleEnum.OWNER); user.setStatus(1);
+        user.setDeleted(0); user.setCredentialVersion(0L); user.setPasswordChangeRequired(false); return user;
+    }
     static String html() {
         try (var input = Objects.requireNonNull(TrendFixture.class.getResourceAsStream("/trend/daily.html"))) {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);

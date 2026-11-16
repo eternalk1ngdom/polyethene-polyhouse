@@ -150,7 +150,7 @@ try {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
         if ($TrendOnly) {
-            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest' '-Dpolyhouse.trend.integration=true' test
         } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test

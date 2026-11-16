@@ -41,9 +41,16 @@ public class TrendAiService {
         this.clock = clock;
     }
 
-    /** 同一执行 UUID 与仓库决定唯一付费意图；只供受控任务使用，本阶段无 HTTP 生成入口。 */
+    /** 同一执行UUID与仓库决定付费意图；兼容内部验收，生产任务使用带执行权检查的重载。 */
     @RequireRole(UserRoleEnum.INSIDER)
     public TrendCollection enrich(String executionId, TrendCollection collection) {
+        return enrich(executionId, collection, () -> { });
+    }
+
+    /** 在每个项目及发送前复核执行权；取消尚未发送的预留，未知远端结果仍保留账本占用。 */
+    @RequireRole(UserRoleEnum.INSIDER)
+    public TrendCollection enrich(String executionId, TrendCollection collection, Runnable guard) {
+        Objects.requireNonNull(guard);
         if (executionId == null || !executionId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                 || collection == null || collection.projects().size() > 25) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
         if (!module.enabled() || !settings.enabled()) return collection;
@@ -53,7 +60,8 @@ public class TrendAiService {
             List<TrendCollection.Project> projects = new ArrayList<>();
             var paused = new AtomicBoolean(); // 仅本次执行的上游熔断，已缓存内容仍可复用。
             for (var project : collection.projects()) {
-                try { projects.add(analyze(executionId, project, paused)); }
+                guard.run();
+                try { projects.add(analyze(executionId, project, paused, guard)); }
                 catch (BusinessException | DataAccessException failure) {
                     projects.add(result(project, null, "UNAVAILABLE"));
                 }
@@ -62,7 +70,7 @@ public class TrendAiService {
         } finally { active.release(); }
     }
 
-    private TrendCollection.Project analyze(String executionId, TrendCollection.Project project, AtomicBoolean paused) {
+    private TrendCollection.Project analyze(String executionId, TrendCollection.Project project, AtomicBoolean paused, Runnable guard) {
         var item = project.snapshot();
         if ("DOC_LIST".equals(item.repoType())) return result(project, null, "NOT_REQUIRED");
         if (item.repositoryId() == null || !item.repositoryId().matches("[1-9][0-9]{0,18}")) return result(project, null, "UNAVAILABLE");
@@ -79,10 +87,17 @@ public class TrendAiService {
         try {
             var prepared = codec.prepare(project, settings.model());
             String id = UUID.nameUUIDFromBytes((executionId + ":" + repo).getBytes(StandardCharsets.UTF_8)).toString();
+            guard.run();
             var decision = ledger.reserve(id, repo, project.readmeVersion(), prepared.inputBound(), prepared.outputBound(), previousPayload);
             if (!"GRANTED".equals(decision.status())) {
                 var latest = cached(decision.payload());
                 return fresh(latest, project) ? result(project, latest, "REUSED") : fallback(project, latest, decision.status());
+            }
+            try { guard.run(); }
+            catch (TrendExecutionLost revoked) {
+                try { ledger.cancelBeforeSend(id); }
+                catch (RuntimeException cleanup) { LOGGER.warn("Unsent AI reservation requires reconciliation: request={}", id); }
+                throw revoked;
             }
             final DeepSeekGateway.Reply reply;
             try { reply = gateway.complete(prepared.body()); }

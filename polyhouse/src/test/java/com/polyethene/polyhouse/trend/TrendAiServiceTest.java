@@ -15,6 +15,24 @@ class TrendAiServiceTest {
     private final DeepSeekGateway gateway = mock(DeepSeekGateway.class);
     private final TrendInsightCodec codec = new TrendInsightCodec(TrendFixture.json());
 
+    @Test void revokedExecutionAfterReservationCancelsUnsentFeeAndNeverCallsProvider() {
+        grant();
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        Runnable guard = () -> { if (checks.incrementAndGet() == 3) throw new TrendExecutionLost(); };
+        assertThatThrownBy(() -> service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection(), guard))
+                .isInstanceOf(TrendExecutionLost.class);
+        verify(ledger).cancelBeforeSend(anyString());
+        verifyNoInteractions(gateway);
+        verify(ledger, never()).unknown(anyString(), anyBoolean());
+    }
+
+    @Test void revokedExecutionBeforeReservationIsNotSwallowedAsProjectFallback() {
+        Runnable guard = () -> { throw new TrendExecutionLost(); };
+        assertThatThrownBy(() -> service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection(), guard))
+                .isInstanceOf(TrendExecutionLost.class);
+        verifyNoInteractions(ledger, gateway);
+    }
+
     @Test void freshUnchangedInsightDoesNotReserveOrCallProvider() {
         String cache = codec.encode(TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofDays(14))));
         when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, cache));

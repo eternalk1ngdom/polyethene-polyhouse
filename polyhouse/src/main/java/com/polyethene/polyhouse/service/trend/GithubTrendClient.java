@@ -39,23 +39,30 @@ public class GithubTrendClient {
 
     /** 尚未启用时不访问外网；采集开始时间只由服务端产生，后续期号据此确定。 */
     public TrendCollection collect() {
+        return collect(() -> { });
+    }
+
+    /** 持久任务在每个请求及重定向前检查执行权，撤销异常不作为单仓库失败吞掉。 */
+    public TrendCollection collect(Runnable guard) {
+        Objects.requireNonNull(guard);
         if (!settings.enabled()) throw unavailable();
         Instant captured = Instant.now();
-        var reply = get(URI.create(GithubTrendingParser.SOURCE));
+        var reply = get(URI.create(GithubTrendingParser.SOURCE), guard);
         if (reply.status() != 200) throw unavailable();
         List<TrendCollection.Project> projects = new ArrayList<>();
         boolean apiPaused = false;
         for (var base : parser.parse(reply.body())) {
+            guard.run();
             TrendProjectVO snapshot = base;
             String readmeVersion = null;
             String readmeText = "";
             if (!apiPaused) {
                 try {
-                    var metadata = object(get(URI.create("https://api.github.com/repos/" + base.fullName())));
+                    var metadata = object(get(URI.create("https://api.github.com/repos/" + base.fullName()), guard));
                     snapshot = metadata(base, metadata);
                     String prefix = "https://api.github.com/repos/" + snapshot.fullName();
-                    var files = array(get(URI.create(prefix + "/contents")));
-                    var readme = get(URI.create(prefix + "/readme"));
+                    var files = array(get(URI.create(prefix + "/contents"), guard));
+                    var readme = get(URI.create(prefix + "/readme"), guard);
                     if (readme.status() == 404) {
                         snapshot = classify(snapshot, files, "MISSING");
                     } else {
@@ -88,10 +95,11 @@ public class GithubTrendClient {
         return new TrendCollection(captured, projects);
     }
 
-    private TrendSourceTransport.Reply get(URI initial) {
+    private TrendSourceTransport.Reply get(URI initial, Runnable guard) {
         URI target = initial;
         for (int hop = 0; hop <= 2; hop++) {
             GithubTrendHttp.requireAllowed(target);
+            guard.run();
             final TrendSourceTransport.Reply reply;
             try { reply = transport.get(target, target.getHost().equals("api.github.com") ? settings.githubToken() : null); }
             catch (BusinessException failure) { throw new ApiPaused(); }

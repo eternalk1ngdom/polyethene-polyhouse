@@ -50,6 +50,9 @@ polyhouse:
   trend:
     enabled: ${POLYHOUSE_TREND_ENABLED:false}
     github-token: ${POLYHOUSE_GITHUB_TOKEN:}
+    # 受控异步任务另行启用；须先追加010、011、012迁移，不自动开启每日调度。
+    jobs:
+      enabled: ${POLYHOUSE_TREND_JOBS_ENABLED:false}
     # Key 只注入后端进程；月额度使用人民币微元，最高仍为已批准的十元。
     ai:
       enabled: ${POLYHOUSE_TREND_AI_ENABLED:false}

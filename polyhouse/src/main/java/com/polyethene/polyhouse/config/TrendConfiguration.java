@@ -8,10 +8,31 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpMethod;
 
-/** 公开日报拥有独立的有界读预算，不消耗认证 Redis，也不改变现有全站限额。 */
+/** 公开读与管理入口各有固定预算，拒绝发生在身份存储前，不改变现有全站限额。 */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({TrendProperties.class, TrendAiProperties.class})
+@EnableConfigurationProperties({TrendProperties.class, TrendAiProperties.class, TrendJobProperties.class})
 public class TrendConfiguration {
+    /** 本地与生产都先限定JSON读取体积；生产全站已检查的缓冲请求仍受相同上界保护。 */
+    @Bean
+    public FilterRegistrationBean<ApiBodyLimitFilter> trendManagementBody(ObjectMapper json) {
+        var registration = new FilterRegistrationBean<>(new ApiBodyLimitFilter(json));
+        registration.setName("trendManagementBody");
+        registration.addUrlPatterns("/api/manage/trend/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 15);
+        return registration;
+    }
+
+    /** 先于会话Redis和数据库拒绝管理入口过载；共享地址使用同一预算，伪造头不能增加额度。 */
+    @Bean
+    public FilterRegistrationBean<ApiRequestLimitFilter> trendManagementLimit(ObjectMapper json) {
+        var budget = new ApiRequestBudget(new ApiLimitProperties.Budget(30, 6, 2), System::nanoTime);
+        var registration = new FilterRegistrationBean<>(new ApiRequestLimitFilter(json, request -> budget));
+        registration.setName("trendManagementLimit");
+        registration.addUrlPatterns("/api/manage/trend/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 14);
+        return registration;
+    }
+
     /** 无来源键的固定大小预算，不信任转发头；生产环境仍先经过原 CORS 和全站预算。 */
     @Bean
     public FilterRegistrationBean<ApiRequestLimitFilter> trendReadLimit(ObjectMapper json) {

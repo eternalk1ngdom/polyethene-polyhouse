@@ -16,7 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.*;
 import java.util.*;
 
-/** 仅供受控任务内部发布基础报告；本批不提供绕过预算和鉴权的公开写接口。 */
+/** 供受控任务内部发布不可变日报，公开阅读不触发生成；归档不承担任务身份和网络职责。 */
 @Service
 public class TrendArchiveService {
     private final TrendMapper mapper;
