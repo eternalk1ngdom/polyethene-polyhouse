@@ -53,6 +53,14 @@ polyhouse:
     # 受控异步任务另行启用；须先追加010、011、012迁移，不自动开启每日调度。
     jobs:
       enabled: ${POLYHOUSE_TREND_JOBS_ENABLED:false}
+    # 自动受理独立关闭；时间固定按Asia/Shanghai解释，休眠时不补造历史日报。
+    schedule:
+      enabled: ${POLYHOUSE_TREND_SCHEDULE_ENABLED:false}
+      daily-time: ${POLYHOUSE_TREND_DAILY_TIME:06:30}
+      retry-delay-minutes: 45
+    # 单条公开内容缓存；数据库指针仍是权威，不用于防重或存放私有材料。
+    cache:
+      enabled: ${POLYHOUSE_TREND_CACHE_ENABLED:false}
     # Key 只注入后端进程；月额度使用人民币微元，最高仍为已批准的十元。
     ai:
       enabled: ${POLYHOUSE_TREND_AI_ENABLED:false}

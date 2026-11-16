@@ -4,10 +4,12 @@ import com.polyethene.polyhouse.common.constant.*;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.*;
 import com.polyethene.polyhouse.mapper.TrendJobMapper;
+import com.polyethene.polyhouse.mapper.TrendScheduleMapper;
 import com.polyethene.polyhouse.model.entity.*;
 import com.polyethene.polyhouse.model.vo.*;
 import com.polyethene.polyhouse.service.trend.*;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -23,13 +25,24 @@ public class TrendJobStore {
     private final TrendProperties module;
     private final TrendJobProperties jobs;
     private final TrendAiProperties ai;
+    private final TrendScheduleProperties schedule;
+    private final TrendScheduleMapper scheduled;
     private final TransactionTemplate transaction;
 
     /** 所有短事务使用同一管理器；发布加入当前事务，任务结果和公开版本同步提交。 */
     public TrendJobStore(TrendJobMapper mapper, TrendOwnerAuthorization owners, TrendArchiveService archive,
                          TrendProperties module, TrendJobProperties jobs, TrendAiProperties ai, PlatformTransactionManager manager) {
+        this(mapper, owners, archive, module, jobs, ai, manager, new TrendScheduleProperties(false, null, null), null);
+    }
+
+    /** 生产追加定时配置与映射，旧内部验收构造仍保持定时关闭，无需重放旧迁移。 */
+    @Autowired
+    public TrendJobStore(TrendJobMapper mapper, TrendOwnerAuthorization owners, TrendArchiveService archive,
+                         TrendProperties module, TrendJobProperties jobs, TrendAiProperties ai, PlatformTransactionManager manager,
+                         TrendScheduleProperties schedule, TrendScheduleMapper scheduled) {
         this.mapper = mapper; this.owners = owners; this.archive = archive;
         this.module = module; this.jobs = jobs; this.ai = ai;
+        this.schedule = schedule; this.scheduled = scheduled;
         transaction = new TransactionTemplate(manager); transaction.setTimeout(5);
     }
 
@@ -44,22 +57,63 @@ public class TrendJobStore {
             var existing = mapper.lockJob(id);
             var active = recover(slot, now);
             if (existing != null) {
-                if (existing.actorId() != actor.getId()) throw new BusinessException(ErrorCode.FORBIDDEN);
+                if (!java.util.Objects.equals(existing.actorId(), actor.getId())) throw new BusinessException(ErrorCode.FORBIDDEN);
                 return new TrendJobSubmissionVO(false, true, view(mapper.lockJob(id)));
             }
             if (active != null) return new TrendJobSubmissionVO(false, false, view(active));
             if (slot.lastAcceptedAt() != null && now.isBefore(slot.lastAcceptedAt().plusSeconds(60))) {
                 throw new TrendJobThrottle((Duration.between(now, slot.lastAcceptedAt().plusSeconds(60)).toMillis() + 999) / 1000);
             }
-            if (ai.enabled() && !ai.ready()) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "AI配置尚未就绪，未受理任务");
-            if (!mapper.hasPendingFees()) mapper.clean(now.minusDays(90));
-            if (mapper.count() >= 1000 || slot.generation() == Long.MAX_VALUE) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "任务存储已达容量，需先检查历史及待核对记录");
-            long generation = slot.generation() + 1;
-            var job = new TrendJobRecord(id, actor.getId(), actor.getCredentialVersion(), ai.enabled(), generation,
-                    "QUEUED", "QUEUED", now, null, null, null, now.plusMinutes(30), null, null);
-            if (mapper.insert(job) != 1 || mapper.occupy(id, generation, now) != 1) throw conflict();
-            return new TrendJobSubmissionVO(true, false, view(job));
+            return new TrendJobSubmissionVO(true, false, view(admit(id, actor.getId(), actor.getCredentialVersion(), slot, now)));
         });
+    }
+
+    /**
+     * 数据库北京时间命中首次/补偿十分钟窗口才受理；多实例和重启共用单槽及日期唯一事实。
+     * 补偿只接受首次明确FAILED/COLLECTING且无任何待核对费用，不重放已进入AI的执行。
+     * @return 新受理任务，窗口外、忙、已有报告/尝试或不安全补偿时为空
+     */
+    public TrendJobRecord scheduleDue() {
+        if (!module.enabled() || !jobs.enabled() || !schedule.ready() || scheduled == null) return null;
+        return transaction.execute(status -> {
+            var now = mapper.now();
+            var local = now.toInstant(ZoneOffset.UTC).atZone(ZoneId.of("Asia/Shanghai"));
+            int delta = local.getHour() * 60 + local.getMinute() - schedule.startMinute();
+            int attempt = delta >= 0 && delta < 10 ? 0
+                    : delta >= schedule.retryDelayMinutes() && delta < schedule.retryDelayMinutes() + 10 ? 1 : -1;
+            if (attempt < 0) return null;
+            var slot = slot();
+            var checkedNow = mapper.now();
+            var checkedLocal = checkedNow.toInstant(ZoneOffset.UTC).atZone(ZoneId.of("Asia/Shanghai"));
+            int checkedDelta = checkedLocal.getHour() * 60 + checkedLocal.getMinute() - schedule.startMinute();
+            int expectedStart = attempt == 0 ? 0 : schedule.retryDelayMinutes();
+            if (!local.toLocalDate().equals(checkedLocal.toLocalDate()) || checkedDelta < expectedStart || checkedDelta >= expectedStart + 10) return null;
+            now = checkedNow;
+            // 单槽所有读取与后续写入使用同一事务，等待超时会安全拒绝而不排外部请求。
+            var day = local.toLocalDate();
+            if (recover(slot, now) != null || scheduled.lockAttempt(day, attempt) != null || scheduled.published(day)) return null;
+            if (slot.lastAcceptedAt() != null && now.isBefore(slot.lastAcceptedAt().plusSeconds(60))) return null;
+            if (attempt == 1) {
+                var first = scheduled.lockAttempt(day, 0);
+                if (first == null || mapper.hasPendingFees()) return null;
+                var previous = mapper.lockJob(first.jobId());
+                if (previous == null || !"FAILED".equals(previous.state()) || !"COLLECTING".equals(previous.phase())) return null;
+            }
+            var job = admit(java.util.UUID.randomUUID().toString(), null, null, slot, now);
+            if (scheduled.insert(new TrendScheduleRecord(day, attempt, job.id(), now)) != 1) throw conflict();
+            return job;
+        });
+    }
+
+    private TrendJobRecord admit(String id, Long actor, Long version, TrendJobSlot slot, LocalDateTime now) {
+        if (ai.enabled() && !ai.ready()) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "AI配置尚未就绪，未受理任务");
+        if (!mapper.hasPendingFees()) mapper.clean(now.minusDays(90));
+        if (mapper.count() >= 1000 || slot.generation() == Long.MAX_VALUE) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "任务存储已达容量，需先检查历史及待核对记录");
+        long generation = slot.generation() + 1;
+        var job = new TrendJobRecord(id, actor, version, ai.enabled(), generation, "QUEUED", "QUEUED", now,
+                null, null, null, now.plusMinutes(30), null, null);
+        if (mapper.insert(job) != 1 || mapper.occupy(id, generation, now) != 1) throw conflict();
+        return job;
     }
 
     /** 查询也回收已过期任务，停用执行器时不会一直向屋主显示运行中。 */
@@ -91,6 +145,8 @@ public class TrendJobStore {
             var slot = slot(); var now = mapper.now();
             var job = recover(slot, now);
             if (job == null || !"QUEUED".equals(job.state())) return null;
+            // 多实例可能只在部分节点启用定时；无资格的节点不能先抢走系统任务再将其误标中断。
+            if (job.actorId() == null && (!schedule.ready() || scheduled == null)) return null;
             if (mapper.start(job.id(), now, earlier(now.plusMinutes(2), job.deadline())) != 1) throw conflict();
             return mapper.lockJob(job.id());
         });
@@ -112,7 +168,7 @@ public class TrendJobStore {
     public TrendReportVO publish(TrendJobRecord job, TrendCollection collection) {
         requireReady();
         return transaction.execute(status -> {
-            owners.lockActor(job.actorId(), job.credentialVersion());
+            authorize(job);
             var slot = slot(); var now = mapper.now();
             current(job, slot, now);
             var report = archive.publish(job.id(), collection);
@@ -136,7 +192,7 @@ public class TrendJobStore {
         try {
             requireReady();
             transaction.executeWithoutResult(status -> {
-                owners.lockActor(job.actorId(), job.credentialVersion());
+                authorize(job);
                 var slot = slot(); var now = mapper.now();
                 var current = current(job, slot, now);
                 if (phase != null && mapper.phase(job.id(), job.generation(), phase) != 1) throw conflict();
@@ -151,6 +207,17 @@ public class TrendJobStore {
         if (current == null || current.generation() != expected.generation() || !"RUNNING".equals(current.state())
                 || current.leaseUntil() == null || !now.isBefore(current.leaseUntil()) || !now.isBefore(current.deadline())) throw new TrendExecutionLost();
         return current;
+    }
+
+    private void authorize(TrendJobRecord job) {
+        if (job.actorId() != null && job.credentialVersion() != null) {
+            owners.lockActor(job.actorId(), job.credentialVersion());
+            return;
+        }
+        if (job.actorId() != null || job.credentialVersion() != null || !schedule.ready() || scheduled == null) throw new TrendExecutionLost();
+        var intent = scheduled.byJob(job.id());
+        if (intent == null || !intent.createdAt().equals(job.createdAt()) || !intent.periodDate().equals(
+                job.createdAt().toInstant(ZoneOffset.UTC).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate())) throw new TrendExecutionLost();
     }
 
     private TrendJobRecord recover(TrendJobSlot slot, LocalDateTime now) {
@@ -177,7 +244,7 @@ public class TrendJobStore {
     }
     private static TrendJobVO view(TrendJobRecord job) {
         return new TrendJobVO(job.id(), job.state(), job.phase(), job.aiRequested(), instant(job.createdAt()), instant(job.startedAt()),
-                instant(job.completedAt()), instant(job.deadline()), job.reportId(), job.reason());
+                instant(job.completedAt()), instant(job.deadline()), job.reportId(), job.reason(), job.actorId() == null ? "SCHEDULED" : "MANUAL");
     }
     private static Instant instant(LocalDateTime value) { return value == null ? null : value.toInstant(ZoneOffset.UTC); }
     private static LocalDateTime earlier(LocalDateTime a, LocalDateTime b) { return a.isBefore(b) ? a : b; }

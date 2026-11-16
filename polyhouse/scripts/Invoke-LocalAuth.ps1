@@ -8,6 +8,7 @@ Verify -AccountProvisioningOnly：只在随机隔离库执行开户验收，包�
 Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Verify -ProfileModerationOnly -WorkspaceBrowser：U4 保留随机后端与本机桥接，等待显式完成后校验并清理。
 Verify -TrendOnly：只验技术雷达随机隔离库，不创建账号、连接 Redis 或付费AI。
+Verify -TrendRedisOnly：只在本机Redis的随机测试键验证内容缓存Lua，不改正式内容键/认证键，不连接数据库。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
@@ -28,12 +29,17 @@ param(
     # U4 显式保留隔离 HTTP 服务，供 CUA 浏览器验收；普通验证不会等待人工操作。
     [switch]$WorkspaceBrowser,
     # 技术雷达只运行自己的随机库专项，不能落入默认全量 OWNER 夹具。
-    [switch]$TrendOnly
+    [switch]$TrendOnly,
+    # 只执行内容缓存的随机Redis键专项，绝不落入账号或付费夹具。
+    [switch]$TrendRedisOnly,
+    # 可选临时Redis本机端口，只用于专项，不改私有预设或普通启动配置。
+    [ValidateRange(1024, 65535)][int]$TrendRedisPort
 )
 
 $ErrorActionPreference = 'Stop'
-if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly + [int][bool]$TrendRedisOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly -or $TrendRedisOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if ($PSBoundParameters.ContainsKey('TrendRedisPort') -and (-not $TrendRedisOnly -or -not $SkipWslRedis)) { throw '临时Redis端口只用于 -TrendRedisOnly -SkipWslRedis。' }
 if ($WorkspaceBrowser -and (-not $ProfileModerationOnly -or $Action -ne 'Verify')) { throw '工作台浏览器验收必须同时选择 Verify -ProfileModerationOnly。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
@@ -105,7 +111,7 @@ try {
     if ($redisHost -and $redisHost -notin @('localhost', '127.0.0.1', '::1')) {
         throw '本机验收入口只允许本机 Redis。'
     }
-    if ($Action -eq 'Run') {
+    if ($Action -eq 'Run' -or $TrendRedisOnly) {
         if (-not $SkipWslRedis) {
             # 本机约定为 Ubuntu 无认证 Redis。持有独立 WSL 进程直到后端退出，
             # 避免把 systemd 的 enabled 状态误当成 Windows 侧持续可访问。
@@ -142,15 +148,23 @@ try {
                 Start-Sleep -Milliseconds 200
             }
             if (-not $ready) { throw '本机 Redis 未就绪，后端尚未启动。请检查 Ubuntu 的 redis-server 和 Windows 本机端口转发。' }
-            Write-Host '本机 Redis 已就绪；后端运行期间保持 Ubuntu WSL 活跃。'
+            Write-Host '本机 Redis 已就绪；本次运行/验证期间保持 Ubuntu WSL 活跃。'
         }
+    }
+    if ($Action -eq 'Run') {
         & mvn spring-boot:run
         if ($LASTEXITCODE -ne 0) { throw '本地后端启动失败，请查看不含凭据的应用诊断。' }
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($TrendOnly) {
-            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest,TrendFeeIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+        if ($TrendRedisOnly) {
+            $trendRedisArguments = @('-q', '-Dtest=TrendCacheRedisIntegrationTest', '-Dpolyhouse.trend.redis=true')
+            if ($PSBoundParameters.ContainsKey('TrendRedisPort')) {
+                $trendRedisArguments += @('-Dspring.data.redis.host=127.0.0.1', "-Dspring.data.redis.port=$TrendRedisPort")
+            }
+            & mvn @trendRedisArguments test
+        } elseif ($TrendOnly) {
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest,TrendFeeIntegrationTest,TrendScheduleIntegrationTest' '-Dpolyhouse.trend.integration=true' test
         } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test
@@ -169,6 +183,7 @@ try {
         }
         if ($LASTEXITCODE -ne 0) {
             if ($TrendOnly) { throw '技术雷达隔离验收失败，请检查 Surefire 汇总。' }
+            if ($TrendRedisOnly) { throw '技术雷达Redis专项失败，请检查本机连接及Surefire汇总。' }
             if ($ProfileModerationOnly) { throw '资料审核隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountManagementOnly) { throw '账号管理隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountProvisioningOnly) { throw '账号开户隔离验收失败，请检查 Surefire 汇总。' }

@@ -4,19 +4,19 @@
 
 ## 当前无需提交密钥
 
-G2/G3实现及数据库测试只用假Key、模拟模型。真实模型质量、响应和费用尚未验证，不将模拟成功当作真实接入成功。G3a屋主持久任务和G3b费用查询/保守关闭已实现，默认任务关闭；每日定时与缓存仍待做，完整真实联调留在后续收口。目前无需提供Key或运行迁移。
+G2/G3实现及数据库测试只用假Key、模拟模型。真实模型质量、响应和费用尚未验证，不将模拟成功当作真实接入成功。屋主持久任务、费用查询/保守关闭、每日定时和可选内容缓存已实现，开关默认关闭；完整真实联调留在G4，目前无需把Key发到聊天或提前运行迁移。
 
 不要把 Key、包含 Key 的截图、请求头或环境变量输出发到聊天中。助手不需要查看明文；只需在后续联调时回复“已在本机配置，启动成功/失败”，失败只提供脱敏状态或固定错误。
 
 ## 可选本机启动包装
 
-脚本 [Invoke-TrendAiLocal.ps1](../../polyhouse/scripts/Invoke-TrendAiLocal.ps1) 不替代原启动入口，不改写IDEA配置，不保存Key文件。`Inspect`只显示Key存在及模块/AI/任务开关四个布尔状态，不访问API，也不证明Key有效：
+脚本 [Invoke-TrendAiLocal.ps1](../../polyhouse/scripts/Invoke-TrendAiLocal.ps1) 不替代原启动入口，不改写IDEA配置，不保存Key文件。`Inspect`只显示Key存在及模块/AI/任务/定时/缓存六个布尔状态，不访问API，也不证明Key或运行链路有效：
 
 ```powershell
 ./polyhouse/scripts/Invoke-TrendAiLocal.ps1 -Action Inspect
 ```
 
-后续确认真实目标库及010～013迁移、既有任务/费用状态和真实联调安排后，在自己的PowerShell终端、仓库根目录运行（不是要求现在执行）：
+后续确认真实目标库及010～014迁移、既有任务/费用状态和G4真实联调安排后，在自己的PowerShell终端、仓库根目录运行（不是要求现在执行）：
 
 ```powershell
 ./polyhouse/scripts/Invoke-TrendAiLocal.ps1 -Action Run -EnableAi
@@ -24,7 +24,7 @@ G2/G3实现及数据库测试只用假Key、模拟模型。真实模型质量、
 
 出现隐藏输入提示时再输入聚妙屋专用 Key，正常终端仅显示掩码。命令本身不含 Key，因此不会把真实值写入 PowerShell 命令历史；脚本没有持久化逻辑。若启用了剪贴板历史/云同步，复制粘贴仍可能留下副本，避免把它贴到其他窗口或截图中。
 
-包装只向本次启动进程树注入`POLYHOUSE_DEEPSEEK_API_KEY`；`-EnableAi`显式启用模块及AI，**不更改任务开关、不迁移、不主动提交新采集意图**。任务默认关闭；如果你原先已设置`POLYHOUSE_TREND_JOBS_ENABLED=true`，重启后端可能执行先前受理的QUEUED任务并按原账本收费，启动前必须核对状态。随后复用已有`Invoke-LocalAuth.ps1 -Action Run`；正常或异常结束均恢复包装所改环境，保留用户原配置。需要其他Redis环境时沿用`-SkipWslRedis`。
+包装只向本次启动进程树注入`POLYHOUSE_DEEPSEEK_API_KEY`；`-EnableAi`显式启用模块及AI，**不更改任务/定时/缓存开关、不迁移、不主动提交新意图**。若原任务开关已启用，重启可能执行先前受理的QUEUED任务；若同时启用定时，命中窗口时后台还可能自动受理新任务并按账本收费。启动前核对状态；受控真实样本联调先保持定时关闭。随后复用已有`Invoke-LocalAuth.ps1 -Action Run`，退出恢复包装所改环境、保留用户原配置，其他Redis环境沿用`-SkipWslRedis`。
 
 隐藏输入与环境继承机制见 [Read-Host](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/read-host?view=powershell-7.5) 和[进程环境变量](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.5)。运行时仍需明文供 HTTP 认证使用，同权限恶意程序、内存转储或不当调试可能读取；不承诺绝对不泄露。不要打印环境、开启包含认证头的 HTTP 调试或分享运行转储。
 

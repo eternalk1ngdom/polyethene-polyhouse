@@ -23,6 +23,7 @@ public interface TrendMapper {
 
     /** 发布请求号是唯一主键，重放不生成第二份报告。 */
     @Select("SELECT id,period_date,captured_at,payload FROM tool_trend_report_version WHERE id=#{id}")
+    @Options(timeout = 3)
     TrendReportRecord findVersion(@Param("id") String id);
 
     /** payload 使用参数绑定；新版本不会修改旧报告 JSON。 */
@@ -48,6 +49,22 @@ public interface TrendMapper {
         """)
     @Options(timeout = 3)
     TrendReportRecord published(@Param("day") LocalDate day);
+
+    /** 缓存启用时仍先读权威头，只取小列，不把整份JSON传出数据库。 */
+    @Select("""
+        SELECT v.id,v.period_date,v.captured_at,NULL AS payload FROM tool_trend_daily d
+        JOIN tool_trend_report_version v ON v.id=d.report_id ORDER BY d.period_date DESC LIMIT 1
+        """)
+    @Options(timeout = 3)
+    TrendReportRecord latestHeader();
+
+    /** 历史查询同样按当前发布指针核对版本，不能用Redis中的旧版本冒充当期当前内容。 */
+    @Select("""
+        SELECT v.id,v.period_date,v.captured_at,NULL AS payload FROM tool_trend_daily d
+        JOIN tool_trend_report_version v ON v.id=d.report_id WHERE d.period_date=#{day}
+        """)
+    @Options(timeout = 3)
+    TrendReportRecord publishedHeader(@Param("day") LocalDate day);
 
     /** 使用日期索引和排他游标，limit 来自已验证上限，不允许用户指定排序片段。 */
     @Select("""

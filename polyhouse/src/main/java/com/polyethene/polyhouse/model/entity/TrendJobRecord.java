@@ -5,8 +5,8 @@ import java.time.LocalDateTime;
 /**
  * 数据库任务快照，只在内部流转；身份版本用于执行前复核，不保存会话令牌。
  * @param id 请求和任务共用的幂等 UUID
- * @param actorId 受理时的屋主编号
- * @param credentialVersion 受理时的凭据版本，改密/重置后旧任务不能继续付费
+ * @param actorId 手动受理的屋主编号；系统定时为空且另有受理事实校验，不伪造用户
+ * @param credentialVersion 手动受理的凭据版本；与actorId同时为空才可表示系统定时
  * @param aiRequested 受理时冻结是否允许分析，后续打开开关不扩大原请求意图
  * @param generation 全局单调代数，旧执行不能释放新槽或发布
  * @param state 执行状态，不与是否发布或解读完整度混用
@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * @param reportId 仅成功发布后记录的版本编号
  * @param reason 固定安全原因码，无上游原文
  */
-public record TrendJobRecord(String id, long actorId, long credentialVersion, boolean aiRequested,
+public record TrendJobRecord(String id, Long actorId, Long credentialVersion, boolean aiRequested,
                              long generation, String state, String phase, LocalDateTime createdAt,
                              LocalDateTime startedAt, LocalDateTime completedAt, LocalDateTime leaseUntil,
                              LocalDateTime deadline, String reportId, String reason) { }

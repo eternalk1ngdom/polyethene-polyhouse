@@ -19,6 +19,8 @@ if ($Action -eq 'Inspect') {
         ModuleEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'Process') -eq 'true'
         AiEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'Process') -eq 'true'
         JobsEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_JOBS_ENABLED', 'Process') -eq 'true'
+        ScheduleEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_SCHEDULE_ENABLED', 'Process') -eq 'true'
+        CacheEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_CACHE_ENABLED', 'Process') -eq 'true'
     }
     return
 }
@@ -40,7 +42,7 @@ try {
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'true', 'Process')
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'true', 'Process')
     }
-    Write-Host 'Key已注入本次启动进程树，未验证有效性、不做迁移；任务开关保持原值，已启用时后端重启可能继续已受理任务并计费。'
+    Write-Host 'Key已注入本次启动进程树，未验证有效性、不做迁移；任务及定时开关保持原值，启用时可能继续已受理任务或自动受理新任务并计费。'
     & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Run -SkipWslRedis:$SkipWslRedis
 } finally {
     foreach ($name in $names) {

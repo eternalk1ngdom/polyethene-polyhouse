@@ -10,7 +10,7 @@ import org.springframework.http.HttpMethod;
 
 /** 公开读与管理入口各有固定预算，拒绝发生在身份存储前，不改变现有全站限额。 */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({TrendProperties.class, TrendAiProperties.class, TrendJobProperties.class})
+@EnableConfigurationProperties({TrendProperties.class, TrendAiProperties.class, TrendJobProperties.class, TrendScheduleProperties.class, TrendCacheProperties.class})
 public class TrendConfiguration {
     /** 本地与生产都先限定JSON读取体积；生产全站已检查的缓冲请求仍受相同上界保护。 */
     @Bean
