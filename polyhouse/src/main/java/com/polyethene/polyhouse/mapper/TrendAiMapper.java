@@ -48,6 +48,19 @@ public interface TrendAiMapper {
     @Select("SELECT * FROM tool_trend_ai_request WHERE id=#{id} FOR UPDATE")
     TrendAiRequest lockRequest(@Param("id") String id);
 
+    /** 预留时间不可变，人工处理须等待安全窗口，不依据客户端时间。 */
+    @Select("SELECT created_at FROM tool_trend_ai_request WHERE id=#{id}")
+    @Options(timeout = 3)
+    LocalDateTime createdAt(@Param("id") String id);
+
+    /** 人工关闭只记保守金额，不能捏造token用量或退回已不确定的费用。 */
+    @Update("""
+        UPDATE tool_trend_ai_request SET state='SETTLED',charged_micros=reserved_micros,
+        prompt_tokens=NULL,completion_tokens=NULL,outcome='MANUAL_RESERVED'
+        WHERE id=#{id} AND state IN ('RESERVED','UNKNOWN') AND reserved_micros=#{expected}
+        """)
+    int closeReserved(@Param("id") String id, @Param("expected") long expected);
+
     /** 参数绑定资料指纹及价格，不保存 Prompt、正文或任何令牌。 */
     @Insert("""
         INSERT INTO tool_trend_ai_request(id,month_key,repository_id,readme_sha,model,rule_version,state,

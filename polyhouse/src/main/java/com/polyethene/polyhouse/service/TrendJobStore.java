@@ -10,6 +10,7 @@ import com.polyethene.polyhouse.service.trend.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.time.*;
 import java.util.Set;
 
@@ -69,6 +70,18 @@ public class TrendJobStore {
             if (job == null) throw new BusinessException(ErrorCode.NOT_FOUND);
             return view(job);
         });
+    }
+
+    /**
+     * 人工费用处理必须与新任务受理/运行互斥；调用方先锁屋主，持有本槽直到审计和账本一起提交。
+     * 不单独开启后立即提交事务，避免释放槽后才修改计费状态；过期任务只标中断不重放。
+     * @return 同一数据库的UTC时间，供人工处理的五分钟窗口判断
+     */
+    public LocalDateTime lockIdleForFeeResolution() {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("Fee resolution requires an outer transaction");
+        var slot = slot(); var now = mapper.now();
+        if (recover(slot, now) != null) throw new BusinessException(ErrorCode.CONFLICT, "请等待当前采集任务结束后再处理费用");
+        return now;
     }
 
     /** 单工作线程领取持久QUEUED；过期RUNNING只标中断，绝不重放可能已经计费的执行。 */

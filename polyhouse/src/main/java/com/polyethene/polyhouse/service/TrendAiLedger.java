@@ -78,7 +78,7 @@ public class TrendAiLedger {
     /** 只有能够证明尚未发送的失败可退回预留，不允许用网络超时调用此方法。 */
     public void cancelBeforeSend(String id) { complete(id, 0, 0, null, true); }
 
-    /** 无响应/无可信用量保持未知；用量违约额外暂停该月。 */
+    /** 无响应保持未知；晚到的用量违约即使请求已人工关闭也须暂停原月，不能被终结状态掩盖。 */
     public void unknown(String id, boolean usageExceeded) {
         transaction.executeWithoutResult(status -> {
             var request = mapper.request(id);
@@ -88,8 +88,37 @@ public class TrendAiLedger {
             var current = mapper.lockRequest(id);
             if ("RESERVED".equals(current.state())) {
                 mapper.unknown(id, usageExceeded ? "USAGE_OUT_OF_BOUNDS" : "RESULT_UNKNOWN");
-                if (usageExceeded) mapper.suspend(current.monthKey());
             }
+            if (usageExceeded && !"CANCELLED".equals(current.state())) mapper.suspend(current.monthKey());
+        });
+    }
+
+    /**
+     * 只在屋主事务持有空闲任务槽时调用，沿用仓库→月份→请求锁序；本方法不发起外部调用。
+     * 预留上限全部计入预算，原月份和暂停状态不变，不把未知结果当成零费用。
+     * @param id 待核对的原AI请求UUID
+     * @param expected 调用方明确确认的原预留额
+     * @param now 持有任务槽时取得的数据库UTC时间
+     * @return 可追加审计的结算事实，不携带模型内容
+     */
+    public ConservativeCharge closeConservatively(String id, long expected, LocalDateTime now) {
+        if (id == null || !id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                || expected < 1 || expected > 10_000_000 || now == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+        return transaction.execute(status -> {
+            var request = mapper.request(id);
+            if (request == null) throw new BusinessException(ErrorCode.NOT_FOUND);
+            var cache = mapper.lockRepository(request.repositoryId());
+            mapper.lockMonth(request.monthKey());
+            var current = mapper.lockRequest(id);
+            if (current == null || !("RESERVED".equals(current.state()) || "UNKNOWN".equals(current.state()))
+                    || cache == null || !id.equals(cache.activeRequest()) || current.reservedMicros() != expected) throw conflict();
+            var created = mapper.createdAt(id);
+            if (created == null || now.isBefore(created.plusMinutes(5))) {
+                throw new BusinessException(ErrorCode.CONFLICT, "请等待原请求预留至少五分钟后再处理");
+            }
+            if (mapper.settle(current.monthKey(), expected, expected) != 1 || mapper.closeReserved(id, expected) != 1
+                    || mapper.release(current.repositoryId(), id, null) != 1) throw conflict();
+            return new ConservativeCharge(id, current.monthKey(), current.repositoryId(), expected);
         });
     }
 
@@ -127,6 +156,15 @@ public class TrendAiLedger {
      * @param payload 锁内看到的成功缓存
      */
     public record Decision(String status, TrendAiRequest request, String payload) { }
+
+    /**
+     * 供同事务审计使用，表示内部预算处理，不冒充平台实际账单。
+     * @param requestId 原请求编号
+     * @param monthKey 原预留月
+     * @param repositoryId 已释放等待状态的仓库编号
+     * @param accountedMicros 全部原预留额，不是退款或平台扣费
+     */
+    public record ConservativeCharge(String requestId, String monthKey, long repositoryId, long accountedMicros) { }
 
     private static BusinessException conflict() { return new BusinessException(ErrorCode.CONFLICT, "AI 账本状态已变化"); }
 }

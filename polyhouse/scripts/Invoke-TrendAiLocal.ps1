@@ -18,6 +18,7 @@ if ($Action -eq 'Inspect') {
         KeyConfigured = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('POLYHOUSE_DEEPSEEK_API_KEY', 'Process'))
         ModuleEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'Process') -eq 'true'
         AiEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'Process') -eq 'true'
+        JobsEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_JOBS_ENABLED', 'Process') -eq 'true'
     }
     return
 }
@@ -39,7 +40,7 @@ try {
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'true', 'Process')
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'true', 'Process')
     }
-    Write-Host 'Key已注入本次启动进程树；未验证有效性，未执行AI调用或数据库迁移。'
+    Write-Host 'Key已注入本次启动进程树，未验证有效性、不做迁移；任务开关保持原值，已启用时后端重启可能继续已受理任务并计费。'
     & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Run -SkipWslRedis:$SkipWslRedis
 } finally {
     foreach ($name in $names) {

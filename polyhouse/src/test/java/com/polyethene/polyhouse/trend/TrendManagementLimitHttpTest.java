@@ -21,6 +21,7 @@ class TrendManagementLimitHttpTest {
     @LocalServerPort private int port;
     @MockBean private AuthService auth;
     @MockBean private TrendJobManagementService jobs;
+    @MockBean private TrendFeeService fees;
 
     @Test void sharedBudgetRejectsBeforeAuthenticationAndRecoversWithoutLockingAccount() throws Exception {
         var entered = new CountDownLatch(2); var release = new CountDownLatch(1);
@@ -30,29 +31,31 @@ class TrendManagementLimitHttpTest {
         });
         when(jobs.query(any(), any())).thenReturn(new TrendJobVO(ID, "QUEUED", "QUEUED", false, TrendAiFixture.NOW,
                 null, null, TrendAiFixture.NOW.plusSeconds(1800), null, null));
+        when(fees.query(any(), any())).thenReturn(new TrendFeeVO("2026-11", 10_000_000, 0, 0, 10_000_000, 0, false, java.util.List.of(), null));
         try (var client = HttpClient.newHttpClient()) {
             var a = client.sendAsync(request("/api/manage/trend/jobs?jobId=" + ID, 1).GET().build(), HttpResponse.BodyHandlers.ofString());
             var b = client.sendAsync(request("/api/manage/trend/jobs?jobId=" + ID, 2).GET().build(), HttpResponse.BodyHandlers.ofString());
             try {
                 assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
-                limited(client.send(request("/api/manage/%74rend/jobs;fixture=1?jobId=" + ID, 3).GET().build(), HttpResponse.BodyHandlers.ofString()));
+                limited(client.send(request("/api/manage/%74rend/fees;fixture=1", 3).GET().build(), HttpResponse.BodyHandlers.ofString()));
                 verify(auth, times(2)).getCurrentUser("fixture");
             } finally { release.countDown(); }
             assertThat(a.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(200);
             assertThat(b.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(200);
-            clearInvocations(auth, jobs);
-            var large = client.send(request("/api/manage/trend/jobs", 4).header("Content-Type", "application/json")
+            clearInvocations(auth, jobs, fees);
+            var large = client.send(request("/api/manage/trend/fees/resolutions", 4).header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString("x".repeat(384 * 1024 + 1))).build(), HttpResponse.BodyHandlers.ofString());
-            assertThat(large.statusCode()).isEqualTo(413); verifyNoInteractions(auth, jobs);
+            assertThat(large.statusCode()).isEqualTo(413); verifyNoInteractions(auth, jobs, fees);
             boolean rejected = false;
             for (int i = 0; i < 12; i++) {
-                var response = client.send(request("/api/manage/trend/jobs?jobId=" + ID, i + 5).GET().build(), HttpResponse.BodyHandlers.ofString());
+                String path = i % 2 == 0 ? "/api/manage/trend/jobs?jobId=" + ID : "/api/manage/trend/fees";
+                var response = client.send(request(path, i + 5).GET().build(), HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() == 429) { limited(response); rejected = true; break; }
                 assertThat(response.statusCode()).isEqualTo(200);
             }
             assertThat(rejected).isTrue();
             Thread.sleep(2200);
-            assertThat(client.send(request("/api/manage/trend/jobs?jobId=" + ID, 20).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+            assertThat(client.send(request("/api/manage/trend/fees", 20).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
         }
     }
     private HttpRequest.Builder request(String path, int address) {

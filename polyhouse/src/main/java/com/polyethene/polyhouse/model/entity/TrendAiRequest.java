@@ -12,7 +12,7 @@ import java.math.BigDecimal;
  * @param ruleVersion 解读规则版本
  * @param state RESERVED、UNKNOWN、SETTLED 或 CANCELLED
  * @param reservedMicros 本次持有的人民币微元
- * @param chargedMicros 已确认的保守计费，未知为 null
+ * @param chargedMicros 已计入预算的保守金额，可含人工按预留上限关闭；未知为null，不代表平台实际账单
  * @param inputBound 输入 token 保守上界
  * @param outputBound 已发送的最大输出 token
  * @param inputRate 每百万输入 token 的人民币价格

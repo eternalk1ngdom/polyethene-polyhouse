@@ -2,7 +2,7 @@
 
 更新时间：2026-11-16（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)G1/G2核心及G3a屋主持久任务已实现，编译/本轮103项通过；默认关闭，开发库未迁移。下一步G3b费用待核对、定时与缓存；真实DeepSeek样本待私有配置，前端另行设计。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)G1/G2核心、G3a任务及G3b费用闭环完成，本轮编译/128项通过。默认关闭、开发库未迁移；下一步每日定时/缓存，真实模型待验，前端待专项设计。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
