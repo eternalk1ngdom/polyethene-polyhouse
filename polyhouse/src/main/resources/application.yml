@@ -50,6 +50,14 @@ polyhouse:
   trend:
     enabled: ${POLYHOUSE_TREND_ENABLED:false}
     github-token: ${POLYHOUSE_GITHUB_TOKEN:}
+    # Key 只注入后端进程；月额度使用人民币微元，最高仍为已批准的十元。
+    ai:
+      enabled: ${POLYHOUSE_TREND_AI_ENABLED:false}
+      api-key: ${POLYHOUSE_DEEPSEEK_API_KEY:}
+      model: deepseek-flash
+      input-yuan-per-million: 2
+      output-yuan-per-million: 8
+      monthly-budget-micros: 10000000
   jwt:
     # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}

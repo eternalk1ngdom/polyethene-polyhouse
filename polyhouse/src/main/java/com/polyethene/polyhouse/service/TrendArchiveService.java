@@ -47,8 +47,10 @@ public class TrendArchiveService {
                     || !names.add(item.fullName().toLowerCase(Locale.ROOT))) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
         }
         LocalDate date = collection.capturedAt().atZone(ZoneId.of("Asia/Shanghai")).toLocalDate();
+        boolean complete = collection.projects().stream().allMatch(project -> "NOT_REQUIRED".equals(project.snapshot().insightStatus())
+                || (project.snapshot().insight() != null && Set.of("ANALYZED", "REUSED").contains(project.snapshot().insightStatus())));
         var view = new TrendReportVO(publicationId, "DAILY", date, collection.capturedAt(), Instant.now(),
-                GithubTrendingParser.SOURCE, false, collection.projects().stream().map(TrendCollection.Project::snapshot).toList());
+                GithubTrendingParser.SOURCE, complete, collection.projects().stream().map(TrendCollection.Project::snapshot).toList());
         final String payload;
         try { payload = json.writeValueAsString(view); }
         catch (JsonProcessingException failure) { throw new BusinessException(ErrorCode.INTERNAL_ERROR); }

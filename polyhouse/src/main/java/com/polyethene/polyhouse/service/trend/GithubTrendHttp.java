@@ -10,10 +10,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.*;
 
 /** 固定来源、单请求并发、完整响应十五秒和一 MiB 边界，禁止隐式跨域携带 GitHub 令牌。 */
@@ -48,7 +46,7 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
                 request.header("Authorization", "Bearer " + token);
             }
             if (uri.getHost().equals("api.github.com")) request.header("X-GitHub-Api-Version", "2026-03-10");
-            future = client.sendAsync(request.GET().build(), info -> new LimitedBody(MAX_BYTES));
+            future = client.sendAsync(request.GET().build(), info -> new LimitedResponseBody(MAX_BYTES));
             var response = future.get(15, TimeUnit.SECONDS);
             String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (response.statusCode() == 200 && !(uri.getHost().equals("api.github.com")
@@ -89,27 +87,4 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
         return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
     }
 
-    /** 请求下一批前累计字节，超限即取消订阅，不等待完整响应在内存中聚合。 */
-    private static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
-        private final HttpResponse.BodySubscriber<byte[]> delegate = HttpResponse.BodySubscribers.ofByteArray();
-        private final int limit;
-        private long received;
-        private Flow.Subscription subscription;
-        private boolean stopped;
-
-        private LimitedBody(int limit) { this.limit = limit; }
-        @Override public CompletionStage<byte[]> getBody() { return delegate.getBody(); }
-        @Override public void onSubscribe(Flow.Subscription value) { subscription = value; delegate.onSubscribe(value); }
-        @Override public void onNext(List<ByteBuffer> buffers) {
-            if (stopped) return;
-            for (ByteBuffer buffer : buffers) received += buffer.remaining();
-            if (received > limit) {
-                stopped = true;
-                subscription.cancel();
-                delegate.onError(new IllegalStateException("GitHub body limit exceeded"));
-            } else delegate.onNext(buffers);
-        }
-        @Override public void onError(Throwable failure) { if (!stopped) { stopped = true; delegate.onError(failure); } }
-        @Override public void onComplete() { if (!stopped) { stopped = true; delegate.onComplete(); } }
-    }
 }

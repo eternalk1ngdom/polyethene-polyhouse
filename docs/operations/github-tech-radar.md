@@ -1,12 +1,12 @@
 # 技术雷达后端基础归档与查询
 
-当前交付为[阶段方案](../plans/github-tech-radar.md)的 G1 及公开查询部分。AI、屋主任务写接口、定时、Redis 内容缓存和前端尚未交付；查询不会自动生成数据。
+当前已实现[阶段方案](../plans/github-tech-radar.md)的 G1、公开查询及 G2 解读/预算核心；G2真实模型样本仍待私有配置验证。屋主任务写接口、定时、Redis内容缓存和前端尚未交付；查询不会自动生成数据。
 
 ## 启用与数据来源
 
 - 默认 `POLYHOUSE_TREND_ENABLED=false`，不需 GitHub 或 AI 密钥，既有启动方式保持。关闭时新查询返回统一 503，其他功能照常启动。
 - 明确目标库并完成下述迁移后，通过运行环境设置 `POLYHOUSE_TREND_ENABLED=true`。可用私有变量 `POLYHOUSE_GITHUB_TOKEN` 提供公共仓库只读凭据，不写入提交文件或发到聊天。
-- 当前采集及发布只有内部 Java 服务，没有公网生成入口。采集返回有界材料，内部发布服务保存基础日报；G2/G3 后续接入解读、受控任务及定时。不要将运维命令暴露成公开 HTTP。
+- 当前采集、AI富化及发布只有内部 Java 服务，没有公网生成入口。G2提供结构化解读、复用和账本，G3再接受控任务及定时。Key配置见[安全输入说明](deepseek-key-safety.md)，不要发到聊天；不要将运维命令暴露成公开 HTTP。
 
 ## 查询契约
 
@@ -17,7 +17,7 @@
 
 均为匿名只读，统一 `Result<T>`，不恢复账号会话。无报告 404，非法日期/周期/限额 400，关闭或存储故障 503；超限 429 并带 `Retry-After`。沿用 no-store，不为公开内容改公共鉴权。
 
-版本包含 UUID、北京期号、UTC ISO 采集/发布时间、来源和按来源排名的项目。仓库 ID 为字符串、未知数据为 null，README 正文、上游错误及凭据不公开。当前未分析，项目状态 `NOT_ANALYZED` 或资源项目 `NOT_REQUIRED`，`insightComplete=false`。未来前端须转义展示文本。
+版本包含 UUID、北京期号、UTC ISO 采集/发布时间、来源和来源排名。仓库ID为字符串，未知为null，正文/错误/凭据不公开。G1旧报告缺少`insight`仍可读取；新报告可有结构化解读及生成时间，`ANALYZED`/`REUSED`表示有效，`STALE`明确沿用旧解读，其他状态说明缺失。所有需分析项目都有效时`insightComplete=true`，资源项目无需分析。未来前端须转义展示。
 
 ## 迁移与回退
 
@@ -31,7 +31,7 @@
 
 ## 验证入口
 
-在仓库根目录先运行 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Inspect`，再运行 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Verify -TrendOnly`。专项只创建并清理随机 `polyhouse_trend_` 库，不创建用户、不连接 Redis、不改开发库；其他专项原行为保留。
+在仓库根目录先运行 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Inspect`，再运行 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Verify -TrendOnly`。分别创建并清理G1随机两表库和G2随机五表库，不创建用户、不连接Redis、不调用付费AI、不改开发库；其他专项保留。
 
 在 `polyhouse/` 可定向运行：
 

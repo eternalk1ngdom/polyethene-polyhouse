@@ -58,6 +58,17 @@ class TrendReportServiceTest {
         assertCode(() -> service.report(new TrendReportQueryDTO(null, null)), ErrorCode.SERVICE_UNAVAILABLE);
     }
 
+    @Test void oldReportsWithoutInsightFieldRemainReadable() throws Exception {
+        var view = TrendFixture.report();
+        var tree = TrendFixture.json().valueToTree(view);
+        for (var item : tree.path("items")) ((com.fasterxml.jackson.databind.node.ObjectNode)item).remove("insight");
+        when(mapper.latest()).thenReturn(new TrendReportRecord(view.reportId(), view.periodKey(), null, tree.toString()));
+        var result = service.report(new TrendReportQueryDTO(null, null));
+        assertThat(result.items()).hasSize(2);
+        assertThat(result.items().getFirst().insight()).isNull();
+        assertThat(result.insightComplete()).isFalse();
+    }
+
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
                 failure -> assertThat(failure.getErrorCode()).isEqualTo(expected));

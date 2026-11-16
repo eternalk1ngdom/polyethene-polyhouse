@@ -12,7 +12,7 @@ import java.util.List;
  * @param capturedAt 实际采集开始时间，ISO UTC 时间带时区
  * @param publishedAt 本版本发布时间
  * @param sourceUrl 固定的日榜来源
- * @param insightComplete 所有需要分析的项目是否完成；本批基础日报明确为 false
+ * @param insightComplete 所有需分析的项目是否有当前有效解读；陈旧或缺失时为 false
  * @param items 按来源排名排列的当期资料，最大二十五条
  */
 public record TrendReportVO(String reportId, String periodType, LocalDate periodKey, Instant capturedAt,

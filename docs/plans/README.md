@@ -4,7 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [GitHub 开源技术雷达](github-tech-radar.md) | S1～S4 已批准；后端首批采集、基础归档、公开查询已实现，G2 AI/预算及任务待做；前端后续专项设计 | [dev.15](../dev-log/v1.0-dev.15.md) |
+| [GitHub 开源技术雷达](github-tech-radar.md) | G1/公开查询、G2解读与预算核心已实现；G2真实模型待私有配置验证，G3任务/定时待做；前端后续专项设计 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [框架优化与文档重塑](framework-optimization.md) | 已通过 [PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4) 合入 dev `be1a108`，F5 按需跳过；main/部署未更新 | [dev.14](../dev-log/v1.0-dev.14.md) |
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |

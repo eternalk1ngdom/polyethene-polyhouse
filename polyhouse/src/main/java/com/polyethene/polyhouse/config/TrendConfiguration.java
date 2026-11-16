@@ -10,7 +10,7 @@ import org.springframework.http.HttpMethod;
 
 /** 公开日报拥有独立的有界读预算，不消耗认证 Redis，也不改变现有全站限额。 */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(TrendProperties.class)
+@EnableConfigurationProperties({TrendProperties.class, TrendAiProperties.class})
 public class TrendConfiguration {
     /** 无来源键的固定大小预算，不信任转发头；生产环境仍先经过原 CORS 和全站预算。 */
     @Bean

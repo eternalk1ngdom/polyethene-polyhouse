@@ -7,7 +7,7 @@ Verify -AccountManagementOnly：只在随机隔离库执行 P3 管理验收。
 Verify -AccountProvisioningOnly：只在随机隔离库执行开户验收，包含本测试专属屋主。
 Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Verify -ProfileModerationOnly -WorkspaceBrowser：U4 保留随机后端与本机桥接，等待显式完成后校验并清理。
-Verify -TrendOnly：只验技术雷达随机两表库，不创建账号或连接 Redis。
+Verify -TrendOnly：只验技术雷达随机隔离库，不创建账号、连接 Redis 或付费AI。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
@@ -150,7 +150,7 @@ try {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
         if ($TrendOnly) {
-            & mvn -q '-Dtest=TrendArchiveIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest' '-Dpolyhouse.trend.integration=true' test
         } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test

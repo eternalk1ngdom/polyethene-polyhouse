@@ -48,7 +48,7 @@ npm run lint:check
 
 编译通过和 Spring 上下文启动成功不等于数据库或 Redis 已完成连接验证；实际数据读写需要另行集成测试。普通测试不会执行 MySQL 查询，MySQL 和 Redis 实例测试默认跳过。
 
-技术雷达新增独立专项 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Verify -TrendOnly`，只在随机两表库验证迁移、归档、并发与回退，不运行账号/OWNER 夹具，也不连接 Redis。普通测试不会开启 `polyhouse.trend.integration` 或 `polyhouse.trend.live`；仅在明确需要时按[技术雷达说明](github-tech-radar.md)启用真实 MySQL 或两次匿名 GitHub GET。测试位于标准根目录下的 `trend/`。
+技术雷达专项 `./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Verify -TrendOnly` 在随机G1/G2隔离库验证迁移、归档、预算、并发与回退，不运行账号/OWNER夹具、不连接Redis或付费AI。普通测试不会开启 `polyhouse.trend.integration` 或 `polyhouse.trend.live`；按[模块说明](github-tech-radar.md)选择真实MySQL或匿名GitHub GET。Java测试在标准`trend/`目录，密钥包装以[安全说明](deepseek-key-safety.md)中的假后端脚本验证，不传真实Key。
 
 ## 自动化浏览器访问本机服务
 
