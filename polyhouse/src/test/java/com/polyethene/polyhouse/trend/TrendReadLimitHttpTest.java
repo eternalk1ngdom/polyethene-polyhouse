@@ -33,11 +33,20 @@ class TrendReadLimitHttpTest {
             return new TrendPeriodsVO("DAILY", List.of(), null);
         });
         try (var client = HttpClient.newHttpClient()) {
+            var readiness = client.send(request("/api/trend/readiness"), HttpResponse.BodyHandlers.ofString());
+            assertThat(readiness.statusCode()).isEqualTo(200);
+            assertThat(readiness.headers().firstValue("Cache-Control")).contains("no-store");
+            assertThat(readiness.body()).contains("\"scope\":\"APPLICATION\"", "\"status\":\"READY\"");
+            var head = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/trend/readiness"))
+                    .timeout(Duration.ofSeconds(12)).method("HEAD", HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(head.statusCode()).isEqualTo(200);
+            assertThat(head.body()).isEmpty();
             var one = client.sendAsync(request("/api/trend/periods?a=1"), HttpResponse.BodyHandlers.ofString());
             var two = client.sendAsync(request("/api/trend/periods?a=2"), HttpResponse.BodyHandlers.ofString());
             try {
                 assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
-                limited(client.send(request("/api/%74rend/periods;fixture=one?a=3"), HttpResponse.BodyHandlers.ofString()));
+                limited(client.send(request("/api/%74rend/readiness;fixture=one?a=3"), HttpResponse.BodyHandlers.ofString()));
             } finally { finish.countDown(); }
             assertThat(one.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(200);
             assertThat(two.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(200);
@@ -49,7 +58,7 @@ class TrendReadLimitHttpTest {
             }
             assertThat(rejected).isTrue();
             Thread.sleep(1200);
-            assertThat(client.send(request("/api/trend/periods"), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+            assertThat(client.send(request("/api/trend/readiness"), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
         }
         verifyNoInteractions(auth);
     }
