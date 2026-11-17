@@ -1,8 +1,8 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-16（Asia/Shanghai）。**v1.0 开发中。**
+更新时间：2026-11-17（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)G1/G2/G3及Java21外部预热已本地实现，上轮编译/15项通过；本轮补中文注释规范，仅文档检查。默认关闭、开发库未迁移；下一步G4真实链路/模型验收，前端待专项设计。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)G4a编译、6项真实HTTP隔离及1项真实GitHub兼容通过；PS5编码已修复。用户要求官方Key配置/AI样本/账单留新会话，[入口](docs/operations/trend-g4-acceptance.md)。默认关闭、开发库未迁移，前端待设计。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
