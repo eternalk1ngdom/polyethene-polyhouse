@@ -19,12 +19,20 @@ const router = createRouter({
       name: starTide.name,
       component: () => import('../views/TrendView.vue'),
       meta: { title: `${starTide.title} · ${starTide.subtitle}` },
+      children: [
+        {
+          path: ':date/:owner/:repo',
+          name: 'star-tide-project',
+          component: () => import('../features/trend/TrendProjectDetail.vue'),
+          meta: { title: '项目详情 · 星潮' },
+        },
+      ],
     },
     {
       path: starTide.ownerRoute,
       name: 'star-tide-owner',
       component: () => import('../views/TrendOwnerView.vue'),
-      meta: { title: `${starTide.title} · 屋主工作台` },
+      meta: { title: '星潮发布台' },
     },
     {
       path: '/account',
@@ -68,6 +76,8 @@ const router = createRouter({
     },
   ],
   scrollBehavior(to, _from, savedPosition) {
+    // 日报列表可能还在读取，交给页面在条目挂载后恢复滚动和键盘焦点。
+    if (to.name === starTide.name && typeof to.query.at === 'string') return false
     // 浏览器后退优先恢复原位置，锚点等待已挂载的页面，普通切页回到顶部。
     if (savedPosition) return savedPosition
     // 分享片段的载入/清理属于同页来源选择，保留正在阅读的规则与按钮位置。

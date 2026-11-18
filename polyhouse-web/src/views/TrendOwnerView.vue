@@ -61,7 +61,7 @@ function yuan(micros: number): string {
   <div class="owner-page">
     <RouterLink :to="starTide.route" class="back">返回星潮日报</RouterLink>
     <header>
-      <h1>星潮屋主工作台</h1>
+      <h1>星潮发布台</h1>
       <p>手动更新日报与查看本月 AI 费用。</p>
     </header>
     <p v-if="user.status === 'checking'" role="status">正在核对登录状态…</p>

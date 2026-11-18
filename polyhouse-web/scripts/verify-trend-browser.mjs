@@ -48,7 +48,7 @@ try {
   await page.goto(base)
   await page.getByRole('link', { name: '阅读星潮', exact: true }).click()
   await page.locator('.issue-meta').getByText(history, { exact: true }).waitFor()
-  assert.equal(await page.getByRole('link', { name: '屋主工作台', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('link', { name: '星潮发布台', exact: true }).count(), 0)
 
   stage = '通过登录弹窗建立真实屋主会话'
   await page.locator('.login-trigger').click()
@@ -58,7 +58,7 @@ try {
   const signedIn = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/auth/login')
   await login.getByRole('button', { name: '登录，回到小屋' }).click()
   assert.equal((await signedIn).status(), 200)
-  await page.getByRole('link', { name: '屋主工作台', exact: true }).click()
+  await page.getByRole('link', { name: '星潮发布台', exact: true }).click()
   await page.getByText('剩余可用', { exact: true }).waitFor()
 
   stage = '提交更新、刷新任务和确认正式发布'
@@ -93,8 +93,21 @@ try {
   const selected = await rows.locator('.rank').allTextContents()
   assert.ok(selected.length > 0 && selected.every((rank) => ranks.includes(rank)))
 
+  stage = '从筛选结果读项目、刷新详情并返回同一条'
+  const entryLink = rows.first().getByRole('link')
+  const address = await entryLink.getAttribute('href')
+  const entryId = await entryLink.getAttribute('id')
+  await entryLink.focus()
+  await page.keyboard.press('Enter')
+  await page.waitForURL(url => url.href.endsWith(address))
+  await page.reload()
+  await page.getByRole('link', { name: '在 GitHub 查看' }).waitFor()
+  await page.getByRole('link', { name: '返回当期榜单' }).click()
+  await page.waitForFunction(id => document.activeElement?.id === id, entryId)
+  assert.equal(await languages.inputValue(), language)
+
   stage = '模拟上游失败，公开页面继续读上一版本'
-  await page.getByRole('link', { name: '屋主工作台', exact: true }).click()
+  await page.getByRole('link', { name: '星潮发布台', exact: true }).click()
   stage = '重新进入工作台并恢复第一笔任务'
   const waitAgain = page.getByText('请求较频繁或更新正在冷却，请稍后重试。', { exact: true })
   const firstJob = page.getByRole('heading', { name: /^已发布/ })
@@ -125,7 +138,7 @@ try {
   await page.getByRole('link', { name: '返回星潮日报' }).click()
   await rows.first().waitFor()
   assert.deepEqual(await rows.locator('h2').allTextContents(), fullNames)
-  assert.equal(await page.getByRole('link', { name: '屋主工作台', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('link', { name: '星潮发布台', exact: true }).count(), 0)
   await page.goto(`${base}#/manage/trend`)
   await page.getByRole('heading', { name: '屋主专用' }).waitFor()
   assert.equal(pageErrors.length, 0)

@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
-import { TopRight } from '@element-plus/icons-vue'
-import { ApiError } from '../api/index'
-import { getTrendPeriods, getTrendReport, isTrendDate, type TrendReport } from '../api/trend'
+import { Back, Calendar, TopRight } from '@element-plus/icons-vue'
+import voyage from '../assets/startide-voyage.webp'
+import { isTrendDate } from '../api/trend'
 import { starTide } from '../config/starTide'
-import TrendProjectEntry from '../features/trend/TrendProjectEntry.vue'
-import { trendTime } from '../features/trend/presentation'
 import { useUserStore } from '../stores/useUserStore'
+import { trendTime } from '../features/trend/presentation'
+import { useTrendEdition } from '../features/trend/useTrendEdition'
+import TrendProjectEntry from '../features/trend/TrendProjectEntry.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,339 +17,394 @@ const user = useUserStore()
 const owner = computed(
   () => user.isLoggedIn && user.user?.role === 'OWNER' && !user.requiresPasswordChange,
 )
-const report = ref<TrendReport | null>(null)
-const dates = ref<string[]>([])
-const cursor = ref<string | null>(null)
-const language = ref('')
-const loadingReport = ref(false)
-const loadingDates = ref(false)
-const dateError = ref(false)
-const reportError = ref('')
-const noReport = ref(false)
-const reportBlockedUntil = ref(0)
-const dateBlockedUntil = ref(0)
-const selectedDate = computed(() => (isTrendDate(route.query.date) ? route.query.date : ''))
+const directory = computed(() => route.name === starTide.name)
+const edition = computed(() => (directory.value ? route.query.date : route.params.date))
+const {
+  report,
+  reportError,
+  loadingReport,
+  noReport,
+  loadReport,
+  dates,
+  cursor,
+  dateError,
+  loadingDates,
+  loadDates,
+} = useTrendEdition(edition, directory)
+const selectedDate = computed(() => (isTrendDate(edition.value) ? edition.value : ''))
 const dateOptions = computed(() =>
-  [...new Set([...(selectedDate.value ? [selectedDate.value] : []), ...dates.value])]
-    .sort()
-    .reverse(),
+  [...new Set([selectedDate.value, ...dates.value].filter(Boolean))].sort().reverse(),
 )
-const languages = computed(() =>
-  [
-    ...new Set(
-      report.value?.items.flatMap((item) => (item.primaryLanguage ? [item.primaryLanguage] : [])) ??
-        [],
-    ),
-  ].sort(),
-)
+const language = computed(() => (typeof route.query.lang === 'string' ? route.query.lang : ''))
+const languages = computed(() => {
+  const counts = new Map<string, number>()
+  for (const item of report.value?.items ?? []) {
+    if (item.primaryLanguage)
+      counts.set(item.primaryLanguage, (counts.get(item.primaryLanguage) ?? 0) + 1)
+  }
+  return [...counts].sort(([a], [b]) => a.localeCompare(b))
+})
 const entries = computed(
   () =>
     report.value?.items.filter(
       (item) => !language.value || item.primaryLanguage === language.value,
     ) ?? [],
 )
-let reportRequest: AbortController | undefined
-let datesRequest: AbortController | undefined
-
-function selectDate(event: Event): void {
-  const value = (event.target as HTMLSelectElement).value
-  void router.push({ name: starTide.name, query: value ? { date: value } : {} })
-}
-
-async function loadReport(): Promise<void> {
-  reportRequest?.abort()
-  const request = new AbortController()
-  reportRequest = request
-  const raw = route.query.date
-  report.value = null
-  reportError.value = ''
-  noReport.value = false
-  language.value = ''
-  loadingReport.value = false
-  if (raw !== undefined && !isTrendDate(raw)) {
-    reportError.value = '日期格式无效，请重新选择日报期次。'
-    return
-  }
-  if (Date.now() < reportBlockedUntil.value) {
-    reportError.value = '请求过于频繁，请稍后重试。'
-    return
-  }
-  loadingReport.value = true
-  try {
-    const result = await getTrendReport(selectedDate.value || undefined, request.signal)
-    if (!request.signal.aborted) report.value = result
-  } catch (failure: unknown) {
-    if (request.signal.aborted) return
-    if (failure instanceof ApiError && failure.status === 404) noReport.value = true
-    else if (failure instanceof ApiError && failure.status === 429) {
-      reportBlockedUntil.value = Date.now() + (failure.retryAfterSeconds ?? 2) * 1000
-      reportError.value = '请求过于频繁，请稍后重试。'
-    } else reportError.value = '暂时无法读取日报，请稍后重试。'
-  } finally {
-    if (!request.signal.aborted) loadingReport.value = false
-  }
-}
-
-async function loadDates(append = false): Promise<void> {
-  if (loadingDates.value || Date.now() < dateBlockedUntil.value) return
-  const before = append ? cursor.value : null
-  if (append && !before) return
-  const request = new AbortController()
-  datesRequest = request
-  loadingDates.value = true
-  dateError.value = false
-  try {
-    const result = await getTrendPeriods(before ?? undefined, request.signal)
-    if (request.signal.aborted) return
-    dates.value = append ? [...new Set([...dates.value, ...result.items])] : result.items
-    cursor.value = result.nextBefore
-  } catch (failure: unknown) {
-    if (request.signal.aborted) return
-    dateError.value = true
-    if (failure instanceof ApiError && failure.status === 429)
-      dateBlockedUntil.value = Date.now() + (failure.retryAfterSeconds ?? 2) * 1000
-  } finally {
-    if (!request.signal.aborted) loadingDates.value = false
-  }
-}
-
-watch(
-  () => route.query.date,
-  () => {
-    void loadReport()
-  },
-  { immediate: true },
+const repoName = computed(() => `${route.params.owner}/${route.params.repo}`)
+const project = computed(() =>
+  report.value?.items.find((item) => item.fullName.toLowerCase() === repoName.value.toLowerCase()),
 )
-onMounted(() => {
-  void loadDates()
-})
-onScopeDispose(() => {
-  reportRequest?.abort()
-  datesRequest?.abort()
-})
+const listHeading = ref<HTMLElement>()
+const detailPanel = ref<HTMLElement>()
+
+function directoryLocation(date: string, lang: string, at?: string) {
+  return { name: starTide.name, query: { date: date || undefined, lang: lang || undefined, at } }
+}
+const returnTo = computed(() =>
+  directoryLocation(selectedDate.value, language.value, project.value?.fullName ?? repoName.value),
+)
+function detailLocation(name: string) {
+  const [owner, repo] = name.split('/')
+  return {
+    name: 'star-tide-project',
+    params: { date: report.value?.periodKey, owner, repo },
+    query: { lang: language.value || undefined },
+  }
+}
+function ordinaryClick(event: MouseEvent) {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
+}
+async function openProject(event: MouseEvent, name: string) {
+  if (!ordinaryClick(event) || !report.value) return
+  event.preventDefault()
+  const destination = detailLocation(name)
+  // 先固定实际期号，跨午夜或刷新详情后仍可后退到同一期与原位置。
+  const origin = directoryLocation(report.value.periodKey, language.value, name)
+  await router.replace({ ...origin, state: { tideScroll: window.scrollY }, force: true })
+  await router.push({ ...destination, state: { tideOrigin: router.currentRoute.value.fullPath } })
+}
+function goBack(event: MouseEvent) {
+  if (!ordinaryClick(event)) return
+  event.preventDefault()
+  const origin = window.history.state?.tideOrigin
+  if (
+    project.value &&
+    origin === router.resolve(returnTo.value).fullPath &&
+    origin === window.history.state?.back
+  )
+    router.back()
+  else void router.replace(returnTo.value)
+}
+function selectDate(event: Event) {
+  void router.push(directoryLocation((event.target as HTMLSelectElement).value, ''))
+}
+function selectLanguage(event: Event) {
+  void router.replace(
+    directoryLocation(selectedDate.value, (event.target as HTMLSelectElement).value),
+  )
+}
+
+// 仅在页面或日报就绪时恢复焦点，筛选和更早日期加载不抢占键盘操作。
+watch(
+  [directory, report, repoName],
+  async () => {
+    await nextTick()
+    if (!report.value) return
+    if (!directory.value) {
+      detailPanel.value?.querySelector('h1')?.focus({ preventScroll: true })
+      return
+    }
+    if (typeof route.query.at !== 'string') return
+    const target = document.getElementById('repo-' + route.query.at)
+    const element = target ?? listHeading.value
+    element?.focus({ preventScroll: true })
+    const offset = window.history.state?.tideScroll
+    if (target && typeof offset === 'number') window.scrollTo(0, offset)
+    else element?.scrollIntoView({ block: 'center' })
+  },
+  { immediate: true, flush: 'post' },
+)
 </script>
 
 <template>
-  <div class="trend-page">
-    <header class="masthead">
-      <div class="masthead-inner">
-        <div>
-          <p class="kicker">{{ starTide.subtitle }} <span>／</span> {{ starTide.tag }}</p>
-          <h1>{{ starTide.title }}<span>.</span></h1>
-          <p>{{ starTide.description }}</p>
+  <div class="reader">
+    <div class="sheet">
+      <template v-if="directory">
+        <header class="cover">
+          <div class="cover-copy">
+            <p class="signature">StarTide <span>／ 开源项目日报</span></p>
+            <h1>星潮</h1>
+            <p class="issue-meta" v-if="report">
+              <strong>{{ report.periodKey }}</strong
+              ><span>本期 {{ report.items.length }} 个项目</span>
+            </p>
+          </div>
+          <img :src="voyage" alt="" width="1200" height="600" class="voyage" />
+        </header>
+        <div class="toolbar">
+          <label class="control"
+            ><ElIcon aria-hidden="true"><Calendar /></ElIcon>日报日期
+            <select id="trend-date" :value="selectedDate" @change="selectDate">
+              <option value="">最新一期</option>
+              <option v-for="day in dateOptions" :key="day" :value="day">{{ day }}</option>
+            </select>
+          </label>
+          <ElButton v-if="cursor" :loading="loadingDates" @click="loadDates(true)"
+            >更早日期</ElButton
+          >
+          <label class="control" v-if="languages.length || language"
+            >编程语言
+            <select id="trend-language" :value="language" @change="selectLanguage">
+              <option value="">全部语言</option>
+              <option
+                v-if="language && !languages.some(([name]) => name === language)"
+                :value="language"
+              >
+                {{ language }} · 0
+              </option>
+              <option v-for="[name, count] in languages" :key="name" :value="name">
+                {{ name }} · {{ count }}
+              </option>
+            </select>
+          </label>
+          <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility owner-link"
+            >星潮发布台</RouterLink
+          >
         </div>
-        <RouterLink v-if="owner" :to="starTide.ownerRoute" class="owner-link"
-          >屋主工作台</RouterLink
-        >
-      </div>
-    </header>
-    <div class="issue">
-      <div class="controls">
-        <div class="control-field">
-          <label for="trend-date">日报日期</label>
-          <select id="trend-date" :value="selectedDate" @change="selectDate">
-            <option value="">最新一期</option>
-            <option v-for="day in dateOptions" :key="day" :value="day">{{ day }}</option>
-          </select>
-        </div>
-        <ElButton v-if="cursor" :loading="loadingDates" @click="loadDates(true)">更早日期</ElButton>
-        <div v-if="languages.length" class="control-field">
-          <label for="trend-language">编程语言</label>
-          <select id="trend-language" v-model="language">
-            <option value="">全部语言</option>
-            <option v-for="item in languages" :key="item" :value="item">{{ item }}</option>
-          </select>
-        </div>
-      </div>
-      <p v-if="dateError" class="notice" role="status">
-        历史日期暂时无法读取。<ElButton text @click="loadDates()">重试历史</ElButton>
-      </p>
-      <div v-if="loadingReport" class="reader-state" role="status">正在读取日报…</div>
-      <div v-else-if="reportError" class="reader-state" role="alert">
+        <p v-if="dateError" class="notice" role="status">
+          历史日期暂时无法读取。<ElButton text @click="loadDates()">重试历史</ElButton>
+        </p>
+      </template>
+      <a v-else class="utility back" :href="router.resolve(returnTo).href" @click="goBack"
+        ><ElIcon aria-hidden="true"><Back /></ElIcon> 返回当期榜单</a
+      >
+      <div v-if="loadingReport" class="state" role="status">正在读取日报…</div>
+      <div v-else-if="reportError" class="state" role="alert">
         <p>{{ reportError }}</p>
         <ElButton @click="loadReport">重新读取</ElButton>
+        <RouterLink :to="starTide.route">查看最新一期</RouterLink>
       </div>
-      <div v-else-if="noReport" class="reader-state" role="status">
+      <div v-else-if="noReport" class="state" role="status">
         <h2>{{ selectedDate ? '该日没有已发布的日报' : '暂无已发布的日报' }}</h2>
         <RouterLink v-if="selectedDate" :to="starTide.route">返回最新一期</RouterLink>
       </div>
-      <template v-else-if="report">
-        <div class="issue-meta">
+      <template v-else-if="report && directory">
+        <div class="section-head">
           <div>
-            <strong>{{ report.periodKey }}</strong
-            ><span> 采集 {{ trendTime(report.capturedAt) }}（北京时间）</span>
+            <h2 ref="listHeading" tabindex="-1">项目日榜</h2>
+            <p class="meta">采集于 {{ trendTime(report.capturedAt) }}（北京时间）</p>
           </div>
-          <a :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
-            >GitHub 日榜来源 <ElIcon aria-hidden="true"><TopRight /></ElIcon
+          <a class="utility" :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
+            >GitHub 日榜 <ElIcon aria-hidden="true"><TopRight /></ElIcon
           ></a>
         </div>
         <p v-if="!report.insightComplete" class="notice">
-          部分项目的 AI 解读暂缺或沿用旧版，GitHub 榜单资料仍可查看。
+          部分解读暂缺或沿用旧版，榜单资料仍可阅读。
         </p>
-        <p class="results" role="status">
-          {{
+        <div class="columns">
+          <span role="status">{{
             language
-              ? `筛选后 ${entries.length} 条 · 保留来源排名`
-              : `本期 ${entries.length} 个项目`
-          }}
-        </p>
-        <div v-if="!entries.length" class="reader-state">本期没有符合条件的项目。</div>
+              ? `筛选后 ${entries.length} / ${report.items.length} 条 · 保留来源排名`
+              : '排名 ／ 项目'
+          }}</span
+          ><span>本期新增星标</span>
+        </div>
         <TrendProjectEntry
-          v-for="project in entries"
-          :key="`${report.reportId}:${project.fullName}`"
-          :project="project"
+          v-for="item in entries"
+          :key="item.fullName"
+          :project="item"
+          :href="router.resolve(detailLocation(item.fullName)).href"
+          @open="openProject"
         />
+        <p v-if="!entries.length" class="state">
+          本期没有符合条件的项目。
+          <RouterLink :to="directoryLocation(selectedDate, '')">查看全部</RouterLink>
+        </p>
       </template>
+      <section v-else-if="report" ref="detailPanel" aria-label="当期项目详情">
+        <RouterView v-if="project" :project="project" :report="report" />
+        <div v-else class="state">
+          <h1 tabindex="-1">该项目未收录在这期当前版本</h1>
+          <p>可返回当期榜单查看已发布的项目。</p>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-.trend-page {
-  color: #251e32;
-  background: #faf8f6;
-  min-width: 0;
+.reader {
+  background: #fbfaf6;
+  color: #192743;
+  min-height: 65vh;
+  padding: 24px 0 64px;
 }
-.masthead {
-  color: #fff8fc;
-  background: radial-gradient(ellipse at 86% 10%, #493457, transparent 57%), #262437;
-}
-.masthead-inner,
-.issue {
-  width: min(1100px, calc(100% - 48px));
+.sheet {
+  width: min(1110px, calc(100% - 48px));
   margin: auto;
 }
-.masthead-inner {
-  min-height: 224px;
+.cover {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #deebf2;
+  min-height: 175px;
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-  padding-block: clamp(24px, 6vw, 46px);
+  align-items: center;
 }
-h1,
-h2,
-p {
+.cover-copy {
+  padding: 20px clamp(20px, 4vw, 52px);
+}
+.signature {
+  font:
+    italic 20px Georgia,
+    serif;
   margin: 0;
 }
-.masthead h1 {
-  margin-block: 3px 8px;
+.signature span {
+  font: 600 12px var(--ph-font);
+  letter-spacing: 0.08em;
+}
+.cover h1 {
   font:
-    700 clamp(46px, 8vw, 78px)/1.05 Georgia,
+    700 clamp(46px, 6vw, 70px)/1 Georgia,
     'Songti SC',
     SimSun,
     serif;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  margin: 9px 0 14px;
 }
-.masthead h1 span {
-  color: #f2a3c6;
+.voyage {
+  mask-image: linear-gradient(to right, transparent, black 14%);
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  width: 59%;
+  height: 100%;
+  object-fit: fill;
 }
-.kicker {
-  color: #efd3e2;
-  font-size: 13px;
-  letter-spacing: 0.13em;
-}
-.kicker span {
-  margin-inline: 4px;
-}
-.owner-link {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border: 1px solid #c9a8c1;
-  border-radius: 8px;
-  color: #fff8fb;
-}
-.owner-link:hover,
-.owner-link:focus-visible {
-  background: #493754;
-}
-.issue {
-  padding-block: 20px 42px;
-}
-.controls,
 .issue-meta {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 5px 14px;
+  font-size: 13px;
+  margin: 0;
 }
-.controls label {
+.toolbar,
+.control,
+.utility,
+.section-head,
+.columns {
+  display: flex;
+  align-items: center;
+}
+.toolbar {
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+  border-bottom: 1px solid #c8d5db;
+}
+.control {
+  gap: 8px;
   font-size: 13px;
   font-weight: 650;
-  white-space: nowrap;
-}
-.control-field {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
   max-width: 100%;
 }
-.controls select {
-  color: #2b2336;
+select {
   min-height: 44px;
   max-width: 100%;
   min-width: 0;
-  border: 1px solid #b9afc1;
-  border-radius: 8px;
-  background: #fff;
-  padding: 7px 10px;
-  font: inherit;
+  padding: 6px 9px;
+  border: 1px solid #9daeb8;
+  background: white;
+  color: #213951;
+  border-radius: 9px;
 }
-.controls select:focus-visible {
-  border-color: #85345d;
-  outline: 2px solid #85345d;
-  outline-offset: 2px;
+select:focus-visible {
+  outline: none;
+  border-color: #154e78;
+  box-shadow: inset 0 0 0 1px #154e78;
 }
-.issue-meta {
-  margin-top: 13px;
-  justify-content: space-between;
+.utility {
+  width: fit-content;
+  gap: 5px;
+  min-height: 44px;
+  color: #28566f;
   font-size: 13px;
+  font-weight: 650;
 }
-.issue-meta strong {
-  font-variant-numeric: tabular-nums;
-}
-.issue-meta span,
-.results,
-.notice {
-  color: #574d61;
-}
-.issue-meta a,
-.reader-state a {
-  color: #8a2955;
+.utility:hover,
+.state a {
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
+}
+.owner-link {
+  margin-left: auto;
+}
+.section-head,
+.columns {
+  justify-content: space-between;
+  gap: 14px;
+}
+.section-head {
+  margin: 22px 0 9px;
+}
+.section-head h2 {
+  margin: 0;
+  font-size: 25px;
+  letter-spacing: -0.04em;
+}
+.meta,
+.notice,
+.columns {
+  font-size: 12px;
+  color: #475c6b;
+}
+.meta {
+  margin: 4px 0 0;
 }
 .notice {
-  margin-top: 10px;
-  font-size: 13px;
+  margin: 6px 0 12px;
 }
-.results {
-  margin-block: 14px 5px;
-  font-size: 13px;
+.columns {
+  border-bottom: 2px solid #273b50;
+  padding: 8px 0;
+  font-weight: 650;
 }
-.reader-state {
-  padding: 32px 0;
+.state {
+  padding: 28px 0;
 }
-.reader-state h2 {
-  font-size: 20px;
+.state h1 {
+  font-size: 24px;
 }
-.reader-state .el-button {
-  margin-block-start: 8px;
-}
-@media (max-width: 520px) {
-  .masthead-inner,
-  .issue {
-    width: calc(100% - 30px);
+@media (max-width: 620px) {
+  .reader {
+    padding-top: 12px;
   }
-  .masthead-inner {
-    min-height: 174px;
+  .sheet {
+    width: calc(100% - 28px);
   }
-  .controls {
-    gap: 7px;
+  .cover {
+    min-height: 148px;
+  }
+  .cover-copy {
+    padding: 16px;
+  }
+  .voyage {
+    width: 49%;
+    height: 70%;
+  }
+  .issue-meta {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toolbar {
+    gap: 6px 12px;
+  }
+  .section-head {
+    margin-top: 16px;
   }
 }
 </style>
