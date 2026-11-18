@@ -10,6 +10,7 @@ Verify -ProfileModerationOnly -WorkspaceBrowser：U4 保留随机后端与本机
 Verify -TrendOnly：只验技术雷达随机隔离库，不创建账号、连接 Redis 或付费AI。
 Verify -TrendRedisOnly：只在本机Redis的随机测试键验证内容缓存Lua，不改正式内容键/认证键，不连接数据库。
 Verify -TrendHttpOnly：自动创建临时Redis，验收随机库中的真实认证/HTTP/任务/费用链路，不访问外网。
+Verify -TrendBrowserOnly：启动隔离前后端和浏览器，按真实接口验收发布和阅读。另加 -TrendBrowserLiveGithub 才读 GitHub 日榜，全程关闭 AI。
 Verify -TrendLiveOnly：自动创建临时Redis，使用持久专属验收库和至多一角月预算进行真实小样本，须通过隐藏输入包装调用。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
@@ -36,6 +37,9 @@ param(
     [switch]$TrendRedisOnly,
     # G4真实HTTP链路仍只用假外部服务；真实Key不会传给该专项。
     [switch]$TrendHttpOnly,
+    # 整站浏览器验收沿用免费随机库和临时 Redis，普通 Run 不进入此分支。
+    [switch]$TrendBrowserOnly,
+    [switch]$TrendBrowserLiveGithub,
     # G4真实外部样本单独显式选择，保留专属库及费用，不能混入免费验收。
     [switch]$TrendLiveOnly,
     # 可选临时Redis本机端口，只用于专项，不改私有预设或普通启动配置。
@@ -43,8 +47,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly + [int][bool]$TrendRedisOnly + [int][bool]$TrendHttpOnly + [int][bool]$TrendLiveOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly -or $TrendRedisOnly -or $TrendHttpOnly -or $TrendLiveOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly + [int][bool]$TrendRedisOnly + [int][bool]$TrendHttpOnly + [int][bool]$TrendLiveOnly + [int][bool]$TrendBrowserOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly -or $TrendRedisOnly -or $TrendHttpOnly -or $TrendLiveOnly -or $TrendBrowserOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if ($TrendBrowserLiveGithub -and -not $TrendBrowserOnly) { throw '真实 GitHub 来源选项只用于浏览器专项。' }
 if ($PSBoundParameters.ContainsKey('TrendRedisPort') -and (-not $TrendRedisOnly -or -not $SkipWslRedis)) { throw '临时Redis端口只用于 -TrendRedisOnly -SkipWslRedis。' }
 if ($WorkspaceBrowser -and (-not $ProfileModerationOnly -or $Action -ne 'Verify')) { throw '工作台浏览器验收必须同时选择 Verify -ProfileModerationOnly。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
@@ -119,7 +124,7 @@ try {
     if ($redisHost -and $redisHost -notin @('localhost', '127.0.0.1', '::1')) {
         throw '本机验收入口只允许本机 Redis。'
     }
-    if ($TrendHttpOnly -or $TrendLiveOnly) {
+    if ($TrendHttpOnly -or $TrendLiveOnly -or $TrendBrowserOnly) {
         if ($TrendLiveOnly -and ([Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_LIVE_CNY', 'Process') -cne 'true' -or
             [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('POLYHOUSE_DEEPSEEK_API_KEY', 'Process')))) {
             throw '真实样本须经隐藏输入包装，并先核对人民币计价；不要把Key传入命令参数。'
@@ -192,7 +197,10 @@ try {
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($TrendHttpOnly -or $TrendLiveOnly) {
+        if ($TrendBrowserOnly) {
+            $liveGithubEnabled = $TrendBrowserLiveGithub.ToString().ToLowerInvariant()
+            & mvn -q '-Dtest=TrendBrowserAcceptanceTest' '-Dpolyhouse.trend.browser=true' "-Dpolyhouse.trend.browser.live-github=$liveGithubEnabled" "-Dpolyhouse.trend.http.redis.port=$trendHttpPort" test
+        } elseif ($TrendHttpOnly -or $TrendLiveOnly) {
             $className = if ($TrendLiveOnly) { 'TrendLiveAcceptanceTest' } else { 'TrendHttpAcceptanceTest' }
             $flag = if ($TrendLiveOnly) { '-Dpolyhouse.trend.live.acceptance=true' } else { '-Dpolyhouse.trend.http=true' }
             & mvn -q "-Dtest=$className" $flag "-Dpolyhouse.trend.http.redis.port=$trendHttpPort" test
@@ -221,6 +229,7 @@ try {
                 '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
         }
         if ($LASTEXITCODE -ne 0) {
+            if ($TrendBrowserOnly) { throw '星潮浏览器联调未通过，请检查 target/trend-browser-result.log 和 Surefire 汇总。' }
             if ($TrendHttpOnly -or $TrendLiveOnly) { throw 'G4专项未通过；检查安全状态及Surefire结果，真实样本不可盲目换号重试。' }
             if ($TrendOnly) { throw '技术雷达隔离验收失败，请检查 Surefire 汇总。' }
             if ($TrendRedisOnly) { throw '技术雷达Redis专项失败，请检查本机连接及Surefire汇总。' }

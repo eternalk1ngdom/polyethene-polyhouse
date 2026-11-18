@@ -1,6 +1,32 @@
 # 技术雷达后端运行与验收
 
-当前已实现[阶段方案](../plans/github-tech-radar.md)的G1～G3，G4本机真实认证、GitHub、DeepSeek小样本及账单复核已通过。样本有数字口径差异，见[验收记录](trend-g4-acceptance.md)。前端待G5设计，云端调度待验。公开查询只读取已发布的日报。
+星潮的真实前后端浏览器联调已通过。本机开发库已完成增量迁移，云端调度待验。DeepSeek 真实样本及账单见[G4 验收记录](trend-g4-acceptance.md)。公开查询只读取已发布的日报。
+
+## 本机启动与首次阅读
+
+在仓库根目录运行 `.\polyhouse\scripts\Start-LocalStarTide.ps1`。入口复用 `PolyhouseApplication` 的原数据库和 JWT 私有预设，调用原有 Redis 检查并组合启动前端 5173、后端 8080。当前机器的 WSL 管理命令超时，Docker Desktop 在线时使用以下方式：
+
+```powershell
+.\polyhouse\scripts\Start-LocalStarTide.ps1 -DockerRedis
+```
+
+该选项在本机缺少可用 Redis 时才用已有 `redis:7-alpine` 启动临时容器，绑定本机 6379。入口可复用已运行的聚妙屋 Vite 前端，结束时清理自己创建的前端和临时 Redis。可在 IDEA 的 External Tools 添加同一命令，保留原启动脚本与启动前任务。
+
+使用终端启动时，结束后按 `Ctrl+C`。若 Maven 批处理询问 `Terminate batch job (Y/N)?`，输入 `Y` 结束并等待清理。
+
+看到 `Tomcat started` 后，打开 `http://127.0.0.1:5173/polyethene-polyhouse/#/trend`。用原屋主登录，从日报进入「屋主工作台」，点「手动更新日报」。第一次由真实 GitHub 数据生成基础日报，任务显示「已发布，部分解读待补充」后即可阅读。此入口关闭 AI、每日定时和内容缓存，首次手动更新无 AI 费用。G4 的历史样本及账本留在验收库。
+
+## 隔离浏览器专项
+
+前端依赖、Edge 和 Playwright 可用时，在仓库根目录运行以下命令。Playwright 已安装在非标准路径时，可通过本次环境变量 `POLYHOUSE_PLAYWRIGHT_MODULE` 指定。
+
+```powershell
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify -TrendBrowserOnly
+# 加上此参数才访问实时公开 GitHub，仍关闭 AI。
+.\polyhouse\scripts\Invoke-LocalAuth.ps1 -Action Verify -TrendBrowserOnly -TrendBrowserLiveGithub
+```
+
+专项使用真实 Vite、Spring Boot、随机 MySQL 和临时 Redis，覆盖屋主登录和发布、任务恢复、历史及筛选、失败保留与匿名读。结束时回收随机库和 Redis，脱敏诊断位于 `polyhouse/target/trend-browser-result.log`。
 
 ## 启用与数据来源
 
@@ -30,7 +56,7 @@
 
 如启用任务，在010之后先执行[011费用迁移](../../polyhouse/sql/011_trend_ai.sql)，再执行[012任务迁移](../../polyhouse/sql/012_trend_jobs.sql)。即使AI关闭，任务容量保护也会检查费用表。检查单槽仅有`singleton_id=1`一行、状态CHECK及版本/活动任务外键。没有自动补建单槽，缺失时拒绝受理。
 
-任务回退先停用并停止执行器，等待外部请求结束，核对待执行任务及费用预留。可以暂留两表供排查；确需删除并已确认数据恢复方案后，先`tool_trend_job_slot`后`tool_trend_job`，保留010/011。任务表引用报告版本，完整回退必须先处理012，再处理010；费用事实不因任务回退删除。开发/TiDB迁移和真实库回退未执行。
+任务回退先停用并停止执行器，等待外部请求结束，核对待执行任务及费用预留。可以暂留两表供排查；确需删除并已确认数据恢复方案后，先`tool_trend_job_slot`后`tool_trend_job`，保留010/011。任务表引用报告版本，完整回退必须先处理012，再处理010；费用事实不因任务回退删除。TiDB 迁移和真实库回退未执行。
 
 使用费用接口还需在上述迁移后追加[013保守关闭审计](../../polyhouse/sql/013_trend_ai_resolution.sql)，核对请求唯一键、原月份/请求外键、金额/原因CHECK和月份索引。脚本不自动运行，不重写011，也不修改账号表。费用操作使用操作者→任务单槽→仓库→月份→请求的锁序，审计随同提交；原预留与审计不按任务保留期删除。
 
@@ -38,7 +64,7 @@
 
 启用每日定时前，在010～013之后执行[014迁移](../../polyhouse/sql/014_trend_schedule.sql)。它只把任务操作者/凭据版本改成可同时为空，并追加日期/尝试受理表；新CHECK拒绝混合空身份，手动旧记录保持原值。系统任务没有用户身份，必须有匹配的受理映射及启用配置，绝不创建假OWNER。映射随超过90天的终结任务级联清理，报告/费用不删除；检查唯一键、外键、CHECK及实际启用状态。未启用定时的旧手动任务流程不访问新表。
 
-014回退优先停用定时并保留表/身份快照；降级到不认识系统身份的旧程序前停用整个任务执行，公开报告可继续读。不要把NULL身份改为虚构用户；确需恢复012的非空列，必须先备份/导出系统任务和映射、明确授权处理相关行，确认无NULL后再移除映射及恢复约束。DDL不是整份脚本事务，部分失败先盘点，不能盲目重跑。隔离测试验证了只处理本测试系统行、保留手动记录/报告并恢复约束；真实库/TiDB未迁移或回退。
+014回退优先停用定时并保留表/身份快照；降级到不认识系统身份的旧程序前停用整个任务执行，公开报告可继续读。不要把NULL身份改为虚构用户；确需恢复012的非空列，必须先备份/导出系统任务和映射、明确授权处理相关行，确认无NULL后再移除映射及恢复约束。DDL不是整份脚本事务，部分失败先盘点，不能盲目重跑。隔离测试验证了只处理本测试系统行、保留手动记录/报告并恢复约束。TiDB 迁移和真实库回退未执行。
 
 同日更新追加版本，行锁和短事务切换指针；较早采集不得覆盖较新版本。重试同一 UUID 不复制报告，也不把旧版本重新设为当前。
 

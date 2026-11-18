@@ -94,6 +94,10 @@ final class TrendAcceptanceSandbox implements AutoCloseable {
     }
 
     void configure(DynamicPropertyRegistry properties) {
+        configure(properties, true);
+    }
+
+    void configure(DynamicPropertyRegistry properties, boolean aiEnabled) {
         byte[] key = new byte[32]; new SecureRandom().nextBytes(key);
         String signing = Base64.getEncoder().encodeToString(key);
         properties.add("server.address", () -> "127.0.0.1");
@@ -108,8 +112,8 @@ final class TrendAcceptanceSandbox implements AutoCloseable {
         properties.add("polyhouse.jwt.secret", () -> signing);
         properties.add("polyhouse.trend.enabled", () -> true);
         properties.add("polyhouse.trend.jobs.enabled", () -> true);
-        properties.add("polyhouse.trend.ai.enabled", () -> true);
-        properties.add("polyhouse.trend.ai.api-key", () -> live ? System.getenv("POLYHOUSE_DEEPSEEK_API_KEY") : TrendAiFixture.KEY);
+        properties.add("polyhouse.trend.ai.enabled", () -> aiEnabled);
+        properties.add("polyhouse.trend.ai.api-key", () -> !aiEnabled ? "" : live ? System.getenv("POLYHOUSE_DEEPSEEK_API_KEY") : TrendAiFixture.KEY);
         properties.add("polyhouse.trend.ai.monthly-budget-micros", () -> live ? 100_000L : 10_000_000L);
         properties.add("polyhouse.trend.schedule.enabled", () -> false);
         properties.add("polyhouse.trend.cache.enabled", () -> true);
