@@ -29,14 +29,22 @@ export class ApiError extends Error {
   readonly code: number | null
   /** 网络异常与 403 都不能作为清理会话的依据。 */
   readonly sessionExpired: boolean
+  /** 限流等待时间来自受控响应头，用于避免界面频繁重试。 */
+  readonly retryAfterSeconds: number | null
 
   /** 丢弃底层异常对象，只保存经过筛选的状态与提示。 */
-  constructor(message: string, status = 0, code: number | null = null) {
+  constructor(
+    message: string,
+    status = 0,
+    code: number | null = null,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.sessionExpired = status === 401 || code === 40100
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -55,7 +63,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function safeError(status: number, code: number | null = null): ApiError {
+function safeError(status: number, code: number | null = null, retryAfter?: unknown): ApiError {
   if (code === 40301) return new ApiError('请先修改初始密码', 403, code)
   if (status === 401 || code === 40100) return new ApiError('登录状态已失效，请重新登录', 401, code)
   if (status === 403 || code === 40300)
@@ -64,7 +72,16 @@ function safeError(status: number, code: number | null = null): ApiError {
     return new ApiError('当前数据状态已变化，请刷新后重试', 409, code)
   if (status === 400 || code === 40000)
     return new ApiError('填写的信息不符合要求，请检查后重试', 400, code)
-  if (status === 429) return new ApiError('请求过于频繁，请稍后重试', 429, code)
+  if (status === 429) {
+    const seconds =
+      typeof retryAfter === 'string' || typeof retryAfter === 'number' ? String(retryAfter) : ''
+    return new ApiError(
+      '请求过于频繁，请稍后重试',
+      429,
+      code,
+      /^[1-9]\d{0,5}$/.test(seconds) ? Number(seconds) : null,
+    )
+  }
   if (status === 413) return new ApiError('图片体积超过限制，请重新选择图片', 413, code)
   if (status === 0) return new ApiError('暂时无法连接服务，请检查网络后重试')
   return new ApiError('服务暂时不可用，请稍后重试', status, code)
@@ -101,6 +118,7 @@ export async function apiRequest<T>(
               isRecord(error.response?.data) && typeof error.response.data.code === 'number'
                 ? error.response.data.code
                 : null,
+              error.response?.headers['retry-after'],
             )
           : new ApiError('服务返回的数据不完整，请稍后重试', 502)
     if (safe.sessionExpired && submittedToken) unauthorizedHandler?.(submittedToken)

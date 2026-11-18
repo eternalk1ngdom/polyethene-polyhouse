@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { toolRegistry } from '../config/toolRegistry'
+import { starTide } from '../config/starTide'
 import { needsAccountSectionRedirect, resolveAccountSection } from '../utils/accountSections'
 
 // 页面按需加载；导航与卡片只读取注册表，不维护第二份入口列表。
@@ -13,6 +14,18 @@ const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { title: '日常小事，顺手一点' } },
+    {
+      path: starTide.route,
+      name: starTide.name,
+      component: () => import('../views/TrendView.vue'),
+      meta: { title: `${starTide.title} · ${starTide.subtitle}` },
+    },
+    {
+      path: starTide.ownerRoute,
+      name: 'star-tide-owner',
+      component: () => import('../views/TrendOwnerView.vue'),
+      meta: { title: `${starTide.title} · 屋主工作台` },
+    },
     {
       path: '/account',
       name: 'account',
@@ -64,6 +77,7 @@ const router = createRouter({
     if (to.name === 'account' && _from.name === 'account') return false
     // 审核分区也是同页只读切换，保留当前位置；跨工作区仍正常回顶。
     if (to.name === 'profile-review' && _from.name === 'profile-review') return false
+    if (to.name === starTide.name && _from.name === starTide.name) return false
     if (to.hash === '#tools' || to.hash === '#about') {
       // 原生平滑滚动随距离自然缓入缓出；系统要求减少动态时立即定位，不强制播放动画。
       const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches

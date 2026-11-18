@@ -5,16 +5,19 @@ import { ElButton, ElIcon, ElInput } from 'element-plus'
 import { ArrowDown, ArrowRight, Crop, Search, Switch } from '@element-plus/icons-vue'
 import { toolRegistry } from '../config/toolRegistry'
 import ToolArtwork from '../components/ToolArtwork.vue'
+import { starTide } from '../config/starTide'
+import StarTideFeature from '../features/trend/StarTideFeature.vue'
 
 /** 分类只筛选真实注册工具，不生成尚未交付的入口。 */
 interface Category {
-  /** all 不限制类别，其他值与注册表一致。 */
-  value: 'all' | 'text' | 'image'
+  /** 独立日报可单独筛选，工具分类继续沿用原注册表。 */
+  value: 'all' | 'trend' | 'text' | 'image'
   /** 可见名称同时用于辅助阅读。 */
   label: string
 }
 const categories: readonly Category[] = [
   { value: 'all', label: '全部工具' },
+  { value: 'trend', label: '开源资讯' },
   { value: 'text', label: '文本处理' },
   { value: 'image', label: '图片处理' },
 ]
@@ -22,18 +25,30 @@ const query = ref('')
 const category = ref<Category['value']>('all')
 const router = useRouter()
 const toolIcons = { Switch, Crop }
-// 搜索只匹配本地注册表，不上传关键词，也不依赖账号或后端。
-const visibleTools = computed(() => {
-  const needle = query.value.trim().toLocaleLowerCase()
-  return toolRegistry.filter(
+// 首页只筛选本地入口，不上传关键词或请求日报。
+const needle = computed(() => query.value.trim().toLocaleLowerCase())
+function matchesSearch(fields: readonly string[]): boolean {
+  return fields.join(' ').toLocaleLowerCase().includes(needle.value)
+}
+const featuredVisible = computed(
+  () =>
+    (category.value === 'all' || category.value === 'trend') &&
+    matchesSearch([starTide.title, starTide.subtitle, starTide.tag, starTide.description]),
+)
+const visibleTools = computed(() =>
+  toolRegistry.filter(
     (tool) =>
       (category.value === 'all' || tool.category === category.value) &&
-      [tool.title, tool.subtitle, tool.tag, tool.description, ...tool.plannedFeatures]
-        .join(' ')
-        .toLocaleLowerCase()
-        .includes(needle),
-  )
-})
+      matchesSearch([
+        tool.title,
+        tool.subtitle,
+        tool.tag,
+        tool.description,
+        ...tool.plannedFeatures,
+      ]),
+  ),
+)
+const resultCount = computed(() => visibleTools.value.length + Number(featuredVisible.value))
 function resetFilters(): void {
   query.value = ''
   category.value = 'all'
@@ -90,9 +105,9 @@ async function showResults(): Promise<void> {
         </div>
       </div>
       <p class="results-count" role="status">
-        {{ query.trim() ? `“${query.trim()}” · ` : '' }}{{ visibleTools.length }} 个工具 ·
-        实际开放状态见卡片
+        {{ query.trim() ? `“${query.trim()}” · ` : '' }}{{ resultCount }} 个结果
       </p>
+      <StarTideFeature v-if="featuredVisible" class="featured-tool" />
       <div v-if="visibleTools.length" class="tool-grid">
         <article v-for="tool in visibleTools" :key="tool.code" class="tool-card">
           <RouterLink
@@ -120,7 +135,7 @@ async function showResults(): Promise<void> {
           </div>
         </article>
       </div>
-      <div v-else class="empty-search">
+      <div v-if="!resultCount" class="empty-search">
         <ElIcon><Search /></ElIcon>
         <h3>还没有找到这个工具</h3>
         <p>换个关键词，或看看全部工具。</p>
@@ -311,6 +326,9 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 34px;
+}
+.featured-tool + .tool-grid {
+  margin-block-start: 28px;
 }
 .tool-card {
   min-width: 0;

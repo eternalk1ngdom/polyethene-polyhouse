@@ -2,7 +2,8 @@
 
 更新时间：2026-11-18（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) [技术雷达](docs/plans/github-tech-radar.md)G4真实小样本已跑通，2条解读发布，平台显示¥0.01。样本有数字口径差异，保留验收账本防重。默认关闭，开发库未迁移。[G5前端草案](docs/plans/trend-frontend-design.md)待评审。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮 StarTide 已完成 G6 首版前端，含首页首位入口、独立日报及屋主更新与账本。[前端设计](docs/plans/trend-frontend-design.md)待成品评审。[技术雷达](docs/plans/github-tech-radar.md) G4 真实样本 2 条，平台显示 ¥0.01，一条有数字口径差异。模块默认关闭，开发库未迁移。
+- 下一轮优先：按用户要求，先查[前端技能](docs/operations/ui-ux-skill.md) GitHub 上游是否有更新，对照本地固定版后给出升级判断，再继续业务任务。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
@@ -15,7 +16,7 @@
 - 前端视觉基线 1.0（原方案二）：白底墨色、小窗/空间、“开门小屋”SVG及首页特色；方案一/选型历史保留。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
 - 妙替R1～R7、妙压T1～T4完成：文本替换、词库/草稿/分享、图片体积/DPI/ZIP；[指南](docs/guides/features.md)，验收dev.10/11。T5换底/PDF/云预设已否决。
 - **本机有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，勿复制/输出；Redis 启动检查非运行期监控。
-- **后端依赖版本继续冻结**，仅批准 Tomcat 升至 10.1.61，候选镜像本地已验。AI核心已实现但真实样本未验，云模板未接入，3D/社交不在范围；服务器与公网操作须具体授权。
+- **后端依赖版本继续冻结**，仅批准 Tomcat 升至 10.1.61，候选镜像本地已验。云模板未接入，3D/社交不在范围。服务器与公网操作须具体授权。
 
 ## 既有交付（详细验收见 dev.13）
 
