@@ -1,0 +1,6 @@
+# IDEA 等未指定运行环境的本机启动默认可读日报、手动更新，仍可用环境变量关闭。
+polyhouse:
+  trend:
+    enabled: ${POLYHOUSE_TREND_ENABLED:true}
+    jobs:
+      enabled: ${POLYHOUSE_TREND_JOBS_ENABLED:true}

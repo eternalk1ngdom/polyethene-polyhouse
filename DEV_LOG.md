@@ -2,8 +2,8 @@
 
 更新时间：2026-11-18（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮已通过真实浏览器联调，GitHub 实时榜 15 项，固定整榜 25 项。开发库已备份并追加 010～014，屋主保留。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)已验 Docker 入口，待用户首次发布和评审。G4 真实 AI 样本及 ¥0.01 账单已核对，保留验收库。
-- [前端技能](docs/operations/ui-ux-skill.md)已核对上游，保留最新正式版 v2.15.0。WSL 仍超时，原入口保留，当前机器可用 Docker 临时 Redis。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮已通过真实浏览器联调，开发库已备份并追加 010～014，屋主保留。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新，待首次发布和评审。G4 真实 AI 样本及 ¥0.01 账单已核对，保留验收库。
+- [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。

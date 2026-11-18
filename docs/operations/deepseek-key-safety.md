@@ -10,7 +10,7 @@ G2/G3离线测试使用假Key和模拟模型。2026-11-18，G4已由用户在本
 
 ## 可选本机启动包装
 
-脚本 [Invoke-TrendAiLocal.ps1](../../polyhouse/scripts/Invoke-TrendAiLocal.ps1) 不替代原启动入口，不改写IDEA配置，不保存Key文件。`Inspect`只显示Key存在及模块/AI/任务/定时/缓存六个布尔状态，不访问API，也不证明Key或运行链路有效：
+脚本 [Invoke-TrendAiLocal.ps1](../../polyhouse/scripts/Invoke-TrendAiLocal.ps1) 通过运行进程传递 Key。`Inspect` 只检查当前终端的显式环境变量，Spring profile 默认值在应用启动时加载。运行检查的命令为：
 
 ```powershell
 ./polyhouse/scripts/Invoke-TrendAiLocal.ps1 -Action Inspect
@@ -24,7 +24,7 @@ G2/G3离线测试使用假Key和模拟模型。2026-11-18，G4已由用户在本
 
 出现隐藏输入提示时再输入聚妙屋专用 Key，正常终端仅显示掩码。命令本身不含 Key，因此不会把真实值写入 PowerShell 命令历史；脚本没有持久化逻辑。若启用了剪贴板历史/云同步，复制粘贴仍可能留下副本，避免把它贴到其他窗口或截图中。
 
-包装只向本次启动进程树注入`POLYHOUSE_DEEPSEEK_API_KEY`；`-EnableAi`显式启用模块及AI，**不更改任务/定时/缓存开关、不迁移、不主动提交新意图**。若原任务开关已启用，重启可能执行先前受理的QUEUED任务；若同时启用定时，命中窗口时后台还可能自动受理新任务并按账本收费。启动前核对状态；受控真实样本联调先保持定时关闭。随后复用已有`Invoke-LocalAuth.ps1 -Action Run`，退出恢复包装所改环境、保留用户原配置，其他Redis环境沿用`-SkipWslRedis`。
+包装只向本次启动进程树注入 `POLYHOUSE_DEEPSEEK_API_KEY`。`-EnableAi` 显式启用模块及 AI。使用该包装启动时，只有显式传入 `POLYHOUSE_TREND_JOBS_ENABLED=true` 才允许任务执行，定时和缓存沿用原设置。重新打开执行器可能继续已受理的 QUEUED 任务，定时开启且命中窗口时也可自动受理。随后复用 `Invoke-LocalAuth.ps1 -Action Run`，退出恢复原环境，其他 Redis 环境沿用 `-SkipWslRedis`。
 
 隐藏输入与环境继承机制见 [Read-Host](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/read-host?view=powershell-7.5) 和[进程环境变量](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.5)。运行时仍需明文供 HTTP 认证使用，同权限恶意程序、内存转储或不当调试可能读取；不承诺绝对不泄露。不要打印环境、开启包含认证头的 HTTP 调试或分享运行转储。
 

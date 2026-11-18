@@ -4,7 +4,9 @@
 
 ## 本机启动与首次阅读
 
-在仓库根目录运行 `.\polyhouse\scripts\Start-LocalStarTide.ps1`。入口复用 `PolyhouseApplication` 的原数据库和 JWT 私有预设，调用原有 Redis 检查并组合启动前端 5173、后端 8080。当前机器的 WSL 管理命令超时，Docker Desktop 在线时使用以下方式：
+已有星潮表的本机直接用 IDEA 的 `PolyhouseApplication` 运行后端，前端照常用 `npm run dev`。未指定 Spring profile 时，默认可以阅读和手动更新。原 Redis 启动检查和数据库连接继续复用。
+
+需要同时启动两端时，在仓库根目录运行 `.\polyhouse\scripts\Start-LocalStarTide.ps1`。入口复用相同的数据库和 JWT 私有预设，组合启动前端 5173、后端 8080。遇到 WSL 故障时，Docker Desktop 在线也可使用以下方式：
 
 ```powershell
 .\polyhouse\scripts\Start-LocalStarTide.ps1 -DockerRedis
@@ -30,9 +32,9 @@
 
 ## 启用与数据来源
 
-- 默认 `POLYHOUSE_TREND_ENABLED=false`，不需 GitHub 或 AI 密钥，既有启动方式保持。关闭时新查询返回统一 503，其他功能照常启动。
-- 明确目标库并完成下述迁移后，通过运行环境设置 `POLYHOUSE_TREND_ENABLED=true`。可用私有变量 `POLYHOUSE_GITHUB_TOKEN` 提供公共仓库只读凭据，不写入提交文件或发到聊天。
-- 屋主任务另需012迁移和`POLYHOUSE_TREND_JOBS_ENABLED=true`。只读报告不需要启用任务；启用任务但保持AI关闭可以发布基础日报。Key配置见[安全输入说明](deepseek-key-safety.md)，不要发到聊天；`Invoke-TrendAiLocal.ps1 -EnableAi`仍仅打开模块/AI，**不会打开任务开关**。
+- 本机默认 profile 启用模块及屋主任务，可显式传入 `POLYHOUSE_TREND_ENABLED=false` 或 `POLYHOUSE_TREND_JOBS_ENABLED=false` 临时关闭。新开发库需要先执行下述迁移。读取在模块关闭或报告表未就绪时返回 503，已迁移的空库返回空期次列表和日报 404。
+- 生产 `prod` 继续默认关闭。完成迁移后可显式设置 `POLYHOUSE_TREND_ENABLED=true`，需要手动更新时再设置 `POLYHOUSE_TREND_JOBS_ENABLED=true`。可选 `POLYHOUSE_GITHUB_TOKEN` 只通过私有环境变量注入。
+- AI 和每日定时独立关闭，手动任务可发布基础日报。使用 `Invoke-TrendAiLocal.ps1 -Action Run -EnableAi` 后，任务执行仍需显式开启，详见[安全输入说明](deepseek-key-safety.md)。
 - 任务开关启用后，重启可继续已经受理且未过期的QUEUED任务，届时可能产生账本允许的付费；先核对已有任务及费用状态。关闭开关不会自动迁移、退款或开启每日调度。
 
 ## 查询契约

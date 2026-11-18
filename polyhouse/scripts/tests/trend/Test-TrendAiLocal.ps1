@@ -23,9 +23,12 @@ throw 'Expected fake backend failure'
 '@ | Set-Content -LiteralPath (Join-Path $fixtureDirectory 'Invoke-LocalAuth.ps1') -Encoding utf8
     foreach ($name in $names) { if (Test-Path -LiteralPath "Env:$name") { Remove-Item -LiteralPath "Env:$name" } }
     function Read-Host { param($Prompt,[switch]$AsSecureString) ConvertTo-SecureString 'fixture-deepseek-key-1234' -AsPlainText -Force }
-    foreach ($jobState in @('false', 'true')) {
+    foreach ($jobState in @('false', 'true', $null)) {
         $outputs.Clear()
-        foreach ($flag in $unchangedFlags) { [Environment]::SetEnvironmentVariable($flag, $jobState, 'Process') }
+        foreach ($flag in $unchangedFlags) {
+            if ($null -eq $jobState) { Remove-Item -LiteralPath "Env:$flag" }
+            else { [Environment]::SetEnvironmentVariable($flag, $jobState, 'Process') }
+        }
         $inspection = & (Join-Path $fixtureDirectory 'Invoke-TrendAiLocal.ps1') -Action Inspect
         if ($inspection.JobsEnabled -ne ($jobState -eq 'true') -or $inspection.ScheduleEnabled -ne ($jobState -eq 'true') -or
                 $inspection.CacheEnabled -ne ($jobState -eq 'true') -or $inspection.KeyConfigured) { throw 'Inspect state mismatch' }
@@ -39,7 +42,9 @@ throw 'Expected fake backend failure'
         foreach ($flag in $unchangedFlags) {
             if ([Environment]::GetEnvironmentVariable($flag, 'Process') -ne $jobState) { throw 'Execution flag was changed' }
         }
-        foreach ($kind in @('Jobs','Schedule','Cache')) { if (-not $outputs.Contains('Fixture' + $kind + ':' + $jobState)) { throw 'Backend flag mismatch' } }
+        $expectedJobs = if ($null -eq $jobState) { 'false' } else { $jobState }
+        if (-not $outputs.Contains('FixtureJobs:' + $expectedJobs)) { throw 'AI 启动的任务开关不符合预期' }
+        foreach ($kind in @('Schedule','Cache')) { if (-not $outputs.Contains('Fixture' + $kind + ':' + $jobState)) { throw 'Backend flag mismatch' } }
         if (($outputs | Out-String).Contains('fixture-deepseek-key-1234')) { throw 'Key leaked in captured output' }
     }
     $outputs.Clear()
@@ -55,7 +60,7 @@ throw 'Expected fake backend failure'
         & (Join-Path $fixtureDirectory 'Invoke-TrendAiLocal.ps1') -Action VerifyLive
         throw '未核对币种也进入了真实验收'
     } catch { if ($_.Exception.Message -notlike '*人民币账户*') { throw } }
-    '安全输入包装：任务/定时/缓存开关均保持原值，假后端失败后环境恢复，输出未含Key、未写凭据文件'
+    '安全输入包装：保持任务显式设置，未设置时默认关闭。失败后环境恢复，未输出或保存Key。'
 } finally {
     foreach ($name in $names) {
         if ($null -eq $original[$name]) { if (Test-Path -LiteralPath "Env:$name") { Remove-Item -LiteralPath "Env:$name" } }

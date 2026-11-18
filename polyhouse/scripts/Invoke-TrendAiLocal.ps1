@@ -28,7 +28,8 @@ if ($Action -eq 'Inspect') {
     }
     return
 }
-$names = @('POLYHOUSE_DEEPSEEK_API_KEY', 'POLYHOUSE_TREND_ENABLED', 'POLYHOUSE_TREND_AI_ENABLED', 'POLYHOUSE_TREND_LIVE_CNY')
+$names = @('POLYHOUSE_DEEPSEEK_API_KEY', 'POLYHOUSE_TREND_ENABLED', 'POLYHOUSE_TREND_AI_ENABLED',
+    'POLYHOUSE_TREND_LIVE_CNY', 'POLYHOUSE_TREND_JOBS_ENABLED')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $secureKey = $null
@@ -51,7 +52,11 @@ try {
         Write-Host 'G4真实验收：仅本机专属库，一角月预算持久记账，定时关闭；同月重复运行不换号重发。Key不写文件。'
         & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Verify -TrendLiveOnly
     } else {
-        Write-Host 'Key已注入本次启动进程树，未验证有效性、不做迁移；任务及定时开关保持原值，启用时可能继续已受理任务或自动受理新任务并计费。'
+        # 拿 Key 启动仍沿用原约定，必须显式打开任务才可以恢复可能产生费用的旧任务。
+        if ([string]::IsNullOrWhiteSpace($previous['POLYHOUSE_TREND_JOBS_ENABLED'])) {
+            [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_JOBS_ENABLED', 'false', 'Process')
+        }
+        Write-Host 'Key已注入本次启动进程树。此入口仅在显式开启任务时运行执行器，定时配置沿用原值。'
         & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Run -SkipWslRedis:$SkipWslRedis
     }
 } finally {
