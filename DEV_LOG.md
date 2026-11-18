@@ -2,7 +2,7 @@
 
 更新时间：2026-11-18（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮已在本机发布真实日报，首次付费整榜 15 条中 12 条通过。已补模型输出兼容及 GitHub API 暂停时的旧解读回退，待本机新版复核。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实 AI 样本及 ¥0.01 账单已核对，保留验收库。
+- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮已在本机发布付费日报，用户确认更新后解读全空的问题未再出现。首页星潮入口已与妙替、妙压统一卡面，日报功能页留待专项评审。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实 AI 样本及 ¥0.01 账单已核对，保留验收库。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
