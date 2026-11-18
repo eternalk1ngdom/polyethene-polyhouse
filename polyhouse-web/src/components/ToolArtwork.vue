@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ElIcon } from 'element-plus'
-import { ArrowRight, Crop, Picture, Star, Switch, TrendCharts } from '@element-plus/icons-vue'
+import { ArrowRight, Crop, Picture, Switch } from '@element-plus/icons-vue'
+import tideVoyage from '../assets/startide-voyage.webp'
 /** 用本项目自己的排版解释工具用途，不使用第三方作品或假处理结果。 */
 interface Props {
   /** 首页用入口类别选择插画，三类入口共用封面尺寸。 */
@@ -48,18 +49,8 @@ defineProps<Props>()
     >
     <template v-else>
       <span class="art-label">GITHUB TRENDING</span>
-      <div class="trend-composition">
-        <div class="trend-paper">
-          <div class="trend-masthead">
-            开源日榜<ElIcon><Star /></ElIcon>
-          </div>
-          <div class="trend-lines"><i /><i /><i /></div>
-        </div>
-        <div class="trend-note">
-          <ElIcon><TrendCharts /></ElIcon><span>中文解读</span>
-        </div>
-      </div>
-      <span class="art-caption">StarTide</span>
+      <img class="trend-voyage" :src="tideVoyage" alt="" width="1200" height="600" decoding="async" />
+      <span class="art-caption">StarTide<span>每天，发现开源新星。</span></span>
     </template>
   </div>
 </template>
@@ -273,70 +264,13 @@ defineProps<Props>()
   font-style: italic;
   font-weight: 400;
 }
-.trend-composition {
+.trend-voyage {
   position: absolute;
-  inset: 23% 10% 28%;
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr);
-  align-items: center;
-  gap: clamp(16px, 5cqi, 36px);
-}
-.trend-paper {
-  height: 100%;
-  padding: clamp(12px, 3.5cqi, 25px);
-  border-radius: 9px;
-  background: #fbfdff;
-  box-shadow: 0 12px 26px #24223814;
-  transform: rotate(-7deg);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: clamp(10px, 3cqi, 22px);
-}
-.trend-masthead {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 1px solid var(--ph-line);
-  padding-bottom: clamp(5px, 1.5cqi, 10px);
-  font-size: clamp(14px, 4.6cqi, 28px);
-  font-weight: 650;
-}
-.trend-masthead .el-icon {
-  color: var(--ph-accent-strong);
-  flex-shrink: 0;
-}
-.trend-lines {
-  display: grid;
-  gap: clamp(5px, 1.6cqi, 10px);
-}
-.trend-lines i {
-  width: 90%;
-  height: clamp(4px, 0.9cqi, 6px);
-  border-radius: 99px;
-  background: #c0d5e4;
-}
-.trend-lines i:nth-child(2) {
-  width: 75%;
-}
-.trend-lines i:last-child {
-  width: 60%;
-}
-.trend-note {
-  display: grid;
-  justify-items: start;
-  gap: clamp(7px, 2cqi, 14px);
-  padding: clamp(10px, 3cqi, 20px);
-  border-radius: 8px;
-  background: var(--ph-ink);
-  color: white;
-  transform: rotate(6deg);
-  font-size: clamp(13px, 3.6cqi, 22px);
-}
-.trend-note .el-icon {
-  color: #f8b9d2;
-  font-size: clamp(18px, 5.2cqi, 32px);
+  inset: 9% 0 auto;
+  width: 100%;
+  /* 窄双列的卡片已达到最小高度，底部仍须容纳两行题签和阅读入口。 */
+  height: min(68%, calc(91% - 74px));
+  pointer-events: none;
 }
 /* 卡片在平板双列时也可能很窄，不能只按手机视口启用紧凑排版。 */
 @container tool-artwork (max-width: 400px) {
