@@ -50,4 +50,20 @@ class GithubTrendingParserTest {
         assertThat(item.forksCount()).isEqualTo(56);
         assertThat(parser.parse(TrendFixture.html().replace("123 stars today", "1 234 stars today")).getFirst().starsAdded()).isNull();
     }
+
+    @Test void readsOnlyTheStarEntryBoundToTheSameRepository() {
+        var html = TrendFixture.htmlWithStarIdentity();
+        assertThat(parser.parse(html)).extracting(item -> item.repositoryId()).containsExactly("1", "2");
+        assertThat(parser.parse(html.replace("return_to=%2Fsample%2Fengine", "return_to=%2Fsample%2Fother")))
+                .extracting(item -> item.repositoryId()).containsExactly(null, "2");
+        assertThat(parser.parse(html.replace("\"repository_id\":2", "\"repository_id\":1")))
+                .allSatisfy(item -> assertThat(item.repositoryId()).isNull());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "\"1\"", "9223372036854775808", "1,\"repository_id\":7"})
+    void ignoresInvalidRepositoryIdsWithoutLosingTheRow(String invalidId) {
+        var html = TrendFixture.htmlWithStarIdentity().replace("\"repository_id\":1", "\"repository_id\":" + invalidId);
+        assertThat(parser.parse(html)).extracting(item -> item.repositoryId()).containsExactly(null, "2");
+    }
 }

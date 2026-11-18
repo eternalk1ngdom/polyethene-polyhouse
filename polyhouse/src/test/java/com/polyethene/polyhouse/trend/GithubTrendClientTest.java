@@ -18,7 +18,7 @@ class GithubTrendClientTest {
             requests.add(uri.toString());
             if (uri.getHost().equals("github.com")) {
                 assertThat(token).isNull();
-                return reply(TrendFixture.html());
+                return reply(TrendFixture.htmlWithStarIdentity());
             }
             assertThat(token).isEqualTo("fake-fixture-token");
             boolean docs = uri.toString().contains("awesome-books");
@@ -44,21 +44,27 @@ class GithubTrendClientTest {
         AtomicInteger calls = new AtomicInteger();
         var client = client((uri, token) -> {
             calls.incrementAndGet();
-            return uri.getHost().equals("github.com") ? reply(TrendFixture.html()) : new TrendSourceTransport.Reply(429, "private upstream error", null);
+            return uri.getHost().equals("github.com") ? reply(TrendFixture.htmlWithStarIdentity()) : new TrendSourceTransport.Reply(429, "private upstream error", null);
         });
         var collection = client.collect();
         assertThat(calls.get()).isEqualTo(2);
         assertThat(collection.projects()).hasSize(2);
-        assertThat(collection.projects().getFirst().snapshot().metadataStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(collection.projects()).extracting(project -> project.snapshot().repositoryId()).containsExactly("1", "2");
+        assertThat(collection.projects()).allSatisfy(project -> {
+            assertThat(project.snapshot().metadataStatus()).isEqualTo("UNAVAILABLE");
+            assertThat(project.readmeVersion()).isNull();
+        });
     }
 
     @Test void refusesPrivateRepoAndExternalRedirectWithoutSendingTokenThere() {
         var client = client((uri, token) -> uri.getHost().equals("github.com") ? reply(TrendFixture.html())
                 : new TrendSourceTransport.Reply(302, "", "https://example.org/steal"));
         assertThat(client.collect().projects().getFirst().snapshot().repositoryId()).isNull();
-        var privateClient = client((uri, token) -> uri.getHost().equals("github.com") ? reply(TrendFixture.html())
+        var privateClient = client((uri, token) -> uri.getHost().equals("github.com") ? reply(TrendFixture.htmlWithStarIdentity())
                 : reply("{\"id\":1,\"full_name\":\"sample/engine\",\"private\":true}"));
-        assertThat(privateClient.collect().projects().getFirst().snapshot().metadataStatus()).isEqualTo("UNAVAILABLE");
+        var privateRepo = privateClient.collect().projects().getFirst().snapshot();
+        assertThat(privateRepo.metadataStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(privateRepo.repositoryId()).isNull();
     }
 
     @Test void missingReadmeDoesNotBecomeAFabricatedDescriptionOrStopOtherRepos() {
@@ -78,7 +84,7 @@ class GithubTrendClientTest {
 
     @Test void deletedFirstRepoDoesNotSuppressMetadataForTheSecondRepo() {
         var client = client((uri, token) -> {
-            if (uri.getHost().equals("github.com")) return reply(TrendFixture.html());
+            if (uri.getHost().equals("github.com")) return reply(TrendFixture.htmlWithStarIdentity());
             if (uri.getPath().contains("/engine")) return new TrendSourceTransport.Reply(404, "{}", null);
             if (uri.getPath().endsWith("/readme")) return new TrendSourceTransport.Reply(404, "{}", null);
             if (uri.getPath().endsWith("/contents")) return reply("[]");
@@ -86,6 +92,7 @@ class GithubTrendClientTest {
         });
         var projects = client.collect().projects();
         assertThat(projects.getFirst().snapshot().metadataStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(projects.getFirst().snapshot().repositoryId()).isNull();
         assertThat(projects.getLast().snapshot().metadataStatus()).isEqualTo("AVAILABLE");
         assertThat(projects.getLast().snapshot().repositoryId()).isEqualTo("2");
     }

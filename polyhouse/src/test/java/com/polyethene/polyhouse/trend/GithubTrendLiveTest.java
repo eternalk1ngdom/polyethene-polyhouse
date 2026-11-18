@@ -22,6 +22,8 @@ class GithubTrendLiveTest {
             assertThat(metadata.status()).isEqualTo(200);
             var json = TrendFixture.json().readTree(metadata.body());
             assertThat(json.path("id").asLong()).isPositive();
+            assertThat(projects).allSatisfy(project -> assertThat(project.repositoryId()).isNotBlank());
+            assertThat(projects.getFirst().repositoryId()).isEqualTo(json.path("id").asText());
             assertThat(json.path("private").asBoolean(true)).isFalse();
         }
     }

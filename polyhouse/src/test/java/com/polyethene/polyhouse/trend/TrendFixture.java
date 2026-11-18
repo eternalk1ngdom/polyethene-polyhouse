@@ -28,6 +28,16 @@ final class TrendFixture {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
+    static String htmlWithStarIdentity() {
+        return html().replace("sample / engine</a></h2>", "sample / engine</a></h2>" + starLogin("sample/engine", 1))
+                .replace("sample / awesome-books</a></h2>", "sample / awesome-books</a></h2>" + starLogin("sample/awesome-books", 2));
+    }
+    private static String starLogin(String repository, int id) {
+        return """
+                <a href="/login?return_to=%%2F%s" data-hydro-click='{"event_type":"authentication.click",
+                "payload":{"location_in_page":"star button","auth_type":"LOG_IN","repository_id":%d}}'>Star</a>
+                """.formatted(repository.replace("/", "%2F"), id);
+    }
     static TrendCollection collection(String capturedAt) {
         return new TrendCollection(Instant.parse(capturedAt), new GithubTrendingParser().parse(html()).stream()
                 .map(item -> new TrendCollection.Project(item, "a".repeat(40), "private internal material")).toList());

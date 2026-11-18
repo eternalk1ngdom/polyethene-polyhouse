@@ -3,7 +3,7 @@ package com.polyethene.polyhouse.model.vo;
 /**
  * 当期基础资料快照；不包含 README 正文、上游错误或内部令牌。
  * @param rankNum 来源榜单排名，筛选后也不重排为新的官方排名
- * @param repositoryId GitHub 编号以字符串传输；资料获取失败时为 null
+ * @param repositoryId GitHub 编号以字符串传输；仓库身份无法确认时为 null
  * @param fullName 当时的仓库全名
  * @param repoUrl 由已校验全名生成的 GitHub HTTPS 链接
  * @param description 当时的公开项目描述
@@ -32,6 +32,13 @@ public record TrendProjectVO(int rankNum, String repositoryId, String fullName, 
                            String classificationReason, String metadataStatus, String readmeStatus, String insightStatus) {
         this(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage, totalStars, starsAdded,
                 forksCount, license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, null);
+    }
+
+    /** 更新仓库标识时保留榜单资料及完整度，避免把身份线索当成已补齐资料。 */
+    public TrendProjectVO withRepositoryId(String id) {
+        return new TrendProjectVO(rankNum, id, fullName, repoUrl, description, primaryLanguage,
+                totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
+                metadataStatus, readmeStatus, insightStatus, insight);
     }
 
     /** 只替换解读投影，保留本次榜单的基础资料，不回写其他日报。 */

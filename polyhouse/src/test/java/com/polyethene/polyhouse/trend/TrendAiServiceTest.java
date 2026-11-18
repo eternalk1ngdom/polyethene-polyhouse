@@ -70,6 +70,23 @@ class TrendAiServiceTest {
         verifyNoInteractions(gateway);
     }
 
+    @Test void githubApiPauseKeepsOldInsightByStableIdWithoutChargingForAbsentReadme() {
+        var previous = TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofHours(1)));
+        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(previous)));
+        var source = new GithubTrendClient((uri, token) -> uri.getHost().equals("github.com")
+                ? new TrendSourceTransport.Reply(200, TrendFixture.htmlWithStarIdentity(), null)
+                : new TrendSourceTransport.Reply(403, "模拟 GitHub API 限流", null),
+                new GithubTrendingParser(), TrendFixture.json(), new TrendProperties(true, null));
+        var output = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), source.collect());
+        assertThat(output.projects()).hasSize(2);
+        var first = output.projects().getFirst().snapshot();
+        assertThat(first.insightStatus()).isEqualTo("STALE");
+        assertThat(first.insight()).isEqualTo(previous);
+        assertThat(output.projects().getLast().snapshot().insightStatus()).isEqualTo("UNAVAILABLE");
+        verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
+        verifyNoInteractions(gateway);
+    }
+
     @Test void optionalFieldOmissionKeepsTheRestOfThePaidInsightWithoutAnotherCall() {
         grant();
         String response = TrendAiFixture.content().replace("\"comparison\":null,", "");

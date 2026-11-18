@@ -9,6 +9,8 @@ import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
 import com.polyethene.polyhouse.model.vo.TrendProjectVO;
 import org.jsoup.Jsoup;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -19,6 +21,7 @@ import java.util.*;
 /** 串行补资料，一旦上游不可用即停止本轮 API 补全，避免限流后继续轰击；有效基础榜单仍可归档。 */
 @Component
 public class GithubTrendClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GithubTrendClient.class);
     private static final Set<String> BUILDS = Set.of("pom.xml", "build.gradle", "build.gradle.kts", "package.json",
             "cargo.toml", "go.mod", "pyproject.toml", "setup.py", "cmakelists.txt", "makefile", "gemfile");
     private final TrendSourceTransport transport;
@@ -51,15 +54,16 @@ public class GithubTrendClient {
         if (reply.status() != 200) throw unavailable();
         List<TrendCollection.Project> projects = new ArrayList<>();
         boolean apiPaused = false;
-        for (var base : parser.parse(reply.body())) {
+        for (var listed : parser.parse(reply.body())) {
             guard.run();
-            TrendProjectVO snapshot = base;
+            // 单仓库明确返回不可用时不采用榜单线索。只有本轮 API 无法继续时才用榜单 ID 查旧解读。
+            TrendProjectVO snapshot = apiPaused || listed.repositoryId() == null ? listed : listed.withRepositoryId(null);
             String readmeVersion = null;
             String readmeText = "";
             if (!apiPaused) {
                 try {
-                    var metadata = object(get(URI.create("https://api.github.com/repos/" + base.fullName()), guard));
-                    snapshot = metadata(base, metadata);
+                    var metadata = object(get(URI.create("https://api.github.com/repos/" + listed.fullName()), guard));
+                    snapshot = metadata(listed, metadata);
                     String prefix = "https://api.github.com/repos/" + snapshot.fullName();
                     var files = array(get(URI.create(prefix + "/contents"), guard));
                     var readme = get(URI.create(prefix + "/readme"), guard);
@@ -84,6 +88,8 @@ public class GithubTrendClient {
                 } catch (ApiPaused failure) {
                     // 限流或连接故障属于上游级失败，停止本轮后续 API，保留已得到的公开资料。
                     apiPaused = true;
+                    if (snapshot.repositoryId() == null) snapshot = listed;
+                    LOGGER.warn("GitHub API 补资料暂停：采集时间={}，原因={}", captured, failure.reason);
                 } catch (BusinessException | IllegalArgumentException failure) {
                     // 单仓库删除、材料过大或格式异常只影响该仓库，丢弃未完成材料后继续其他项目。
                     readmeVersion = null;
@@ -102,8 +108,10 @@ public class GithubTrendClient {
             guard.run();
             final TrendSourceTransport.Reply reply;
             try { reply = transport.get(target, target.getHost().equals("api.github.com") ? settings.githubToken() : null); }
-            catch (BusinessException failure) { throw new ApiPaused(); }
-            if (reply.status() == 403 || reply.status() == 429 || reply.status() >= 500) throw new ApiPaused();
+            catch (BusinessException failure) { throw new ApiPaused("TRANSPORT_OR_RESPONSE"); }
+            if (reply.status() == 403 || reply.status() == 429 || reply.status() >= 500) {
+                throw new ApiPaused("HTTP_" + reply.status());
+            }
             if (!Set.of(301, 302, 307, 308).contains(reply.status())) return reply;
             if (reply.location() == null || reply.location().length() > 512) throw unavailable();
             URI next = target.resolve(reply.location());
@@ -186,6 +194,10 @@ public class GithubTrendClient {
     /** 仅标记应停止本轮 API 的失败，不将单项目的 404 当作整个来源不可用。 */
     private static final class ApiPaused extends BusinessException {
         private static final long serialVersionUID = 1L;
-        private ApiPaused() { super(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用"); }
+        private final String reason;
+        private ApiPaused(String reason) {
+            super(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
+            this.reason = reason;
+        }
     }
 }
