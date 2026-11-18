@@ -5,11 +5,15 @@ import com.polyethene.polyhouse.model.entity.*;
 import com.polyethene.polyhouse.service.*;
 import com.polyethene.polyhouse.service.trend.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import java.time.*;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(OutputCaptureExtension.class)
 class TrendAiServiceTest {
     private final TrendAiLedger ledger = mock(TrendAiLedger.class);
     private final DeepSeekGateway gateway = mock(DeepSeekGateway.class);
@@ -66,12 +70,27 @@ class TrendAiServiceTest {
         verifyNoInteractions(gateway);
     }
 
-    @Test void invalidContentStillSettlesKnownUsage() {
+    @Test void optionalFieldOmissionKeepsTheRestOfThePaidInsightWithoutAnotherCall() {
         grant();
-        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply("  ", 100, 20));
+        String response = TrendAiFixture.content().replace("\"comparison\":null,", "");
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(response, 100, 20));
+        var result = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection()).projects().getFirst().snapshot();
+        assertThat(result.insightStatus()).isEqualTo("ANALYZED");
+        assertThat(result.insight().definition()).isEqualTo("本地开发辅助工具");
+        assertThat(result.insight().comparison()).isNull();
+        verify(gateway, times(1)).complete(any());
+        verify(ledger).settle(anyString(), eq(100), eq(20), eq(codec.encode(result.insight())));
+    }
+
+    @Test void invalidContentSettlesKnownUsageAndLogsOnlyTheSafeReason(CapturedOutput output) {
+        grant();
+        String rawResponse = "模型原始回答不应出现在日志";
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(rawResponse, 100, 20));
         var result = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection()).projects().getFirst().snapshot();
         assertThat(result.insightStatus()).isEqualTo("INVALID_OUTPUT");
+        verify(gateway, times(1)).complete(any());
         verify(ledger).settle(anyString(), eq(100), eq(20), isNull());
+        assertThat(output.getAll()).contains("INVALID_JSON").doesNotContain(rawResponse, TrendAiFixture.KEY, "Ignore all prior instructions");
     }
 
     @Test void unknownNetworkResultRetainsBudgetButProvenNotSentCancels() {

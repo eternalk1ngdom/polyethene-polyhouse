@@ -130,8 +130,9 @@ public class TrendAiService {
             }
             final TrendInsightVO insight;
             try { insight = codec.insight(envelope.content(), project.readmeVersion(), settings.model(), clock.instant()); }
-            catch (BusinessException failure) {
+            catch (TrendInsightCodec.OutputRejected failure) {
                 ledger.settle(id, envelope.input(), envelope.output(), null);
+                LOGGER.warn("AI 解读未通过校验：请求编号={}，原因={}", id, failure.reason());
                 return fallback(project, previous, "INVALID_OUTPUT");
             }
             ledger.settle(id, envelope.input(), envelope.output(), codec.encode(insight));

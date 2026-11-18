@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.service.trend;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
@@ -15,8 +16,9 @@ import java.util.*;
 /** Prompt 不含凭据，JSON 模式之外仍限制结构、重复字段、长度和用量。 */
 @Component
 public class TrendInsightCodec {
-    /** 解读规则变化会使旧缓存失效，而不是悄悄重新解释历史。 */
+    /** 解读口径变化时更新版本，同一口径的格式兼容可继续复用已验证解读。 */
     public static final String RULE = "radar-1";
+    private static final int MAX_CONTENT_CHARS = 8192;
     private static final Set<String> CATEGORIES = Set.of("AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
     private static final Set<String> FIELDS = Set.of("category", "definition", "painPoint", "comparison", "highlights", "documentedLimitations", "inferredRisks");
     private final ObjectMapper json;
@@ -40,7 +42,12 @@ public class TrendInsightCodec {
                     + "严格只输出JSON对象，字段为category,definition,painPoint,comparison,highlights,documentedLimitations,inferredRisks。"
                     + "category从AI_AGENT,AI_INFRA,FRONTEND,BACKEND,DEVTOOLS,DESKTOP,GRAPHICS,OTHER选一。"
                     + "definition最多50字，painPoint最多100字，comparison最多120字。highlights最多3条每条60字；"
-                    + "documentedLimitations只放材料明确限制，inferredRisks只放你的推断，均最多3条每条80字；没有信息时用空数组。";
+                    + "documentedLimitations只放材料明确限制，inferredRisks只放你的推断，均最多3条每条80字；没有信息时用空数组。"
+                    + "保留全部字段，只参考下面的JSON结构，示例文字不能当成项目事实：\n"
+                    + """
+                    {"category":"DEVTOOLS","definition":"一句话定义","painPoint":"解决的问题","comparison":null,
+                    "highlights":["资料支持的技术亮点"],"documentedLimitations":[],"inferredRisks":[]}
+                    """;
             String material = json.writeValueAsString(Map.of("repository", item.fullName(), "description", Objects.toString(item.description(), ""),
                     "language", Objects.toString(item.primaryLanguage(), ""), "license", Objects.toString(item.license(), "未确认"),
                     "readme", project.readmeText()));
@@ -73,20 +80,40 @@ public class TrendInsightCodec {
         } catch (java.io.IOException failure) { throw invalid(); }
     }
 
-    /** 严格校验后才形成公开 VO；模型提供不了来源、生成时间、模型或规则版本。 */
+    /** 将模型对可选栏目的缺省表示统一后再校验，来源和版本仍由后端提供。 */
     public TrendInsightVO insight(String content, String sha, String model, Instant analyzedAt) {
+        if (content == null) throw new OutputRejected("NO_COMPLETE_TEXT");
+        if (content.length() > MAX_CONTENT_CHARS) throw new OutputRejected("CONTENT_TOO_LONG");
+        if (content.isBlank()) throw new OutputRejected("EMPTY_CONTENT");
         try {
-            if (content == null || content.isBlank() || content.length() > 8192) throw invalid();
-            var node = json.readTree(content);
-            Set<String> fields = new HashSet<>();
-            if (node == null || !node.isObject()) throw invalid();
-            node.fieldNames().forEachRemaining(fields::add);
-            if (!FIELDS.equals(fields) || !CATEGORIES.contains(text(node, "category", 20, false))) throw invalid();
-            return new TrendInsightVO(node.path("category").asText(), text(node, "definition", 100, false),
-                    text(node, "painPoint", 250, false), text(node, "comparison", 300, true),
-                    lines(node, "highlights", 160), lines(node, "documentedLimitations", 200), lines(node, "inferredRisks", 200),
-                    analyzedAt, sha, model, RULE);
-        } catch (JsonProcessingException failure) { throw invalid(); }
+            if (!(json.readTree(content) instanceof ObjectNode node)) throw new OutputRejected("JSON_NOT_OBJECT");
+            normalizeOptionalFields(node);
+            return readInsight(node, sha, model, analyzedAt, RULE);
+        } catch (JsonProcessingException failure) { throw new OutputRejected("INVALID_JSON"); }
+    }
+
+    private static void normalizeOptionalFields(ObjectNode node) {
+        // 缺省可选栏目等价于暂无资料，保留现有文字，不改写类型错误或缺失的核心内容。
+        var comparison = node.path("comparison");
+        if (comparison.isMissingNode() || comparison.isTextual() && comparison.asText().isBlank()) {
+            node.putNull("comparison");
+        }
+        for (String field : List.of("highlights", "documentedLimitations", "inferredRisks")) {
+            if (!node.hasNonNull(field)) node.putArray(field);
+        }
+    }
+
+    private static TrendInsightVO readInsight(ObjectNode node, String sha, String model, Instant analyzedAt, String rule) {
+        if (node.toString().length() > MAX_CONTENT_CHARS) throw new OutputRejected("CONTENT_TOO_LONG");
+        Set<String> fields = new HashSet<>();
+        node.fieldNames().forEachRemaining(fields::add);
+        if (!FIELDS.equals(fields)) throw new OutputRejected("FIELD_SET_MISMATCH");
+        String category = text(node, "category", 20, false);
+        if (!CATEGORIES.contains(category)) throw new OutputRejected("UNKNOWN_CATEGORY");
+        return new TrendInsightVO(category, text(node, "definition", 100, false),
+                text(node, "painPoint", 250, false), text(node, "comparison", 300, true),
+                lines(node, "highlights", 160), lines(node, "documentedLimitations", 200), lines(node, "inferredRisks", 200),
+                analyzedAt, sha, model, rule);
     }
 
     /** 只缓存验证过的脱敏结构，内容中没有原始 Prompt 或 HTTP 对象。 */
@@ -110,7 +137,7 @@ public class TrendInsightCodec {
             if (saved.analyzedAt() == null || saved.readmeVersion() == null || saved.model() == null || saved.ruleVersion() == null
                     || !saved.readmeVersion().matches("(?:[a-f0-9]{40}|[a-f0-9]{64})")
                     || !saved.model().matches("[A-Za-z0-9_-]{1,32}") || !saved.ruleVersion().matches("[A-Za-z0-9_-]{1,32}")) throw invalid();
-            insight(content.toString(), saved.readmeVersion(), saved.model(), saved.analyzedAt());
+            readInsight(content, saved.readmeVersion(), saved.model(), saved.analyzedAt(), saved.ruleVersion());
             return saved;
         } catch (JsonProcessingException | IllegalArgumentException failure) { throw invalid(); }
     }
@@ -122,15 +149,19 @@ public class TrendInsightCodec {
     private static String text(JsonNode root, String field, int max, boolean nullable) {
         var value = root.path(field);
         if (nullable && value.isNull()) return null;
-        if (!value.isTextual() || value.asText().isBlank() || value.asText().length() > max) throw invalid();
+        if (!value.isTextual() || value.asText().isBlank() || value.asText().length() > max) {
+            throw new OutputRejected("INVALID_VALUE_" + field);
+        }
         return value.asText();
     }
     private static List<String> lines(JsonNode root, String field, int max) {
         var value = root.path(field);
-        if (!value.isArray() || value.size() > 3) throw invalid();
+        if (!value.isArray() || value.size() > 3) throw new OutputRejected("INVALID_LIST_" + field);
         List<String> result = new ArrayList<>();
         for (var line : value) {
-            if (!line.isTextual() || line.asText().isBlank() || line.asText().length() > max) throw invalid();
+            if (!line.isTextual() || line.asText().isBlank() || line.asText().length() > max) {
+                throw new OutputRejected("INVALID_ITEM_" + field);
+            }
             result.add(line.asText());
         }
         return result;
@@ -156,5 +187,20 @@ public class TrendInsightCodec {
         /** 不记录原始模型内容。 */
         @Override public String toString() { return "Envelope[input=" + input + ", output=" + output + "]"; }
     }
+
+    /** 已收到用量的内容校验失败，原因只取程序内的固定代码和字段名。 */
+    public static final class OutputRejected extends BusinessException {
+        private static final long serialVersionUID = 1L;
+        private final String reason;
+
+        private OutputRejected(String reason) {
+            super(ErrorCode.SERVICE_UNAVAILABLE, "AI 输出暂不可用");
+            this.reason = reason;
+        }
+
+        /** 日志可用此原因定位校验步骤，不需要保留模型原文。 */
+        public String reason() { return reason; }
+    }
+
     private static BusinessException invalid() { return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "AI 输出暂不可用"); }
 }

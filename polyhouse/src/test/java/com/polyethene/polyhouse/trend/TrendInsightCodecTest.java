@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.trend;
 
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
+import com.polyethene.polyhouse.service.trend.TrendInsightCodec.OutputRejected;
 import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.*;
@@ -15,7 +16,11 @@ class TrendInsightCodecTest {
         assertThat(body.path("thinking").path("type").asText()).isEqualTo("disabled");
         assertThat(body.path("max_tokens").asInt()).isEqualTo(1500);
         assertThat(body.has("tools")).isFalse();
-        assertThat(body.path("messages").get(0).path("content").asText()).doesNotContain("Ignore all prior instructions");
+        String system = body.path("messages").get(0).path("content").asText();
+        assertThat(system).doesNotContain("Ignore all prior instructions").contains("\n{");
+        var example = codec.insight(system.substring(system.indexOf("\n{") + 1), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        assertThat(example.highlights()).hasSize(1);
+        assertThat(example.comparison()).isNull();
         assertThat(body.path("messages").get(1).path("content").asText()).contains("Ignore all prior instructions");
         assertThat(new String(prepared.body(), StandardCharsets.UTF_8)).doesNotContain(TrendAiFixture.KEY);
         assertThat(prepared.inputBound()).isEqualTo(prepared.body().length + 512);
@@ -39,6 +44,34 @@ class TrendInsightCodecTest {
         }
     }
 
+    @Test void normalizesOnlyAbsentOptionalFieldsWithoutChangingUsefulText() {
+        var content = TrendFixture.json().createObjectNode()
+                .put("category", "DEVTOOLS").put("definition", "本地开发辅助工具")
+                .put("painPoint", "整理重复操作").put("comparison", "  ").putNull("documentedLimitations");
+        content.putArray("highlights").add("整理开发步骤");
+        var value = codec.insight(content.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        assertThat(value.comparison()).isNull();
+        assertThat(value.highlights()).containsExactly("整理开发步骤");
+        assertThat(value.documentedLimitations()).isEmpty();
+        assertThat(value.inferredRisks()).isEmpty();
+        assertThat(codec.cached(codec.encode(value))).isEqualTo(value);
+
+        // 缓存应该已保存规范形状，损坏的持久化数据仍按严格规则拒绝。
+        String damaged = codec.encode(value).replace("\"documentedLimitations\":[]", "\"documentedLimitations\":null");
+        assertThatThrownBy(() -> codec.cached(damaged)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test void reportsSafeReasonsAndRejectsMissingCoreTextWrongTypesAndIncompleteResponses() {
+        final String content = TrendAiFixture.content();
+        String unfinished = new String(TrendAiFixture.reply(content, 100, 20).body(), StandardCharsets.UTF_8)
+                .replace("\"finish_reason\":\"stop\"", "\"finish_reason\":\"length\"");
+        assertRejected(codec.envelope(unfinished.getBytes(StandardCharsets.UTF_8)).content(), "NO_COMPLETE_TEXT");
+        assertRejected("   ", "EMPTY_CONTENT");
+        assertRejected(content + "{}", "INVALID_JSON");
+        assertRejected(content.replace("\"definition\":\"本地开发辅助工具\",", ""), "FIELD_SET_MISMATCH");
+        assertRejected(content.replace("[\"根据项目资料提取步骤\"]", "\"根据项目资料提取步骤\""), "INVALID_LIST_highlights");
+    }
+
     @Test void validatesUsageBeforeContentAndRejectsMissingOrInconsistentUsage() {
         var envelope = codec.envelope(TrendAiFixture.reply("not valid json", 100, 20).body());
         assertThat(envelope.input()).isEqualTo(100);
@@ -55,5 +88,11 @@ class TrendInsightCodecTest {
                 .isInstanceOf(BusinessException.class);
         String tooMany = TrendAiFixture.content().replace("\"documentedLimitations\":[]", "\"documentedLimitations\":[\"a\",\"b\",\"c\",\"d\"]");
         assertThatThrownBy(() -> codec.insight(tooMany, TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW)).isInstanceOf(BusinessException.class);
+    }
+
+    private void assertRejected(String content, String reason) {
+        assertThatExceptionOfType(OutputRejected.class)
+                .isThrownBy(() -> codec.insight(content, TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW))
+                .satisfies(failure -> assertThat(failure.reason()).isEqualTo(reason));
     }
 }
