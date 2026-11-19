@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
 import { Back, Calendar, TopRight } from '@element-plus/icons-vue'
-import observatory from '../assets/startide-observatory.webp'
+import tideAtlas from '../assets/startide-tide-atlas.webp'
 import { isTrendDate } from '../api/trend'
 import { starTide } from '../config/starTide'
 import { useUserStore } from '../stores/useUserStore'
@@ -131,15 +131,17 @@ watch(
     <div class="sheet">
       <template v-if="directory">
         <header class="cover">
-          <div class="cover-copy">
-            <p class="signature">StarTide <span>／ 开源项目日报</span></p>
-            <h1>星潮</h1>
-            <p class="issue-meta" v-if="report">
+          <div class="cover-scene">
+            <img :src="tideAtlas" alt="" width="1680" height="560" />
+            <h1>星潮 <em lang="en">StarTide</em></h1>
+          </div>
+          <div class="cover-folio">
+            <span class="edition-name">开源项目日报</span>
+            <p v-if="report" class="issue-meta">
               <strong>{{ report.periodKey }}</strong
               ><span>本期 {{ report.items.length }} 个项目</span>
             </p>
           </div>
-          <img :src="observatory" alt="" width="1440" height="480" class="observatory" />
         </header>
         <div class="toolbar">
           <label class="control"
@@ -244,53 +246,83 @@ watch(
   margin: auto;
 }
 .cover {
+  overflow: hidden;
+  border: 1px solid #cad8d6;
+  border-radius: 14px;
+  background: #f6f4e9;
+}
+.cover-scene {
   position: relative;
   isolation: isolate;
-  overflow: hidden;
-  border-radius: 18px;
-  background: #deebf2;
-  min-height: 175px;
-  display: flex;
+  display: grid;
   align-items: center;
+  min-height: clamp(152px, 15vw, 196px);
+  padding: 18px clamp(18px, 4vw, 50px);
+  background: #d7e7e4;
 }
-.cover-copy {
-  padding: 20px clamp(20px, 4vw, 52px);
-}
-.signature {
-  font:
-    italic 20px Georgia,
-    serif;
-  margin: 0;
-}
-.signature span {
-  font: 600 12px var(--ph-font);
-  letter-spacing: 0.08em;
+.cover-scene img {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 54% 49%;
 }
 .cover h1 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  width: fit-content;
+  color: #142f46;
   font:
-    700 clamp(46px, 6vw, 70px)/1 Georgia,
+    700 clamp(46px, 6.8vw, 82px)/1.1 Georgia,
     'Songti SC',
     SimSun,
     serif;
-  letter-spacing: 0.04em;
-  margin: 9px 0 14px;
 }
-.observatory {
-  position: absolute;
-  z-index: -1;
-  right: 0;
-  bottom: 0;
-  width: 65%;
-  height: 100%;
-  object-fit: contain;
-  object-position: right bottom;
+.cover h1 em {
+  font:
+    italic 400 clamp(20px, 2.8vw, 35px)/1 Georgia,
+    serif;
 }
+.cover-folio,
 .issue-meta {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 5px 14px;
-  font-size: 13px;
+}
+.cover-folio {
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px clamp(18px, 4vw, 50px);
+  border-top: 1px solid #91aaa9;
+  color: #243d4d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.edition-name {
+  font-weight: 650;
+  letter-spacing: 0.1em;
+}
+.issue-meta {
+  gap: 5px 12px;
   margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.issue-meta span {
+  border-inline-start: 1px solid #a7b6b5;
+  padding-inline-start: 12px;
+}
+@media (min-width: 900px) {
+  /* 宽刊头为题名留出纸面，降低画幅裁切量，让星、月和潮线同时入画。 */
+  .cover-scene img {
+    inset-inline-start: auto;
+    width: 74%;
+    mask-image: linear-gradient(to right, transparent, black 20%);
+  }
 }
 .toolbar,
 .control,
@@ -386,22 +418,26 @@ select:focus-visible {
   .sheet {
     width: calc(100% - 28px);
   }
-  .cover {
-    min-height: 148px;
+  .cover-scene {
+    min-height: clamp(112px, 26vw, 154px);
+    padding: 14px 16px 23px;
   }
-  .cover-copy {
-    padding: 16px;
+  .cover-scene img {
+    object-position: 60% 50%;
   }
-  .observatory {
-    /* 窄屏裁去星轨的远端，把镜筒和目标星一起留在期号右侧。 */
-    width: 50%;
-    height: min(75%, 25vw);
-    object-fit: cover;
-    mask-image: linear-gradient(to right, transparent, black 8%);
+  .cover h1 {
+    flex-direction: column;
+    gap: 1px;
+  }
+  .cover-folio {
+    padding: 7px 12px;
+    column-gap: 7px;
   }
   .issue-meta {
-    flex-direction: column;
-    gap: 2px;
+    column-gap: 7px;
+  }
+  .issue-meta span {
+    padding-inline-start: 7px;
   }
   .toolbar {
     gap: 6px 12px;
