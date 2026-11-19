@@ -130,20 +130,9 @@ watch(
   <div class="reader">
     <div class="sheet">
       <template v-if="directory">
-        <header class="cover">
-          <div class="cover-scene">
-            <img :src="tideAtlas" alt="" width="1680" height="560" />
-            <h1>星潮 <em lang="en">StarTide</em></h1>
-          </div>
-          <div class="cover-folio">
-            <span class="edition-name">开源项目日报</span>
-            <p v-if="report" class="issue-meta">
-              <strong>{{ report.periodKey }}</strong
-              ><span>本期 {{ report.items.length }} 个项目</span>
-            </p>
-          </div>
-        </header>
+        <img class="cover" :src="tideAtlas" alt="" width="1680" height="560" />
         <div class="toolbar">
+          <h1>星潮 <em lang="en">StarTide</em></h1>
           <label class="control"
             ><ElIcon aria-hidden="true"><Calendar /></ElIcon>日报日期
             <select id="trend-date" :value="selectedDate" @change="selectDate">
@@ -169,7 +158,7 @@ watch(
               </option>
             </select>
           </label>
-          <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility owner-link"
+          <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility"
             >星潮发布台</RouterLink
           >
         </div>
@@ -192,10 +181,12 @@ watch(
       </div>
       <template v-else-if="report && directory">
         <div class="section-head">
-          <div>
-            <h2 ref="listHeading" tabindex="-1">项目日榜</h2>
-            <p class="meta">采集于 {{ trendTime(report.capturedAt) }}（北京时间）</p>
-          </div>
+          <h2 ref="listHeading" tabindex="-1">开源项目日报</h2>
+          <p class="meta">
+            <time :datetime="report.periodKey">{{ report.periodKey }}</time>
+            <span>本期 {{ report.items.length }} 个项目</span>
+            <span>采集于 {{ trendTime(report.capturedAt) }}（北京时间）</span>
+          </p>
           <a class="utility" :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
             >GitHub 日榜 <ElIcon aria-hidden="true"><TopRight /></ElIcon
           ></a>
@@ -246,88 +237,34 @@ watch(
   margin: auto;
 }
 .cover {
-  overflow: hidden;
-  border: 1px solid #cad8d6;
+  display: block;
+  width: 100%;
+  height: clamp(112px, 22vw, 264px);
+  object-fit: cover;
+  object-position: center;
   border-radius: 14px;
-  background: #f6f4e9;
-}
-.cover-scene {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  align-items: center;
-  min-height: clamp(152px, 15vw, 196px);
-  padding: 18px clamp(18px, 4vw, 50px);
   background: #d7e7e4;
 }
-.cover-scene img {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 54% 49%;
-}
-.cover h1 {
-  margin: 0;
+.toolbar h1 {
+  margin: 0 auto 0 0;
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  width: fit-content;
+  gap: 10px;
   color: #142f46;
   font:
-    700 clamp(46px, 6.8vw, 82px)/1.1 Georgia,
+    700 clamp(28px, 3vw, 38px)/1.15 Georgia,
     'Songti SC',
     SimSun,
     serif;
 }
-.cover h1 em {
+.toolbar h1 em {
   font:
-    italic 400 clamp(20px, 2.8vw, 35px)/1 Georgia,
+    italic 400 0.6em/1 Georgia,
     serif;
-}
-.cover-folio,
-.issue-meta {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-}
-.cover-folio {
-  justify-content: space-between;
-  gap: 4px 12px;
-  padding: 8px clamp(18px, 4vw, 50px);
-  border-top: 1px solid #91aaa9;
-  color: #243d4d;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.edition-name {
-  font-weight: 650;
-  letter-spacing: 0.1em;
-}
-.issue-meta {
-  gap: 5px 12px;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-.issue-meta span {
-  border-inline-start: 1px solid #a7b6b5;
-  padding-inline-start: 12px;
-}
-@media (min-width: 900px) {
-  /* 宽刊头为题名留出纸面，降低画幅裁切量，让星、月和潮线同时入画。 */
-  .cover-scene img {
-    inset-inline-start: auto;
-    width: 74%;
-    mask-image: linear-gradient(to right, transparent, black 20%);
-  }
 }
 .toolbar,
 .control,
 .utility,
-.section-head,
 .columns {
   display: flex;
   align-items: center;
@@ -372,15 +309,15 @@ select:focus-visible {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
-.owner-link {
-  margin-left: auto;
-}
-.section-head,
 .columns {
   justify-content: space-between;
   gap: 14px;
 }
 .section-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 12px;
   margin: 22px 0 9px;
 }
 .section-head h2 {
@@ -395,7 +332,18 @@ select:focus-visible {
   color: #475c6b;
 }
 .meta {
-  margin: 4px 0 0;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.meta time {
+  font-weight: 650;
+}
+.section-head > .utility {
+  grid-area: 1 / 2;
 }
 .notice {
   margin: 6px 0 12px;
@@ -418,26 +366,9 @@ select:focus-visible {
   .sheet {
     width: calc(100% - 28px);
   }
-  .cover-scene {
-    min-height: clamp(112px, 26vw, 154px);
-    padding: 14px 16px 23px;
-  }
-  .cover-scene img {
-    object-position: 60% 50%;
-  }
-  .cover h1 {
-    flex-direction: column;
-    gap: 1px;
-  }
-  .cover-folio {
-    padding: 7px 12px;
-    column-gap: 7px;
-  }
-  .issue-meta {
-    column-gap: 7px;
-  }
-  .issue-meta span {
-    padding-inline-start: 7px;
+  .toolbar h1 {
+    flex-basis: 100%;
+    margin-bottom: 4px;
   }
   .toolbar {
     gap: 6px 12px;
