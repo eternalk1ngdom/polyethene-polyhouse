@@ -248,7 +248,7 @@ watch(
   isolation: isolate;
   overflow: hidden;
   border-radius: 18px;
-  background: linear-gradient(110deg, #deebf2 28%, #d8eeed 73%, #f9e8cb);
+  background: #deebf2;
   min-height: 175px;
   display: flex;
   align-items: center;
@@ -393,7 +393,7 @@ select:focus-visible {
     padding: 16px;
   }
   .observatory {
-    /* 窄屏裁去左侧星轨，保住圆顶和镜筒的比例，给左侧期号留出空间。 */
+    /* 窄屏裁去星轨的远端，把镜筒和目标星一起留在期号右侧。 */
     width: 50%;
     height: min(75%, 25vw);
     object-fit: cover;
