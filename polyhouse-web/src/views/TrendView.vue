@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
 import { Back, Calendar, TopRight } from '@element-plus/icons-vue'
-import voyage from '../assets/startide-voyage.webp'
+import observatory from '../assets/startide-observatory.webp'
 import { isTrendDate } from '../api/trend'
 import { starTide } from '../config/starTide'
 import { useUserStore } from '../stores/useUserStore'
@@ -139,7 +139,7 @@ watch(
               ><span>本期 {{ report.items.length }} 个项目</span>
             </p>
           </div>
-          <img :src="voyage" alt="" width="1200" height="600" class="voyage" />
+          <img :src="observatory" alt="" width="1440" height="480" class="observatory" />
         </header>
         <div class="toolbar">
           <label class="control"
@@ -248,7 +248,7 @@ watch(
   isolation: isolate;
   overflow: hidden;
   border-radius: 18px;
-  background: #deebf2;
+  background: linear-gradient(110deg, #deebf2 28%, #d8eeed 73%, #f9e8cb);
   min-height: 175px;
   display: flex;
   align-items: center;
@@ -275,15 +275,15 @@ watch(
   letter-spacing: 0.04em;
   margin: 9px 0 14px;
 }
-.voyage {
-  mask-image: linear-gradient(to right, transparent, black 14%);
+.observatory {
   position: absolute;
   z-index: -1;
   right: 0;
   bottom: 0;
-  width: 59%;
+  width: 65%;
   height: 100%;
-  object-fit: fill;
+  object-fit: contain;
+  object-position: right bottom;
 }
 .issue-meta {
   display: flex;
@@ -392,9 +392,12 @@ select:focus-visible {
   .cover-copy {
     padding: 16px;
   }
-  .voyage {
-    width: 49%;
-    height: 70%;
+  .observatory {
+    /* 窄屏裁去左侧星轨，保住圆顶和镜筒的比例，给左侧期号留出空间。 */
+    width: 50%;
+    height: min(75%, 25vw);
+    object-fit: cover;
+    mask-image: linear-gradient(to right, transparent, black 8%);
   }
   .issue-meta {
     flex-direction: column;
