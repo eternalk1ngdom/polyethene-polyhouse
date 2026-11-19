@@ -244,38 +244,39 @@ watch(
   display: grid;
   align-items: center;
   width: 100%;
-  aspect-ratio: 3.5;
-  min-height: 122px;
+  min-height: clamp(92px, min(20vw, 24vh), 224px);
   overflow: hidden;
   border-radius: 14px;
   background: #d7e7e4;
 }
 .cover img {
   position: absolute;
-  inset: 0;
+  inset: auto 0 0 auto;
   z-index: -1;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: 100%;
-  object-fit: cover;
-  /* 将裁切留在上方天空，让海平线以下的几层潮水完整入画。 */
-  object-position: center bottom;
+  /* 保留原画的上下边缘，左端纸色渐隐，与题名下方的底色衔接。 */
+  object-fit: contain;
+  object-position: right bottom;
+  mask-image: linear-gradient(to right, transparent, black 20%);
 }
 .cover h1 {
   margin: 0;
-  padding-inline-start: clamp(16px, 4vw, 50px);
+  padding-inline-start: clamp(16px, 3.5vw, 38px);
   display: flex;
   align-items: baseline;
   gap: 4px 16px;
   color: #142f46;
   font:
-    700 clamp(46px, 6.8vw, 82px)/1.1 Georgia,
+    700 clamp(36px, 5vw, 62px)/1.1 Georgia,
     'Songti SC',
     SimSun,
     serif;
 }
 .cover h1 em {
   font:
-    italic 400 clamp(20px, 2.8vw, 35px)/1 Georgia,
+    italic 400 clamp(18px, 2.3vw, 28px)/1 Georgia,
     serif;
 }
 .toolbar,
@@ -388,7 +389,7 @@ select:focus-visible {
   .cover h1 {
     flex-direction: column;
     gap: 1px;
-    padding-bottom: 12px;
+    padding-bottom: 6px;
   }
   .toolbar {
     gap: 6px 12px;
