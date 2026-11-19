@@ -239,15 +239,26 @@ watch(
   margin: auto;
 }
 .cover {
+  --scene-height: clamp(92px, min(20vw, 24vh), 224px);
   position: relative;
   isolation: isolate;
   display: grid;
   align-items: center;
   width: 100%;
-  min-height: clamp(92px, min(20vw, 24vh), 224px);
+  min-height: var(--scene-height);
   overflow: hidden;
   border-radius: 14px;
   background: #d7e7e4;
+}
+.cover::before {
+  /* 镜接原画左侧的天空和潮线，补齐宽幅题名区；右侧原图保持完整比例。 */
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: max(0px, calc(100% - 3 * var(--scene-height)));
+  background: url('../assets/startide-tide-atlas.webp') left bottom / 400% 100% no-repeat;
+  transform: scaleX(-1);
+  z-index: -1;
 }
 .cover img {
   position: absolute;
@@ -256,10 +267,8 @@ watch(
   width: auto;
   max-width: 100%;
   height: 100%;
-  /* 保留原画的上下边缘，左端纸色渐隐，与题名下方的底色衔接。 */
   object-fit: contain;
   object-position: right bottom;
-  mask-image: linear-gradient(to right, transparent, black 20%);
 }
 .cover h1 {
   margin: 0;
