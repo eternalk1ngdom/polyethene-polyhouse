@@ -47,7 +47,7 @@ try {
   stage = '首页进入星潮并核对历史档案'
   await page.goto(base)
   await page.getByRole('link', { name: '阅读星潮', exact: true }).click()
-  await page.locator('.issue-meta').getByText(history, { exact: true }).waitFor()
+  await page.locator('.section-head time').filter({ hasText: history }).waitFor()
   assert.equal(await page.getByRole('link', { name: '星潮发布台', exact: true }).count(), 0)
 
   stage = '通过登录弹窗建立真实屋主会话'
@@ -62,7 +62,7 @@ try {
   await page.getByText('剩余可用', { exact: true }).waitFor()
 
   stage = '提交更新、刷新任务和确认正式发布'
-  await page.getByRole('button', { name: '手动更新日报' }).click()
+  await page.getByRole('button', { name: '更新本期日报' }).click()
   await page.getByText('已受理本次更新。', { exact: true }).waitFor()
   await page.reload()
   await page.getByRole('heading', { name: /^已发布/ }).waitFor({ timeout: 210_000 })
@@ -73,16 +73,16 @@ try {
   await rows.first().waitFor()
   const total = await rows.count()
   assert.ok(total > 0 && total <= 25)
-  const issue = page.locator('.issue-meta strong')
+  const issue = page.locator('.section-head time')
   const publishedDay = await issue.textContent()
   assert.notEqual(publishedDay, history)
   const fullNames = await rows.locator('h2').allTextContents()
 
   stage = '读历史并切回当期，同时核对语言筛选保留排名'
   await page.locator('#trend-date').selectOption(history)
-  await page.waitForFunction((day) => document.querySelector('.issue-meta strong')?.textContent === day, history)
+  await page.waitForFunction((day) => document.querySelector('.section-head time')?.textContent === day, history)
   await page.locator('#trend-date').selectOption('')
-  await page.waitForFunction((day) => document.querySelector('.issue-meta strong')?.textContent === day, publishedDay)
+  await page.waitForFunction((day) => document.querySelector('.section-head time')?.textContent === day, publishedDay)
   const languages = page.locator('#trend-language')
   await languages.waitFor()
   const ranks = await rows.locator('.rank').allTextContents()
@@ -118,7 +118,7 @@ try {
   const waitForSubmit = () => page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/manage/trend/jobs')
   const secondSubmission = waitForSubmit()
-  await page.getByRole('button', { name: '手动更新日报' }).click()
+  await page.getByRole('button', { name: '更新本期日报' }).click()
   let updateResponse = await secondSubmission
   // 快速操作会触发真实限流。界面恢复可点后沿用该意图，数据库仍只收到两个任务。
   if (updateResponse.status() === 429) {
