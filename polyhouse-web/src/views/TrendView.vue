@@ -130,9 +130,11 @@ watch(
   <div class="reader">
     <div class="sheet">
       <template v-if="directory">
-        <img class="cover" :src="tideAtlas" alt="" width="1680" height="560" />
-        <div class="toolbar">
+        <header class="cover">
+          <img :src="tideAtlas" alt="" width="1680" height="560" />
           <h1>星潮 <em lang="en">StarTide</em></h1>
+        </header>
+        <div class="toolbar">
           <label class="control"
             ><ElIcon aria-hidden="true"><Calendar /></ElIcon>日报日期
             <select id="trend-date" :value="selectedDate" @change="selectDate">
@@ -158,7 +160,7 @@ watch(
               </option>
             </select>
           </label>
-          <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility"
+          <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility owner-link"
             >星潮发布台</RouterLink
           >
         </div>
@@ -237,29 +239,43 @@ watch(
   margin: auto;
 }
 .cover {
-  display: block;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-items: center;
   width: 100%;
-  height: clamp(112px, 22vw, 264px);
-  object-fit: cover;
-  object-position: center;
+  aspect-ratio: 3.5;
+  min-height: 122px;
+  overflow: hidden;
   border-radius: 14px;
   background: #d7e7e4;
 }
-.toolbar h1 {
-  margin: 0 auto 0 0;
+.cover img {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 将裁切留在上方天空，让海平线以下的几层潮水完整入画。 */
+  object-position: center bottom;
+}
+.cover h1 {
+  margin: 0;
+  padding-inline-start: clamp(16px, 4vw, 50px);
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 16px;
   color: #142f46;
   font:
-    700 clamp(28px, 3vw, 38px)/1.15 Georgia,
+    700 clamp(46px, 6.8vw, 82px)/1.1 Georgia,
     'Songti SC',
     SimSun,
     serif;
 }
-.toolbar h1 em {
+.cover h1 em {
   font:
-    italic 400 0.6em/1 Georgia,
+    italic 400 clamp(20px, 2.8vw, 35px)/1 Georgia,
     serif;
 }
 .toolbar,
@@ -274,6 +290,9 @@ watch(
   flex-wrap: wrap;
   padding: 14px 0;
   border-bottom: 1px solid #c8d5db;
+}
+.owner-link {
+  margin-inline-start: auto;
 }
 .control {
   gap: 8px;
@@ -366,9 +385,10 @@ select:focus-visible {
   .sheet {
     width: calc(100% - 28px);
   }
-  .toolbar h1 {
-    flex-basis: 100%;
-    margin-bottom: 4px;
+  .cover h1 {
+    flex-direction: column;
+    gap: 1px;
+    padding-bottom: 12px;
   }
   .toolbar {
     gap: 6px 12px;
