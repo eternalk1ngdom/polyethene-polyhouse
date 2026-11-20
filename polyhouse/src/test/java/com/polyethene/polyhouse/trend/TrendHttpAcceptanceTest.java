@@ -52,7 +52,7 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
     @BeforeEach void prepareExternalFixtures() {
         reset(source, gateway);
         collected.set(0); fail.set(false); entered = new CountDownLatch(1); release = new CountDownLatch(0);
-        when(source.collect(any(Runnable.class))).thenAnswer(invocation -> {
+        when(source.collect(any(Runnable.class), anySet())).thenAnswer(invocation -> {
             Runnable guard = invocation.getArgument(0);
             guard.run(); collected.incrementAndGet(); entered.countDown();
             if (!release.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("隔离来源等待超时");

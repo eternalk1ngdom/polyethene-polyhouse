@@ -20,6 +20,12 @@ public record TrendCollection(Instant capturedAt, List<Project> projects) {
      * @param snapshot 脱敏基础资料
      * @param readmeVersion GitHub 内容 SHA，未知为 null
      * @param readmeText 已清洗并截断至五千字符的文本，失败为空
+     * @param sourceIssue 本项目首个采集问题，随内存材料传给解读服务；历史调用可为空
      */
-    public record Project(TrendProjectVO snapshot, String readmeVersion, String readmeText) { }
+    public record Project(TrendProjectVO snapshot, String readmeVersion, String readmeText, TrendSourceIssue sourceIssue) {
+        /** 兼容只提供正文的既有调用，不为这些材料推断故障。 */
+        public Project(TrendProjectVO snapshot, String readmeVersion, String readmeText) {
+            this(snapshot, readmeVersion, readmeText, null);
+        }
+    }
 }

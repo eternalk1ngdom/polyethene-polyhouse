@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -20,6 +21,7 @@ public class TrendJobRunner {
     private final TrendJobStore store;
     private final GithubTrendClient source;
     private final TrendAiService ai;
+    private final TrendReportService reports;
     private final boolean enabled;
     private final AtomicReference<Execution> active = new AtomicReference<>();
     private final AtomicBoolean wakePending = new AtomicBoolean();
@@ -32,9 +34,10 @@ public class TrendJobRunner {
     });
 
     /** 不读取ThreadLocal或登录Token；后台显式遵守模块、任务开关、账号版本、预算和执行权。 */
-    public TrendJobRunner(TrendJobStore store, GithubTrendClient source, TrendAiService ai,
+    public TrendJobRunner(TrendJobStore store, GithubTrendClient source, TrendAiService ai, TrendReportService reports,
                           TrendProperties module, TrendJobProperties jobs) {
-        this.store = store; this.source = source; this.ai = ai; enabled = module.enabled() && jobs.enabled();
+        this.store = store; this.source = source; this.ai = ai; this.reports = reports;
+        enabled = module.enabled() && jobs.enabled();
     }
 
     /** 仅启用任务时轮询和续租；这是执行器维护，不是每日采集定时器。 */
@@ -82,15 +85,24 @@ public class TrendJobRunner {
             if (execution.cancelled.get()) throw new TrendExecutionLost();
             store.guard(execution.job);
         };
-        try {
+        try (var context = MDC.putCloseable("trendJob", execution.job.id())) {
             guard.run();
-            var collection = source.collect(guard);
+            var collection = source.collect(guard, reports.missingInsightIds());
+            LOGGER.info("星潮采集完成：任务={}，采集时间={}，收录数={}", execution.job.id(), collection.capturedAt(), collection.projects().size());
             if (execution.job.aiRequested()) {
                 store.advance(execution.job, "ANALYZING");
                 collection = ai.enrich(execution.job.id(), collection, guard);
             }
             store.advance(execution.job, "PUBLISHING");
             store.publish(execution.job, collection);
+            for (var project : collection.projects()) {
+                if (project.sourceIssue() == null) continue;
+                var item = project.snapshot();
+                String content = item.insight() != null ? item.insightStatus()
+                        : item.description() != null && !item.description().isBlank() ? "SOURCE_DESCRIPTION" : "RANKING_ONLY";
+                LOGGER.info("星潮资料降级：任务={}，排名={}，内容来源={}，解读状态={}，资料原因={}",
+                        execution.job.id(), item.rankNum(), content, item.insightStatus(), project.sourceIssue());
+            }
         } catch (RuntimeException failure) {
             boolean interrupted = failure instanceof TrendExecutionLost || execution.cancelled.get() || Thread.currentThread().isInterrupted();
             // 清除中断标记后完成有界数据库清理，避免把JDBC失败误作成功；付费预留不在此退款。

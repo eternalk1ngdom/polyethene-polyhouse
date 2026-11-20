@@ -89,13 +89,13 @@ class TrendJobIntegrationTest {
     @Test void workerCompletesPersistentTaskThroughFakeAiLedgerAndAtomicPublishedReport() {
         store = store(new TrendJobProperties(true), TrendAiFixture.settings());
         var source = mock(GithubTrendClient.class);
-        when(source.collect(any())).thenAnswer(invocation -> { ((Runnable) invocation.getArgument(0)).run(); return TrendAiFixture.collection(); });
+        when(source.collect(any(Runnable.class), anySet())).thenAnswer(invocation -> { ((Runnable) invocation.getArgument(0)).run(); return TrendAiFixture.collection(); });
         var gateway = mock(DeepSeekGateway.class);
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 100, 20));
         var ai = new TrendAiService(new TrendAiLedger(aiMapper, TrendAiFixture.settings(), Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC), manager),
                 gateway, new TrendInsightCodec(TrendFixture.json()), TrendAiFixture.settings(), new TrendProperties(true, null), Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC));
         String id = UUID.randomUUID().toString(); store.submit(id, actor);
-        var runner = new TrendJobRunner(store, source, ai, new TrendProperties(true, null), new TrendJobProperties(true));
+        var runner = new TrendJobRunner(store, source, ai, mock(TrendReportService.class), new TrendProperties(true, null), new TrendJobProperties(true));
         try {
             runner.start(); runner.wake();
             org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(8)).untilAsserted(() -> assertThat(store.query(id).state()).isEqualTo("SUCCEEDED"));

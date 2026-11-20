@@ -23,9 +23,14 @@ final class LimitedResponseBody implements HttpResponse.BodySubscriber<byte[]> {
         if (received > limit) {
             stopped = true;
             subscription.cancel();
-            delegate.onError(new IllegalStateException("Response body limit exceeded"));
+            delegate.onError(new TooLarge());
         } else delegate.onNext(buffers);
     }
     @Override public void onError(Throwable failure) { if (!stopped) { stopped = true; delegate.onError(failure); } }
     @Override public void onComplete() { if (!stopped) { stopped = true; delegate.onComplete(); } }
+
+    /** 将单份响应体超限与传输中断分开，采集器仍可处理后续仓库。 */
+    static final class TooLarge extends IllegalStateException {
+        TooLarge() { super("Response body limit exceeded"); }
+    }
 }

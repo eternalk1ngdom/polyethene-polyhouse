@@ -32,6 +32,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -77,7 +78,7 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
             }
             projects.set(result.projects().size());
             return result;
-        }).when(github).collect(any(Runnable.class));
+        }).when(github).collect(any(Runnable.class), anySet());
 
         Process browser = browser(username);
         try {

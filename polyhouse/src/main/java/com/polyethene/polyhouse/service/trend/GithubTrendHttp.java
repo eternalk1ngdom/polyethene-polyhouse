@@ -8,11 +8,13 @@ import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** 固定来源、单请求并发、完整响应十五秒和一 MiB 边界，禁止隐式跨域携带 GitHub 令牌。 */
 @Component
@@ -37,6 +39,7 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
         requireAllowed(uri);
         if (!active.tryAcquire()) throw unavailable();
         CompletableFuture<HttpResponse<byte[]>> future = null;
+        var received = new AtomicReference<HttpResponse.ResponseInfo>();
         try {
             var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15))
                     .header("User-Agent", "Polyhouse-Tech-Radar")
@@ -46,24 +49,52 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
                 request.header("Authorization", "Bearer " + token);
             }
             if (uri.getHost().equals("api.github.com")) request.header("X-GitHub-Api-Version", "2026-03-10");
-            future = client.sendAsync(request.GET().build(), info -> new LimitedResponseBody(MAX_BYTES));
+            future = client.sendAsync(request.GET().build(), info -> {
+                received.set(info);
+                return new LimitedResponseBody(MAX_BYTES);
+            });
             var response = future.get(15, TimeUnit.SECONDS);
             String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (response.statusCode() == 200 && !(uri.getHost().equals("api.github.com")
                     ? contentType.startsWith("application/json") : contentType.startsWith("text/html"))) {
-                throw unavailable();
+                throw new InvalidResponse(200);
             }
-            return new Reply(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8),
-                    response.headers().firstValue("Location").orElse(null));
+            return reply(response.statusCode(), response.headers(), new String(response.body(), StandardCharsets.UTF_8));
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
             throw unavailable();
-        } catch (ExecutionException | TimeoutException | IllegalArgumentException failure) {
+        } catch (ExecutionException | TimeoutException failure) {
+            // 错误页超大或传到一半超时，仍须遵守已经收到的 429 与等待时间。
+            var info = received.get();
+            if (info != null && info.statusCode() != 200) return reply(info.statusCode(), info.headers(), "");
+            if (failure.getCause() instanceof LimitedResponseBody.TooLarge)
+                throw new InvalidResponse(info == null ? null : info.statusCode());
+            throw unavailable();
+        } catch (IllegalArgumentException failure) {
             // 异常及 cause 可能包含请求头或输入，不向业务层传播它们。
             throw unavailable();
         } finally {
             if (future != null && !future.isDone()) future.cancel(true);
             active.release();
+        }
+    }
+
+    private static Reply reply(int status, HttpHeaders headers, String body) {
+        return new Reply(status, body, headers.firstValue("Location").orElse(null), seconds(headers, "Retry-After"),
+                headers.firstValue("X-RateLimit-Remaining").filter("0"::equals).isPresent(), seconds(headers, "X-RateLimit-Reset"));
+    }
+
+    private static Long seconds(HttpHeaders headers, String name) {
+        return headers.firstValue(name).filter(value -> value.matches("[0-9]{1,10}"))
+                .map(Long::valueOf).orElse(null);
+    }
+
+    /** 已收到的单份材料超限或类型错误，不应因此停止其他仓库。 */
+    static final class InvalidResponse extends BusinessException {
+        final Integer status;
+        InvalidResponse(Integer status) {
+            super(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
+            this.status = status;
         }
     }
 

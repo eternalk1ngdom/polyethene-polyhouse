@@ -37,6 +37,12 @@
 - AI 和每日定时独立关闭，手动任务可发布基础日报。使用 `Invoke-TrendAiLocal.ps1 -Action Run -EnableAi` 后，任务执行仍需显式开启，详见[安全输入说明](deepseek-key-safety.md)。
 - 任务开关启用后，重启可继续已经受理且未过期的QUEUED任务，届时可能产生账本允许的付费；先核对已有任务及费用状态。关闭开关不会自动迁移、退款或开启每日调度。
 
+## 定位一次更新的缺文原因
+
+在后端运行日志中按任务编号查「星潮采集汇总」和「星潮资料故障」。汇总给出首个失败仓库、环节、故障数和整仓跳过数；单项记录给出已知状态码和限流等待截止时间（UTC）。日榜本身失败时直接查 `LISTING` 故障行。按相同编号查「星潮资料降级」可核对最终使用旧稿、来源简介还是仅有排名。只保留这些脱敏行即可复盘，IDEA 控制台的输出需在关闭或清屏前保存。旧日报没有这些采集诊断。
+
+`README_NOT_FOUND` 表示公开身份通过核验后 README 接口返回 404。`SKIPPED_AFTER_PAUSE` 表示本轮已暂停、该仓库没有发起请求。`COOLDOWN` 表示同一进程仍在等待上游恢复；等待到期后由下一次获准任务再试。无明确限流证据的 403 保留访问被拒的事实。等待时间取自合法的 `Retry-After` 或配额耗尽时的 `X-RateLimit-Reset`。[GitHub REST API 请求建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
+
 ## 查询契约
 
 | GET 路径 | 参数 | 行为 |

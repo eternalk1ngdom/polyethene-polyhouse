@@ -69,6 +69,23 @@ class TrendReportServiceTest {
         assertThat(result.insightComplete()).isFalse();
     }
 
+    @Test void onlyTrustedMissingArticleIdsFromLatestPublicationAffectPriority() throws Exception {
+        assertThat(service.missingInsightIds()).isEmpty();
+        var report = TrendFixture.report();
+        var tree = TrendFixture.json().valueToTree(report);
+        var items = (com.fasterxml.jackson.databind.node.ArrayNode) tree.path("items");
+        var first = (com.fasterxml.jackson.databind.node.ObjectNode) items.get(0);
+        first.put("repositoryId", "42");
+        var docs = (com.fasterxml.jackson.databind.node.ObjectNode) items.get(1);
+        docs.put("repositoryId", "7").put("repoType", "DOC_LIST");
+        items.add(first.deepCopy().put("repositoryId", "bad"));
+        items.add(first.deepCopy().put("repositoryId", "43").set("insight", TrendFixture.json().valueToTree(TrendAiFixture.insight(TrendAiFixture.NOW))));
+        when(mapper.latest()).thenReturn(new TrendReportRecord(report.reportId(), report.periodKey(), null, tree.toString()));
+        assertThat(service.missingInsightIds()).containsExactly("42");
+        when(mapper.latest()).thenThrow(new DataAccessResourceFailureException("private"));
+        assertThat(service.missingInsightIds()).isEmpty();
+    }
+
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
                 failure -> assertThat(failure.getErrorCode()).isEqualTo(expected));

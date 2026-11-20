@@ -28,13 +28,18 @@ class GithubTrendHttpTest {
         assertThatThrownBy(() -> GithubTrendHttp.requireAllowed(URI.create(target))).isInstanceOf(BusinessException.class);
     }
 
-    @Test void oversizeChunkCancelsSubscriptionBeforeAggregatingTheBody() {
+    @ParameterizedTest
+    @ValueSource(ints = {200, 429})
+    void oversizeChunkCancelsBodyAndRetainsKnownRateLimit(int status) {
         var http = mock(HttpClient.class);
         var cancelled = new AtomicBoolean();
         when(http.sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any()))
                 .thenAnswer(invocation -> {
                     HttpResponse.BodyHandler<byte[]> handler = invocation.getArgument(1);
                     var info = mock(HttpResponse.ResponseInfo.class);
+                    when(info.statusCode()).thenReturn(status);
+                    when(info.headers()).thenReturn(HttpHeaders.of(Map.of("Retry-After", List.of("120"),
+                            "X-RateLimit-Remaining", List.of("0"), "X-RateLimit-Reset", List.of("invalid")), (key, value) -> true));
                     var subscriber = handler.apply(info);
                     subscriber.onSubscribe(new Flow.Subscription() {
                         @Override public void request(long count) { }
@@ -46,8 +51,18 @@ class GithubTrendHttpTest {
                     });
                 });
         try (var client = new GithubTrendHttp(http)) {
-            assertThatThrownBy(() -> client.get(URI.create("https://api.github.com/repos/a/b"), "fake-fixture-token"))
-                    .isInstanceOf(BusinessException.class).hasMessage("GitHub 资料暂时不可用");
+            var target = URI.create("https://api.github.com/repos/a/b");
+            if (status == 200) {
+                assertThatThrownBy(() -> client.get(target, "fake-fixture-token"))
+                        .isInstanceOf(BusinessException.class).hasMessage("GitHub 资料暂时不可用");
+            } else {
+                var reply = client.get(target, "fake-fixture-token");
+                assertThat(reply.status()).isEqualTo(429);
+                assertThat(reply.retrySeconds()).isEqualTo(120);
+                assertThat(reply.exhausted()).isTrue();
+                assertThat(reply.resetEpoch()).isNull();
+                assertThat(reply.body()).isEmpty();
+            }
         }
         assertThat(cancelled.get()).isTrue();
     }

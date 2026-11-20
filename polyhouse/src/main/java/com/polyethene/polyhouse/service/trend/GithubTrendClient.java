@@ -8,14 +8,21 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
 import com.polyethene.polyhouse.model.vo.TrendProjectVO;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Stage;
 import org.jsoup.Jsoup;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.*;
 
 /** 串行补资料，一旦上游不可用即停止本轮 API 补全，避免限流后继续轰击；有效基础榜单仍可归档。 */
@@ -29,9 +36,22 @@ public class GithubTrendClient {
     private final ObjectMapper json;
     private final TrendProperties settings;
 
+    private final Clock clock;
+    // 每个固定来源只保存一个等待期限，后续任务不占线程等待。
+    private final AtomicReference<Instant> apiRetryAt = new AtomicReference<>(Instant.EPOCH);
+    private final AtomicReference<Instant> listingRetryAt = new AtomicReference<>(Instant.EPOCH);
+
     /** 网络组件只接收固定来源，令牌只由服务端配置读取。 */
     public GithubTrendClient(TrendSourceTransport transport, GithubTrendingParser parser,
                              ObjectMapper json, TrendProperties settings) {
+        this(transport, parser, json, settings, Clock.systemUTC());
+    }
+
+    /** 用同一时钟记录采集时刻和等待期限，便于复核限流后的恢复。 */
+    @Autowired
+    public GithubTrendClient(TrendSourceTransport transport, GithubTrendingParser parser,
+                             ObjectMapper json, TrendProperties settings, Clock clock) {
+        this.clock = clock;
         this.transport = transport;
         this.parser = parser;
         this.json = json.copy();
@@ -47,108 +67,189 @@ public class GithubTrendClient {
 
     /** 持久任务在每个请求及重定向前检查执行权，撤销异常不作为单仓库失败吞掉。 */
     public TrendCollection collect(Runnable guard) {
+        return collect(guard, Set.of());
+    }
+
+    /** 缺稿提示只改变补全顺序；榜单身份和公开排名始终取自本次采集。 */
+    public TrendCollection collect(Runnable guard, Set<String> missingInsightIds) {
         Objects.requireNonNull(guard);
         if (!settings.enabled()) throw unavailable();
-        Instant captured = Instant.now();
-        var reply = get(URI.create(GithubTrendingParser.SOURCE), guard);
-        if (reply.status() != 200) throw unavailable();
-        List<TrendCollection.Project> projects = new ArrayList<>();
-        boolean apiPaused = false;
-        for (var listed : parser.parse(reply.body())) {
-            guard.run();
-            // 单仓库明确返回不可用时不采用榜单线索。只有本轮 API 无法继续时才用榜单 ID 查旧解读。
-            TrendProjectVO snapshot = apiPaused || listed.repositoryId() == null ? listed : listed.withRepositoryId(null);
-            String readmeVersion = null;
-            String readmeText = "";
-            if (!apiPaused) {
-                try {
-                    var metadata = object(get(URI.create("https://api.github.com/repos/" + listed.fullName()), guard));
-                    snapshot = metadata(listed, metadata);
-                    String prefix = "https://api.github.com/repos/" + snapshot.fullName();
-                    var files = array(get(URI.create(prefix + "/contents"), guard));
-                    var readme = get(URI.create(prefix + "/readme"), guard);
-                    if (readme.status() == 404) {
-                        snapshot = classify(snapshot, files, "MISSING");
-                    } else {
-                        var material = object(readme);
-                        if (!"base64".equals(material.path("encoding").asText())
-                                || !material.path("size").canConvertToInt() || material.path("size").asInt() < 0
-                                || material.path("size").asInt() > 256 * 1024
-                                || !material.path("sha").asText().matches("[a-f0-9]{40,64}")) throw unavailable();
-                        // GitHub 的 base64 含换行；仅移除 CR/LF，不能默默接受任意无效字符。
-                        byte[] bytes = Base64.getDecoder().decode(material.path("content").asText().replace("\n", "").replace("\r", ""));
-                        if (bytes.length != material.path("size").asInt()) throw unavailable();
-                        var document = Jsoup.parse(new String(bytes, StandardCharsets.UTF_8));
-                        document.select("script,style,svg,img").remove();
-                        String text = document.text().replaceAll("!\\[[^\\]\\r\\n]{0,200}\\]\\([^\\)\\r\\n]{0,1000}\\)", "");
-                        readmeText = text.substring(0, Math.min(text.length(), 5000));
-                        readmeVersion = material.path("sha").asText();
-                        snapshot = classify(snapshot, files, "AVAILABLE");
-                    }
-                } catch (ApiPaused failure) {
-                    // 限流或连接故障属于上游级失败，停止本轮后续 API，保留已得到的公开资料。
-                    apiPaused = true;
-                    if (snapshot.repositoryId() == null) snapshot = listed;
-                    LOGGER.warn("GitHub API 补资料暂停：采集时间={}，原因={}", captured, failure.reason);
-                } catch (BusinessException | IllegalArgumentException failure) {
-                    // 单仓库删除、材料过大或格式异常只影响该仓库，丢弃未完成材料后继续其他项目。
-                    readmeVersion = null;
-                    readmeText = "";
-                }
-            }
-            projects.add(new TrendCollection.Project(snapshot, readmeVersion, readmeText));
+        var batch = new Batch(clock.instant());
+        List<TrendProjectVO> ranking;
+        try {
+            var page = get(URI.create(GithubTrendingParser.SOURCE), guard);
+            try { ranking = parser.parse(page.body()); }
+            catch (BusinessException failure) { throw invalid(); }
+        } catch (FetchFailure failure) {
+            batch.failed("daily", Stage.LISTING, failure);
+            throw failure;
         }
-        return new TrendCollection(captured, projects);
+        // 稳定排序保留同一优先级内的榜序；数组按真实排名落位，发布时无需重新编号。
+        var order = ranking.stream().sorted(Comparator.comparing(item ->
+                item.repositoryId() == null || !missingInsightIds.contains(item.repositoryId()))).toList();
+        var projects = new TrendCollection.Project[ranking.size()];
+        for (var listed : order) {
+            guard.run();
+            projects[listed.rankNum() - 1] = collectProject(listed, batch, guard);
+        }
+        if (batch.firstIssue != null || batch.skipped > 0) {
+            LOGGER.warn("星潮采集汇总：任务={}，采集时间={}，首个仓库={}，首个故障={}，故障数={}，整仓跳过数={}",
+                    MDC.get("trendJob"), batch.captured, batch.firstRepo, batch.firstIssue, batch.failures, batch.skipped);
+        }
+        return new TrendCollection(batch.captured, List.of(projects));
+    }
+
+    private TrendCollection.Project collectProject(TrendProjectVO listed, Batch batch, Runnable guard) {
+        String name = listed.fullName();
+        if (batch.pause != null || clock.instant().isBefore(apiRetryAt.get())) {
+            boolean cooling = batch.pause == null;
+            var cause = new TrendSourceIssue(Stage.METADATA, cooling ? Reason.COOLDOWN : Reason.SKIPPED_AFTER_PAUSE,
+                    null, cooling ? apiRetryAt.get() : batch.pause.retryAt());
+            batch.skipped++;
+            LOGGER.info("星潮跳过补全：采集时间={}，仓库={}，原因={}", batch.captured, name, cause);
+            return new TrendCollection.Project(listed, null, "", cause);
+        }
+        TrendProjectVO snapshot;
+        try {
+            var reply = get(URI.create("https://api.github.com/repos/" + name), guard);
+            snapshot = metadata(listed, object(reply));
+        } catch (FetchFailure failure) {
+            var issue = batch.failed(name, Stage.METADATA, failure);
+            // 来源级中断保留榜单的稳定 ID；明确不可见或冲突的仓库不能借旧稿恢复身份。
+            var fallback = failure.pausesSource() ? listed : listed.withRepositoryId(null);
+            return new TrendCollection.Project(fallback, null, "", issue);
+        }
+
+        String prefix = "https://api.github.com/repos/" + snapshot.fullName();
+        var material = new Readme(null, "", "UNAVAILABLE");
+        TrendSourceIssue issue = null;
+        try {
+            material = readme(get(URI.create(prefix + "/readme"), guard));
+        } catch (FetchFailure failure) {
+            if (Objects.equals(failure.status, 404)) {
+                failure = new FetchFailure(Reason.README_NOT_FOUND, 404, null);
+                material = new Readme(null, "", "MISSING");
+            }
+            issue = batch.failed(name, Stage.README, failure);
+        }
+        JsonNode files = json.createArrayNode();
+        if (batch.pause == null) {
+            try {
+                files = array(get(URI.create(prefix + "/contents"), guard));
+            } catch (FetchFailure failure) {
+                var directoryIssue = batch.failed(name, Stage.DIRECTORY, failure);
+                if (issue == null) issue = directoryIssue;
+            }
+        }
+        return new TrendCollection.Project(classify(snapshot, files, material.status), material.sha, material.text, issue);
+    }
+
+    private record Readme(String sha, String text, String status) { }
+
+    private Readme readme(TrendSourceTransport.Reply reply) {
+        var material = object(reply);
+        if (!"base64".equals(material.path("encoding").asText())
+                || !material.path("size").isIntegralNumber() || !material.path("size").canConvertToInt()
+                || material.path("size").asInt() < 0 || material.path("size").asInt() > 256 * 1024
+                || !material.path("content").isTextual()
+                || !material.path("sha").asText().matches("(?:[a-f0-9]{40}|[a-f0-9]{64})")) throw invalid();
+        byte[] bytes;
+        try {
+            // 只去掉 GitHub base64 分行，其他非法字符直接拒绝。
+            bytes = Base64.getDecoder().decode(material.path("content").asText().replace("\n", "").replace("\r", ""));
+        } catch (IllegalArgumentException failure) { throw invalid(); }
+        if (bytes.length != material.path("size").asInt()) throw invalid();
+        var document = Jsoup.parse(new String(bytes, StandardCharsets.UTF_8));
+        document.select("script,style,svg,img").remove();
+        String text = document.text().replaceAll("!\\[[^\\]\\r\\n]{0,200}\\]\\([^\\)\\r\\n]{0,1000}\\)", "");
+        text = text.substring(0, Math.min(text.length(), 5000));
+        if (text.isBlank()) throw invalid();
+        return new Readme(material.path("sha").asText(), text, "AVAILABLE");
     }
 
     private TrendSourceTransport.Reply get(URI initial, Runnable guard) {
         URI target = initial;
+        boolean api = "api.github.com".equals(target.getHost());
+        var cooldown = api ? apiRetryAt : listingRetryAt;
         for (int hop = 0; hop <= 2; hop++) {
             GithubTrendHttp.requireAllowed(target);
             guard.run();
+            var until = cooldown.get();
+            if (clock.instant().isBefore(until)) throw new FetchFailure(Reason.COOLDOWN, null, until);
             final TrendSourceTransport.Reply reply;
-            try { reply = transport.get(target, target.getHost().equals("api.github.com") ? settings.githubToken() : null); }
-            catch (BusinessException failure) { throw new ApiPaused("TRANSPORT_OR_RESPONSE"); }
-            if (reply.status() == 403 || reply.status() == 429 || reply.status() >= 500) {
-                throw new ApiPaused("HTTP_" + reply.status());
+            try { reply = transport.get(target, api ? settings.githubToken() : null); }
+            catch (GithubTrendHttp.InvalidResponse failure) { throw new FetchFailure(Reason.INVALID_RESPONSE, failure.status, null); }
+            catch (BusinessException failure) { throw new FetchFailure(Reason.TRANSPORT_FAILURE, null, null); }
+            int status = reply.status();
+            Instant wait = null;
+            if (reply.retrySeconds() != null) wait = clock.instant().plusSeconds(reply.retrySeconds());
+            if (reply.exhausted() && reply.resetEpoch() != null) {
+                var reset = Instant.ofEpochSecond(reply.resetEpoch());
+                if (wait == null || reset.isAfter(wait)) wait = reset;
             }
-            if (!Set.of(301, 302, 307, 308).contains(reply.status())) return reply;
-            if (reply.location() == null || reply.location().length() > 512) throw unavailable();
-            URI next = target.resolve(reply.location());
-            // 同源安全跳转允许仓库转移；HTML 不能跳转到 API，也不能把 token 送到网页。
-            if (!Objects.equals(next.getHost(), target.getHost())) throw unavailable();
-            target = next;
+            boolean limited = status == 429 || status == 403 && (reply.exhausted() || reply.retrySeconds() != null);
+            if (limited && wait == null) wait = clock.instant().plusSeconds(60);
+            if (wait != null) cooldown.accumulateAndGet(wait, (a, b) -> a.isAfter(b) ? a : b);
+            if (status == 200) return reply;
+            if (limited) throw new FetchFailure(Reason.RATE_LIMITED, status, wait);
+            if (status == 403 && api && resourceAccessRefused(reply.body()))
+                throw new FetchFailure(Reason.RESOURCE_ACCESS_REFUSED, status, null);
+            if (status == 403 || status == 401) throw new FetchFailure(Reason.ACCESS_REFUSED, status, wait);
+            if (status >= 500) throw new FetchFailure(Reason.UPSTREAM_ERROR, status, wait);
+            if (!Set.of(301, 302, 307, 308).contains(status)) throw new FetchFailure(Reason.HTTP_ERROR, status, wait);
+            // 跳转不能离开同一来源；每跳都复核允许路径与执行权。
+            try {
+                if (reply.location() == null || reply.location().length() > 512) throw invalid();
+                URI next = target.resolve(reply.location());
+                if (!Objects.equals(next.getHost(), target.getHost())) throw invalid();
+                GithubTrendHttp.requireAllowed(next);
+                target = next;
+            } catch (BusinessException | IllegalArgumentException failure) {
+                throw new FetchFailure(Reason.INVALID_RESPONSE, status, null);
+            }
         }
-        throw unavailable();
+        throw new FetchFailure(Reason.INVALID_RESPONSE, null, null);
+    }
+
+    private boolean resourceAccessRefused(String body) {
+        // 只匹配 GitHub 明确的资源权限错误。未识别的 403 保守暂停，也不记录原文。
+        if (body == null || body.length() > 4096) return false;
+        try {
+            var error = json.readTree(body);
+            return error != null && Set.of("Resource not accessible by integration", "Resource not accessible by personal access token")
+                    .contains(error.path("message").asText(""));
+        } catch (java.io.IOException failure) { return false; }
     }
 
     private JsonNode object(TrendSourceTransport.Reply reply) {
         var node = decode(reply);
-        if (node == null || !node.isObject()) throw unavailable();
+        if (node == null || !node.isObject()) throw invalid();
         return node;
     }
 
     private JsonNode array(TrendSourceTransport.Reply reply) {
         var node = decode(reply);
-        if (node == null || !node.isArray() || node.size() > 1000) throw unavailable();
+        if (node == null || !node.isArray() || node.size() > 1000) throw invalid();
         return node;
     }
 
     private JsonNode decode(TrendSourceTransport.Reply reply) {
-        if (reply.status() != 200) throw unavailable();
         try { return json.readTree(reply.body()); }
-        catch (java.io.IOException failure) { throw unavailable(); }
+        catch (java.io.IOException failure) { throw invalid(); }
     }
 
     private TrendProjectVO metadata(TrendProjectVO base, JsonNode data) {
         String name = data.path("full_name").asText();
         if (!GithubTrendingParser.REPOSITORY.matcher(name).matches() || !data.path("id").isIntegralNumber() || !data.path("id").canConvertToLong()
-                || data.path("id").asLong() <= 0 || !data.path("private").isBoolean()
-                || data.path("private").asBoolean()) throw unavailable();
+                || data.path("id").asLong() <= 0 || !data.path("private").isBoolean()) throw invalid();
+        if (data.path("private").asBoolean()) throw new FetchFailure(Reason.PRIVATE_REPOSITORY, 200, null);
+        if (base.repositoryId() != null ? !base.repositoryId().equals(data.path("id").asText())
+                : !name.equalsIgnoreCase(base.fullName())) throw new FetchFailure(Reason.IDENTITY_CONFLICT, 200, null);
+
         String license = string(data.path("license"), "spdx_id", 100);
         if ("NOASSERTION".equals(license)) license = null;
         return new TrendProjectVO(base.rankNum(), data.path("id").asText(), name, "https://github.com/" + name,
-                string(data, "description", 2000), string(data, "language", 100),
+                Optional.ofNullable(string(data, "description", 2000)).orElse(base.description()), string(data, "language", 100),
                 base.totalStars() == null ? metric(data.path("stargazers_count")) : base.totalStars(), base.starsAdded(),
                 base.forksCount() == null ? metric(data.path("forks_count")) : base.forksCount(), license,
                 data.path("archived").isBoolean() ? data.path("archived").asBoolean() : null,
@@ -191,13 +292,48 @@ public class GithubTrendClient {
         return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
     }
 
-    /** 仅标记应停止本轮 API 的失败，不将单项目的 404 当作整个来源不可用。 */
-    private static final class ApiPaused extends BusinessException {
-        private static final long serialVersionUID = 1L;
-        private final String reason;
-        private ApiPaused(String reason) {
+    private static FetchFailure invalid() { return new FetchFailure(Reason.INVALID_RESPONSE, 200, null); }
+
+    /** 每轮任务持有自己的诊断，首个局部错误与随后可能发生的整批暂停分别保存。 */
+    private static final class Batch {
+        final Instant captured;
+        String firstRepo;
+        TrendSourceIssue firstIssue;
+        TrendSourceIssue pause;
+        int skipped;
+        int failures;
+
+        Batch(Instant captured) { this.captured = captured; }
+
+        TrendSourceIssue failed(String repo, Stage stage, FetchFailure failure) {
+            var issue = new TrendSourceIssue(stage, failure.reason, failure.status, failure.retryAt);
+            if (firstIssue == null) { firstRepo = repo; firstIssue = issue; }
+            failures++;
+            if (failure.pausesSource()) pause = issue;
+            LOGGER.warn("星潮资料故障：任务={}，采集时间={}，仓库={}，故障={}", MDC.get("trendJob"), captured, repo, issue);
+            return issue;
+        }
+
+    }
+
+    /** 只传播安全分类；业务撤销异常不进入资料降级分支。 */
+    private static final class FetchFailure extends BusinessException {
+        final Reason reason;
+        final Integer status;
+        final Instant retryAt;
+
+        FetchFailure(Reason reason, Integer status, Instant retryAt) {
             super(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
             this.reason = reason;
+            this.status = status;
+            this.retryAt = retryAt;
+        }
+
+        boolean pausesSource() {
+            return switch (reason) {
+                case RATE_LIMITED, ACCESS_REFUSED, UPSTREAM_ERROR, TRANSPORT_FAILURE, COOLDOWN -> true;
+                default -> false;
+            };
         }
     }
 }

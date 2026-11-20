@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -40,6 +41,11 @@ final class TrendFixture {
                 <a href="/login?return_to=%%2F%s" data-hydro-click='{"event_type":"authentication.click",
                 "payload":{"location_in_page":"star button","auth_type":"LOG_IN","repository_id":%d}}'>Star</a>
                 """.formatted(repository.replace("/", "%2F"), id);
+    }
+    static String readme(String text) {
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        return "{\"sha\":\"" + "a".repeat(40) + "\",\"size\":" + bytes.length + ",\"encoding\":\"base64\",\"content\":\""
+                + Base64.getEncoder().encodeToString(bytes) + "\"}";
     }
     static TrendCollection collection(String capturedAt) {
         return new TrendCollection(Instant.parse(capturedAt), new GithubTrendingParser().parse(html()).stream()

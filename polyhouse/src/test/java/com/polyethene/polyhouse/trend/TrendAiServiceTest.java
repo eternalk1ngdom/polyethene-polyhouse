@@ -3,6 +3,8 @@ package com.polyethene.polyhouse.trend;
 import com.polyethene.polyhouse.config.*;
 import com.polyethene.polyhouse.model.entity.*;
 import com.polyethene.polyhouse.model.vo.TrendInsightVO;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Stage;
 import com.polyethene.polyhouse.service.*;
 import com.polyethene.polyhouse.service.trend.*;
 import org.junit.jupiter.api.Test;
@@ -112,6 +114,10 @@ class TrendAiServiceTest {
             var row = rows[index];
             var project = output.projects().get(index);
             var item = project.snapshot();
+            assertThat(project.sourceIssue().stage()).isEqualTo(Stage.METADATA);
+            Reason firstFailure = failureStatus == 403 ? Reason.ACCESS_REFUSED : Reason.UPSTREAM_ERROR;
+            assertThat(project.sourceIssue().reason()).isEqualTo(index == 0 ? firstFailure : Reason.SKIPPED_AFTER_PAUSE);
+            assertThat(project.sourceIssue().status()).isEqualTo(index == 0 ? Integer.valueOf(failureStatus) : null);
             assertThat(project.readmeVersion()).isNull();
             assertThat(project.readmeText()).isBlank();
             assertThat(item.rankNum()).isEqualTo(index + 1);
@@ -137,6 +143,36 @@ class TrendAiServiceTest {
                     <a href="/%1$s/stargazers">%3$d</a><span class="float-sm-right">%4$d stars today</span></article>
                     """.formatted(name, TrendFixture.starLogin(name, id), stars, added);
         }
+    }
+
+    @Test void directoryFailureStillProducesOneAnalyzedArticleAndKeepsDocumentListsFree() {
+        List<String> requests = new ArrayList<>();
+        var source = new GithubTrendClient((uri, token) -> {
+            requests.add(uri.getPath());
+            if (uri.getHost().equals("github.com")) return new TrendSourceTransport.Reply(200, TrendFixture.htmlWithStarIdentity(), null);
+            boolean docs = uri.getPath().contains("awesome-books");
+            if (uri.getPath().endsWith("/readme")) return new TrendSourceTransport.Reply(200, TrendFixture.readme("Project notes"), null);
+            if (uri.getPath().endsWith("/contents")) return docs
+                    ? new TrendSourceTransport.Reply(200, "[{\"name\":\"README.md\",\"type\":\"file\"}]", null)
+                    : new TrendSourceTransport.Reply(404, "", null);
+            return new TrendSourceTransport.Reply(200, "{\"id\":" + (docs ? 2 : 1)
+                    + ",\"private\":false,\"full_name\":\"" + uri.getPath().substring(7) + "\"}", null);
+        }, new GithubTrendingParser(), TrendFixture.json(), new TrendProperties(true, null));
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 100, 20));
+        var input = source.collect();
+        var output = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), input);
+        var recovered = output.projects().getFirst();
+        assertThat(requests).hasSize(7);
+        assertThat(recovered.snapshot().repoType()).isEqualTo("UNKNOWN");
+        assertThat(recovered.snapshot().readmeStatus()).isEqualTo("AVAILABLE");
+        assertThat(recovered.sourceIssue()).isEqualTo(new TrendSourceIssue(Stage.DIRECTORY, Reason.HTTP_ERROR, 404, null));
+        assertThat(recovered.snapshot().insightStatus()).isEqualTo("ANALYZED");
+        assertThat(recovered.snapshot().insight().readmeVersion()).isEqualTo(TrendAiFixture.SHA);
+        assertThat(output.projects().getLast().snapshot().insightStatus()).isEqualTo("NOT_REQUIRED");
+        verify(gateway).complete(any());
+        verify(ledger).reserve(anyString(), eq(1L), eq(TrendAiFixture.SHA), anyInt(), anyInt(), any());
+        verify(ledger).settle(anyString(), eq(100), eq(20), anyString());
     }
 
     @Test void optionalFieldOmissionKeepsTheRestOfThePaidInsightWithoutAnotherCall() {

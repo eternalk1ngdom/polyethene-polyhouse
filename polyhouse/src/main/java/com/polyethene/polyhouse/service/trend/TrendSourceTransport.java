@@ -12,8 +12,15 @@ public interface TrendSourceTransport {
      * @param status 上游 HTTP 状态
      * @param body 有限 UTF-8 正文
      * @param location 重定向目标，仍须通过相同白名单核验
+     * @param retrySeconds 合法的 Retry-After 秒数，未提供则为空
+     * @param exhausted GitHub 是否明确报告剩余配额为零
+     * @param resetEpoch 配额重置的 UTC 秒数，仅在配额用尽时使用
      */
-    record Reply(int status, String body, String location) {
+    record Reply(int status, String body, String location, Long retrySeconds, boolean exhausted, Long resetEpoch) {
+        /** 旧来源没有限流头时仅依据状态码。 */
+        public Reply(int status, String body, String location) {
+            this(status, body, location, null, false, null);
+        }
         /** 避免日志意外记录未清洗的上游 HTML 或正文。 */
         @Override public String toString() { return "Reply[status=" + status + "]"; }
     }

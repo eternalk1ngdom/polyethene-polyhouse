@@ -20,6 +20,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeParseException;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +72,19 @@ public class TrendReportService {
             if (record == null) throw new BusinessException(ErrorCode.NOT_FOUND);
             return decode(record);
         } catch (DataAccessException failure) { throw unavailable(); }
+    }
+
+    /** 只用最近已发布版本中的稳定 ID 排采集顺序；没有历史或读不到提示时仍可生成首份日报。 */
+    public Set<String> missingInsightIds() {
+        try {
+            var latest = report(new TrendReportQueryDTO("DAILY", null));
+            return latest.items().stream().filter(item -> item.insight() == null && !"DOC_LIST".equals(item.repoType()))
+                    .map(item -> item.repositoryId()).filter(id -> id != null && id.matches("[1-9][0-9]{0,18}"))
+                    .collect(Collectors.toUnmodifiableSet());
+        } catch (BusinessException failure) {
+            if (failure.getErrorCode() != ErrorCode.NOT_FOUND) LOGGER.warn("星潮上期缺稿提示不可用，沿原榜序补全");
+            return Set.of();
+        }
     }
 
     /** 多取一项判断是否还有下一页，不靠空页猜测，也不计算全表 COUNT。 */

@@ -163,9 +163,14 @@ public class TrendAiService {
         }
     }
     private static TrendCollection.Project fallback(TrendCollection.Project project, TrendInsightVO old, String reason) {
+        if (old != null) {
+            // STALE 对读者说明稿件来源，诊断保留这次为何没有成功生成，尤其是已结算的拒收稿。
+            LOGGER.info("星潮沿用旧稿：仓库={}，本次解读结果={}，资料诊断={}", project.snapshot().repositoryId(), reason, project.sourceIssue());
+        }
         return result(project, old, old == null ? reason : "STALE");
     }
     private static TrendCollection.Project result(TrendCollection.Project project, TrendInsightVO insight, String status) {
-        return new TrendCollection.Project(project.snapshot().withInsight(status, insight), project.readmeVersion(), project.readmeText());
+        return new TrendCollection.Project(project.snapshot().withInsight(status, insight), project.readmeVersion(),
+                project.readmeText(), project.sourceIssue());
     }
 }

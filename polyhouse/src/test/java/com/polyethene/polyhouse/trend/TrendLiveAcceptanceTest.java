@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.doAnswer;
 
 /** 显式隐藏输入后才执行：真实来源和模型、至多两个项目、持久一角月预算，绝不清空真实账本。 */
@@ -68,7 +69,7 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
                     && project.readmeVersion() != null && project.readmeText() != null && !project.readmeText().isBlank()).limit(2).toList();
             if (candidates.isEmpty()) throw new IllegalStateException("真实来源未取得可解读样本，不调用AI");
             return new TrendCollection(full.capturedAt(), candidates);
-        }).when(source).collect(any(Runnable.class));
+        }).when(source).collect(any(Runnable.class), anySet());
         doAnswer(invocation -> { paidCalls.incrementAndGet(); return invocation.callRealMethod(); }).when(gateway).complete(any());
         String username = "g4_live_owner";
         String fixturePassword = "G4!" + UUID.randomUUID();
