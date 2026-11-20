@@ -233,8 +233,14 @@ class TrendAiServiceTest {
 
     @Test void disabledMissingKeyAndDocumentResourcesNeverReachTheProvider() {
         var disabled = new TrendAiProperties(false, null, null, null, null, null);
-        service(disabled).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
-        verifyNoInteractions(ledger, gateway);
+        var old = TrendAiFixture.insight(TrendAiFixture.NOW);
+        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(old)));
+        var basic = service(disabled).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
+        assertThat(basic.projects().getFirst().snapshot().insightStatus()).isEqualTo("REUSED");
+        verify(ledger).repository(1);
+        verifyNoMoreInteractions(ledger);
+        verifyNoInteractions(gateway);
+        reset(ledger);
         service(new TrendAiProperties(true, null, null, null, null, null)).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
         verifyNoInteractions(gateway);
         verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
@@ -245,6 +251,27 @@ class TrendAiServiceTest {
         var input = new TrendCollection(TrendAiFixture.NOW, List.of(new TrendCollection.Project(docs, TrendAiFixture.SHA, "docs")));
         assertThat(service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), input).projects().getFirst().snapshot().insightStatus()).isEqualTo("NOT_REQUIRED");
         verifyNoInteractions(ledger, gateway);
+    }
+
+    @Test void busyGenerationKeepsOldArticleWithoutASecondReservation() {
+        grant();
+        var old = TrendAiFixture.insight(TrendAiFixture.NOW);
+        when(ledger.repository(2)).thenReturn(new TrendAiRepository(2, null, codec.encode(old)));
+        var service = service(TrendAiFixture.settings());
+        var waiting = new TrendCollection(TrendAiFixture.NOW,
+                List.of(TrendAiFixture.project(2, null), TrendAiFixture.project(3, null)));
+        // 第一次发送尚未返回，第二次执行必然处于忙碌分支，无需依赖线程调度。
+        when(gateway.complete(any())).thenAnswer(call -> {
+            var during = service.enrich(UUID.randomUUID().toString(), waiting).projects();
+            assertThat(during.getFirst().snapshot().insightStatus()).isEqualTo("STALE");
+            assertThat(during.getFirst().snapshot().insight()).isEqualTo(old);
+            assertThat(during.getLast().snapshot().insightStatus()).isEqualTo("BUSY");
+            return TrendAiFixture.reply(TrendAiFixture.content(), 100, 20);
+        });
+        var outer = service.enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
+        assertThat(outer.projects().getFirst().snapshot().insightStatus()).isEqualTo("ANALYZED");
+        verify(ledger).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
+        verify(gateway).complete(any());
     }
 
     private TrendAiService service(TrendAiProperties settings) {

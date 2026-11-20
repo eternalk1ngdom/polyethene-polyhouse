@@ -34,7 +34,7 @@
 
 - 本机默认 profile 启用模块及屋主任务，可显式传入 `POLYHOUSE_TREND_ENABLED=false` 或 `POLYHOUSE_TREND_JOBS_ENABLED=false` 临时关闭。新开发库需要先执行下述迁移。读取在模块关闭或报告表未就绪时返回 503，已迁移的空库返回空期次列表和日报 404。
 - 生产 `prod` 继续默认关闭。完成迁移后可显式设置 `POLYHOUSE_TREND_ENABLED=true`，需要手动更新时再设置 `POLYHOUSE_TREND_JOBS_ENABLED=true`。可选 `POLYHOUSE_GITHUB_TOKEN` 只通过私有环境变量注入。
-- AI 和每日定时独立关闭，手动任务可发布基础日报。使用 `Invoke-TrendAiLocal.ps1 -Action Run -EnableAi` 后，任务执行仍需显式开启，详见[安全输入说明](deepseek-key-safety.md)。
+- AI 和每日定时独立关闭，手动任务可发布基础日报。关闭付费生成时仍按稳定仓库 ID 读取本地成功稿；能确认有效的标记为 `REUSED`，无法确认的保留原文与原分析时间并标记为 `STALE`。该读取不产生费用。使用 `Invoke-TrendAiLocal.ps1 -Action Run -EnableAi` 后，任务执行仍需显式开启，详见[安全输入说明](deepseek-key-safety.md)。
 - 任务开关启用后，重启可继续已经受理且未过期的QUEUED任务，届时可能产生账本允许的付费；先核对已有任务及费用状态。关闭开关不会自动迁移、退款或开启每日调度。
 
 ## 定位一次更新的缺文原因
@@ -87,7 +87,7 @@
 
 一次更新意图始终使用相同UUID；重复返回原事实，活动期间另一个UUID返回当前任务且`accepted=false`，没有再排一批。终结后新意图受60秒冷却。受理时冻结是否允许AI；打开AI但配置不完整时不受理新的AI任务。任务/Key开关分别控制，不自动打开。
 
-状态QUEUED→RUNNING→SUCCEEDED/PARTIAL/FAILED/INTERRUPTED；阶段为QUEUED/COLLECTING/ANALYZING/PUBLISHING/DONE。`trigger=MANUAL/SCHEDULED`说明来源；系统任务编号可由屋主查询，但不能当作屋主手动受理UUID重放。PARTIAL表示已发布但解读不完整，关闭AI的基础日报也属此状态；reportId表明已发布。失败保留最近阶段及固定原因，不返回内部异常。执行关闭时仍可由屋主查状态，数据库须已迁移。
+状态QUEUED→RUNNING→SUCCEEDED/PARTIAL/FAILED/INTERRUPTED；阶段为QUEUED/COLLECTING/ANALYZING/PUBLISHING/DONE。`trigger=MANUAL/SCHEDULED`说明来源；系统任务编号可由屋主查询，但不能当作屋主手动受理UUID重放。reportId 表明已发布。需要解读的项目仍有缺文或旧稿待核实时为 PARTIAL，全部有当前有效解读时为 SUCCEEDED；关闭付费生成的任务也按此判断。失败保留最近阶段及固定原因，不返回内部异常。执行关闭时仍可由屋主查状态，数据库须已迁移。
 
 从受理起最多30分钟，数据库UTC时钟；执行器每30秒维护，租约2分钟。模拟重建服务验证QUEUED可以领取；RUNNING过期标中断不重放。旧执行的心跳、发布和释放均校验槽与代数。每次外部调用前再查角色/凭据版本，改密、重置或禁用会停止后续调用；退出登录不撤销已经接受的后台意图。已经发送的请求不能保证远端取消，未知计费继续持有，不自动退款或重试。
 

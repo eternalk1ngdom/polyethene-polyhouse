@@ -92,6 +92,8 @@ public class TrendJobRunner {
             if (execution.job.aiRequested()) {
                 store.advance(execution.job, "ANALYZING");
                 collection = ai.enrich(execution.job.id(), collection, guard);
+            } else {
+                collection = ai.reuseOnly(collection, guard);
             }
             store.advance(execution.job, "PUBLISHING");
             store.publish(execution.job, collection);

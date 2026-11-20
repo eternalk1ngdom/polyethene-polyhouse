@@ -53,24 +53,40 @@ public class TrendAiService {
         Objects.requireNonNull(guard);
         if (executionId == null || !executionId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                 || collection == null || collection.projects().size() > 25) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
-        if (!module.enabled() || !settings.enabled()) return collection;
-        if (!active.tryAcquire()) return new TrendCollection(collection.capturedAt(), collection.projects().stream()
-                .map(project -> result(project, null, "BUSY")).toList());
+        if (!module.enabled()) return collection;
+        if (!settings.enabled()) return reuseOnly(collection, guard);
+        if (!active.tryAcquire()) return applyCached(collection, guard,
+                (project, repo, payload, previous) -> fallback(project, previous, "BUSY"));
         try {
-            List<TrendCollection.Project> projects = new ArrayList<>();
             var paused = new AtomicBoolean(); // 仅本次执行的上游熔断，已缓存内容仍可复用。
-            for (var project : collection.projects()) {
-                guard.run();
-                try { projects.add(analyze(executionId, project, paused, guard)); }
-                catch (BusinessException | DataAccessException failure) {
-                    projects.add(result(project, null, "UNAVAILABLE"));
-                }
-            }
-            return new TrendCollection(collection.capturedAt(), projects);
+            return applyCached(collection, guard, (project, repo, payload, previous) ->
+                    generate(executionId, project, repo, payload, previous, paused, guard));
         } finally { active.release(); }
     }
 
-    private TrendCollection.Project analyze(String executionId, TrendCollection.Project project, AtomicBoolean paused, Runnable guard) {
+    /** 基础日报只读取本地成功稿；没有稿时保留未分析状态，不进入预算预留或发送。 */
+    TrendCollection reuseOnly(TrendCollection collection, Runnable guard) {
+        return applyCached(collection, guard, (project, repo, payload, previous) -> fallback(project, previous, "NOT_ANALYZED"));
+    }
+
+    @FunctionalInterface
+    private interface OnCacheMiss {
+        TrendCollection.Project resolve(TrendCollection.Project project, long repo, String payload, TrendInsightVO previous);
+    }
+
+    private TrendCollection applyCached(TrendCollection collection, Runnable guard, OnCacheMiss onMiss) {
+        List<TrendCollection.Project> projects = new ArrayList<>();
+        for (var project : collection.projects()) {
+            guard.run();
+            try { projects.add(resolveCached(project, onMiss)); }
+            catch (BusinessException | DataAccessException failure) {
+                projects.add(result(project, null, "UNAVAILABLE"));
+            }
+        }
+        return new TrendCollection(collection.capturedAt(), projects);
+    }
+
+    private TrendCollection.Project resolveCached(TrendCollection.Project project, OnCacheMiss onMiss) {
         var item = project.snapshot();
         if ("DOC_LIST".equals(item.repoType())) return result(project, null, "NOT_REQUIRED");
         if (item.repositoryId() == null || !item.repositoryId().matches("[1-9][0-9]{0,18}")) return result(project, null, "UNAVAILABLE");
@@ -81,6 +97,11 @@ public class TrendAiService {
         String previousPayload = repository == null ? null : repository.payload();
         TrendInsightVO previous = cached(previousPayload);
         if (fresh(previous, project)) return result(project, previous, "REUSED");
+        return onMiss.resolve(project, repo, previousPayload, previous);
+    }
+
+    private TrendCollection.Project generate(String executionId, TrendCollection.Project project, long repo,
+            String previousPayload, TrendInsightVO previous, AtomicBoolean paused, Runnable guard) {
         if (paused.get() || !settings.ready() || project.readmeVersion() == null
                 || !project.readmeVersion().matches("(?:[a-f0-9]{40}|[a-f0-9]{64})")
                 || project.readmeText() == null || project.readmeText().isBlank()) return fallback(project, previous, "UNAVAILABLE");

@@ -68,6 +68,12 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
         AtomicInteger attempts = new AtomicInteger();
         AtomicInteger projects = new AtomicInteger();
         boolean live = Boolean.getBoolean("polyhouse.trend.browser.live-github");
+        var previous = TrendAiFixture.insight(TrendAiFixture.NOW);
+        if (!live) {
+            // 发布后从匿名接口核对同仓库的成功旧稿，防止仅验证“没有扣费”漏掉整期缺文。
+            jdbc.update("INSERT INTO tool_trend_ai_repository(repository_id, payload) VALUES(?, ?)",
+                    2L, TrendFixture.json().writeValueAsString(previous));
+        }
         doAnswer(invocation -> {
             if (attempts.incrementAndGet() != 1) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
             TrendCollection result;
@@ -110,6 +116,12 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
         var report = data(call("GET", "/api/trend/report", null, null));
         assertThat(report.path("reportId").asText()).isNotEqualTo(historyId);
         assertThat(report.path("items").size()).isEqualTo(projects.get());
+        if (!live) {
+            var items = report.path("items");
+            assertThat(items.get(0).path("insight").isNull() || items.get(0).path("insight").isMissingNode()).isTrue();
+            assertThat(items.get(1).path("insightStatus").asText()).isEqualTo("STALE");
+            assertThat(TrendFixture.json().treeToValue(items.get(1).get("insight"), previous.getClass())).isEqualTo(previous);
+        }
         org.slf4j.LoggerFactory.getLogger(getClass()).info("星潮浏览器验收通过：{}日榜 {} 项，无 AI 请求", live ? "GitHub 实时" : "固定", projects.get());
     }
 
