@@ -4,6 +4,9 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.mapper.TrendMapper;
 import com.polyethene.polyhouse.model.dto.*;
+import com.polyethene.polyhouse.model.entity.TrendCollection;
+import com.polyethene.polyhouse.model.vo.TrendProjectVO;
+import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
 import com.polyethene.polyhouse.service.TrendArchiveService;
 import com.polyethene.polyhouse.service.TrendReportService;
 import org.apache.ibatis.session.Configuration;
@@ -87,6 +90,29 @@ class TrendArchiveIntegrationTest {
         assertThat(reports.report(new TrendReportQueryDTO(null, null)).reportId()).isEqualTo(id);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tool_trend_daily", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tool_trend_report_version", Integer.class)).isEqualTo(1);
+    }
+
+    @Test void completeEditionWithTwentyFiveLongArticlesSurvivesPublicationAndReadBack() throws Exception {
+        // 填满各正文栏目的校验上限，验证整期发布及公开读回，不只测单篇解码。
+        var json = TrendFixture.json();
+        var content = json.createObjectNode().put("category", "DEVTOOLS").put("definition", "题".repeat(100))
+                .put("painPoint", "文".repeat(250)).put("comparison", "比".repeat(300));
+        for (String field : List.of("highlights", "documentedLimitations", "inferredRisks")) {
+            var entries = content.putArray(field);
+            for (int i = 0; i < 3; i++) entries.add("据".repeat(field.equals("highlights") ? 160 : 200));
+        }
+        var article = new TrendInsightCodec(json).insight(content.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        List<TrendCollection.Project> projects = new ArrayList<>();
+        for (int i = 1; i <= 25; i++) {
+            String name = "sample/project-" + i;
+            var item = new TrendProjectVO(i, Integer.toString(i), name, "https://github.com/" + name, "简介", "Java",
+                    20L, 1L, 2L, "MIT", false, "CODE_PROJECT", "BUILD_AND_SOURCE", "AVAILABLE", "AVAILABLE", "ANALYZED", article);
+            projects.add(new TrendCollection.Project(item, TrendAiFixture.SHA, "internal evidence"));
+        }
+        archive.publish(UUID.randomUUID().toString(), new TrendCollection(TrendAiFixture.NOW, projects));
+        var report = reports.report(new TrendReportQueryDTO(null, null));
+        assertThat(report.insightComplete()).isTrue();
+        assertThat(report.items()).hasSize(25).allSatisfy(item -> assertThat(item.insight()).isEqualTo(article));
     }
 
     @Test void concurrentReplayCreatesExactlyOneVersion() throws Exception {

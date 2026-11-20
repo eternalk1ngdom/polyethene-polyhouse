@@ -2,7 +2,7 @@
 
 更新时间：2026-11-20（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[星潮后端专项](docs/plans/startide-insight-quality.md)第 1～2 步已验。11 月 20 日的 8 项旧稿、8 项无文已离线复现，当天首个采集故障仍无现场证据。目录单独失败的样本恢复 1 篇模拟解读。复核修复了关闭付费生成时漏掉旧稿、材料转址归属、目录误判及限流等待；匿名读回旧稿与原时间，费用新增 0 条。[复核记录](docs/dev-log/v1.0-dev.15.md#基础日报沿用旧稿)。下一步改编辑规则与证据选段。[前端](docs/plans/startide-reader-redesign.md)整体验收暂缓。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实样本及 ¥0.01 账单已核对，保留验收库。
+- 当前：[星潮后端专项](docs/plans/startide-insight-quality.md)第 1～2 步已验。11 月 20 日下午缺文已复现，首个故障仍无现场证据；晚间 9 篇新稿的问题段落仅 33～60 字。第 3 步已实现 `radar-2` 中心句与场景正文，单次请求沿用原预算，详见[写作对照](docs/dev-log/v1.0-dev.15.md#解决什么问题的写作对照)。下一步做 README 选段和 6～8 项对照，真实新稿及读者试读待验。[前端](docs/plans/startide-reader-redesign.md)整体验收暂缓。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实样本及 ¥0.01 账单已核对，保留验收库。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。

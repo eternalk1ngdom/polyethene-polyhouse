@@ -35,6 +35,25 @@ class TrendInsightCodecTest {
         assertThat(codec.cached(codec.encode(value))).isEqualTo(value);
     }
 
+    @Test void acceptsFullParagraphAndThinEvidenceButRejectsRepeatedLeadOnlyForNewRule() throws Exception {
+        var article = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(TrendAiFixture.content());
+        String limit = "文".repeat(250);
+        article.put("painPoint", limit);
+        var expanded = codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        assertThat(expanded.ruleVersion()).isEqualTo("radar-2");
+        assertThat(codec.cached(codec.encode(expanded)).painPoint()).isEqualTo(limit);
+        assertRejected(article.put("painPoint", limit + "文").toString(), "INVALID_VALUE_painPoint");
+
+        String thin = "资料只说明它能生成清单，未交代如何收集条目。";
+        article.put("painPoint", thin);
+        assertThat(codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW).painPoint()).isEqualTo(thin);
+        String lead = article.get("definition").textValue();
+        assertRejected(article.put("painPoint", lead).toString(), "REPEATED_DEFINITION");
+        var historical = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
+        historical.put("ruleVersion", "radar-1").put("painPoint", lead);
+        assertThat(codec.cached(historical.toString()).painPoint()).isEqualTo(lead);
+    }
+
     @Test void rejectsBlankDuplicateUnknownFieldsAndTrailingJson() {
         for (String content : new String[] {"", "   ", "{}", TrendAiFixture.content() + "{}",
                 TrendAiFixture.content().replace("\"DEVTOOLS\"", "\"DEVTOOLS\",\"category\":\"OTHER\""),

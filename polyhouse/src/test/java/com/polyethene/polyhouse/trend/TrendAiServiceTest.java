@@ -52,6 +52,30 @@ class TrendAiServiceTest {
         verifyNoInteractions(gateway);
     }
 
+    @Test void editingUpgradeKeepsOriginalTimeUntilOneNewArticleSucceeds() {
+        var previous = codec.cached(TrendFixture.resource("2026-11-18-openvino.json"));
+        var source = new TrendCollection(TrendAiFixture.NOW, List.of(TrendAiFixture.project(1, previous.readmeVersion())));
+        var now = previous.analyzedAt().plus(Duration.ofDays(1));
+        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(previous)));
+        var module = new TrendProperties(true, null);
+        var clock = Clock.fixed(now, ZoneOffset.UTC);
+        var basic = new TrendAiService(ledger, gateway, codec, new TrendAiProperties(false, null, null, null, null, null), module, clock);
+        var kept = basic.enrich(UUID.randomUUID().toString(), source).projects().getFirst().snapshot();
+        assertThat(kept.insightStatus()).isEqualTo("STALE");
+        assertThat(kept.insight()).isEqualTo(previous);
+        verifyNoInteractions(gateway);
+
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 300, 180));
+        var updated = new TrendAiService(ledger, gateway, codec, TrendAiFixture.settings(), module, clock)
+                .enrich(UUID.randomUUID().toString(), source).projects().getFirst().snapshot();
+        assertThat(updated.insightStatus()).isEqualTo("ANALYZED");
+        assertThat(updated.insight().ruleVersion()).isEqualTo("radar-2");
+        assertThat(updated.insight().analyzedAt()).isEqualTo(now);
+        verify(gateway).complete(any());
+        verify(ledger).settle(anyString(), eq(300), eq(180), notNull());
+    }
+
     @Test void expiryAtFifteenDaysOrChangedReadmeRequiresNewAnalysis() {
         for (boolean expired : new boolean[] {true, false}) {
             reset(ledger, gateway);
