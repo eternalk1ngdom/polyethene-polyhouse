@@ -2,10 +2,13 @@ package com.polyethene.polyhouse.trend;
 
 import com.polyethene.polyhouse.config.*;
 import com.polyethene.polyhouse.model.entity.*;
+import com.polyethene.polyhouse.model.vo.TrendInsightVO;
 import com.polyethene.polyhouse.service.*;
 import com.polyethene.polyhouse.service.trend.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import java.time.*;
@@ -70,21 +73,70 @@ class TrendAiServiceTest {
         verifyNoInteractions(gateway);
     }
 
-    @Test void githubApiPauseKeepsOldInsightByStableIdWithoutChargingForAbsentReadme() {
-        var previous = TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofHours(1)));
-        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(previous)));
-        var source = new GithubTrendClient((uri, token) -> uri.getHost().equals("github.com")
-                ? new TrendSourceTransport.Reply(200, TrendFixture.htmlWithStarIdentity(), null)
-                : new TrendSourceTransport.Reply(403, "模拟 GitHub API 限流", null),
-                new GithubTrendingParser(), TrendFixture.json(), new TrendProperties(true, null));
-        var output = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), source.collect());
-        assertThat(output.projects()).hasSize(2);
-        var first = output.projects().getFirst().snapshot();
-        assertThat(first.insightStatus()).isEqualTo("STALE");
-        assertThat(first.insight()).isEqualTo(previous);
-        assertThat(output.projects().getLast().snapshot().insightStatus()).isEqualTo("UNAVAILABLE");
-        verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
+    /** 两种模拟故障能产生相同的已发布状态，避免用分流结果倒推当天的 HTTP 状态码。 */
+    @ParameterizedTest
+    @ValueSource(ints = {403, 503})
+    void november20BatchKeepsOldInsightsByStableIdWithoutChargingForAbsentReadme(int failureStatus) throws Exception {
+        var rows = TrendFixture.json().readValue(TrendFixture.resource("2026-11-20-ranking.json"), PublishedRow[].class);
+        assertThat(rows).hasSize(16);
+        var html = new StringBuilder("<h1>Trending</h1>");
+        var previous = new HashMap<Long, TrendInsightVO>();
+        for (var row : rows) {
+            html.append(row.listingHtml());
+            if (row.analyzedAt() != null) {
+                // 保留一份真实公开旧稿供编辑对照，其余用各自的分析时间区分模拟稿件。
+                var insight = row.name().equals("openvinotoolkit/openvino")
+                        ? codec.cached(TrendFixture.resource("2026-11-18-openvino.json"))
+                        : TrendAiFixture.insight(row.analyzedAt());
+                assertThat(insight.analyzedAt()).isEqualTo(row.analyzedAt());
+                previous.put(row.id(), insight);
+                when(ledger.repository(row.id())).thenReturn(new TrendAiRepository(row.id(), null, codec.encode(insight)));
+            }
+        }
+        assertThat(previous).hasSize(8);
+        var requests = new ArrayList<String>();
+        var module = new TrendProperties(true, null);
+        var source = new GithubTrendClient((uri, token) -> {
+            requests.add(uri.toString());
+            return uri.toString().equals(GithubTrendingParser.SOURCE)
+                    ? new TrendSourceTransport.Reply(200, html.toString(), null)
+                    : new TrendSourceTransport.Reply(failureStatus, "", null);
+        }, new GithubTrendingParser(), TrendFixture.json(), module);
+        var input = source.collect();
+        assertThat(requests).containsExactly(GithubTrendingParser.SOURCE, "https://api.github.com/repos/" + rows[0].name());
+        var clock = Clock.fixed(Instant.parse("2026-11-20T07:01:32Z"), ZoneOffset.UTC);
+        var service = new TrendAiService(ledger, gateway, codec, TrendAiFixture.settings(), module, clock);
+        var output = service.enrich("90c62baa-388b-4dc2-a3fa-f4f6225fc3c3", input);
+        assertThat(output.projects()).hasSize(rows.length);
+        for (int index = 0; index < rows.length; index++) {
+            var row = rows[index];
+            var project = output.projects().get(index);
+            var item = project.snapshot();
+            assertThat(project.readmeVersion()).isNull();
+            assertThat(project.readmeText()).isBlank();
+            assertThat(item.rankNum()).isEqualTo(index + 1);
+            assertThat(item.fullName()).isEqualTo(row.name());
+            assertThat(item.repositoryId()).isEqualTo(Long.toString(row.id()));
+            assertThat(item.totalStars()).isEqualTo(row.stars());
+            assertThat(item.starsAdded()).isEqualTo(row.added());
+            assertThat(item.metadataStatus()).isEqualTo("UNAVAILABLE");
+            assertThat(item.readmeStatus()).isEqualTo("UNAVAILABLE");
+            assertThat(item.insightStatus()).as(row.name()).isEqualTo(row.status());
+            assertThat(item.insight()).as(row.name()).isEqualTo(previous.get(row.id()));
+            verify(ledger).repository(row.id());
+        }
+        verifyNoMoreInteractions(ledger);
         verifyNoInteractions(gateway);
+    }
+
+    /** 只从公开快照重建解析器需要的榜单字段，原始页面和 HTTP 故障均未归档。 */
+    private record PublishedRow(long id, String name, long stars, long added, String status, Instant analyzedAt) {
+        String listingHtml() {
+            return """
+                    <article class="Box-row"><h2><a href="/%1$s">%1$s</a></h2>%2$s
+                    <a href="/%1$s/stargazers">%3$d</a><span class="float-sm-right">%4$d stars today</span></article>
+                    """.formatted(name, TrendFixture.starLogin(name, id), stars, added);
+        }
     }
 
     @Test void optionalFieldOmissionKeepsTheRestOfThePaidInsightWithoutAnotherCall() {

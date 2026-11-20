@@ -2,7 +2,7 @@
 
 更新时间：2026-11-20（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[dev.15](docs/dev-log/v1.0-dev.15.md) 星潮已在本机发布日报。11 月 20 日这期 16 项均缺当期 README，8 项沿用旧稿，8 项无解读。[后端专项计划](docs/plans/startide-insight-quality.md)已归档，下一步先离线复现缺文并建立文章质量对照。[阅读与发布台改版](docs/plans/startide-reader-redesign.md)第 1～3 步已验，第 4 步整体验收暂缓。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实 AI 样本及 ¥0.01 账单已核对，保留验收库。
+- 当前：[星潮后端专项](docs/plans/startide-insight-quality.md)第 1 步已验。11 月 20 日日报 16 项均缺当期 README，8 项沿用旧稿、8 项无解读；已逐项离线复现并建立 [OpenVINO 文章对照](docs/dev-log/v1.0-dev.15.md#文章质量对照)。当天首个上游故障仍待捕获。下一步修复资料恢复与缺文分流。[阅读与发布台改版](docs/plans/startide-reader-redesign.md)第 4 步整体验收暂缓。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 真实样本及 ¥0.01 账单已核对，保留验收库。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。

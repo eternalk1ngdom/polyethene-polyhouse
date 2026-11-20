@@ -1,6 +1,6 @@
 # 星潮后端专项 · 项目解读、资料恢复与关注度观察
 
-2026-11-20，规划基线 `codex/github-tech-radar` 的 `f3a3e5b`。本轮交付审查和计划，功能待实施。下一轮从第 1 步的离线基线开始。沿用[技术雷达首批范围](github-tech-radar.md)、[费用验收约定](../operations/trend-g4-acceptance.md)和[项目工程约定](../../AGENTS.md)。读者页及发布台暂定版，[前端专项](startide-reader-redesign.md)第 4 步整体验收保留待办。
+2026-11-20，规划基线 `codex/github-tech-radar` 的 `f3a3e5b`。第 1 步已完成[离线复现与文章对照](../dev-log/v1.0-dev.15.md#日报缺文离线复现)。下一步进入第 2 步，修复资料恢复与缺文分流。沿用[技术雷达首批范围](github-tech-radar.md)、[费用验收约定](../operations/trend-g4-acceptance.md)和[项目工程约定](../../AGENTS.md)。读者页及发布台暂定版，[前端专项](startide-reader-redesign.md)第 4 步整体验收保留待办。
 
 ## 一、读者应该从一篇文章带走什么
 

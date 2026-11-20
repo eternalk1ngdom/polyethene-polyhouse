@@ -24,7 +24,10 @@ final class TrendFixture {
         user.setDeleted(0); user.setCredentialVersion(0L); user.setPasswordChangeRequired(false); return user;
     }
     static String html() {
-        try (var input = Objects.requireNonNull(TrendFixture.class.getResourceAsStream("/trend/daily.html"))) {
+        return resource("daily.html");
+    }
+    static String resource(String filename) {
+        try (var input = Objects.requireNonNull(TrendFixture.class.getResourceAsStream("/trend/" + filename))) {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
@@ -32,7 +35,7 @@ final class TrendFixture {
         return html().replace("sample / engine</a></h2>", "sample / engine</a></h2>" + starLogin("sample/engine", 1))
                 .replace("sample / awesome-books</a></h2>", "sample / awesome-books</a></h2>" + starLogin("sample/awesome-books", 2));
     }
-    private static String starLogin(String repository, int id) {
+    static String starLogin(String repository, long id) {
         return """
                 <a href="/login?return_to=%%2F%s" data-hydro-click='{"event_type":"authentication.click",
                 "payload":{"location_in_page":"star button","auth_type":"LOG_IN","repository_id":%d}}'>Star</a>
