@@ -30,6 +30,7 @@ public record TrendSourceIssue(Stage stage, Reason reason, Integer status, Insta
         /** 格式、大小或跳转不符合约束。 */ INVALID_RESPONSE,
         /** 不能用私有仓库资料降级。 */ PRIVATE_REPOSITORY,
         /** 榜单与元数据没有指向同一仓库。 */ IDENTITY_CONFLICT,
+        /** 补资料时的跳转不能确认仍是刚核实仓库的同一份资源。 */ UNVERIFIED_REDIRECT,
         /** 本轮暂停后没有尝试这个仓库。 */ SKIPPED_AFTER_PAUSE,
         /** 之前收到的等待期限尚未结束。 */ COOLDOWN
     }

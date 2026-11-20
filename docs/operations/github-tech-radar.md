@@ -41,7 +41,7 @@
 
 在后端运行日志中按任务编号查「星潮采集汇总」和「星潮资料故障」。汇总给出首个失败仓库、环节、故障数和整仓跳过数；单项记录给出已知状态码和限流等待截止时间（UTC）。日榜本身失败时直接查 `LISTING` 故障行。按相同编号查「星潮资料降级」可核对最终使用旧稿、来源简介还是仅有排名。只保留这些脱敏行即可复盘，IDEA 控制台的输出需在关闭或清屏前保存。旧日报没有这些采集诊断。
 
-`README_NOT_FOUND` 表示公开身份通过核验后 README 接口返回 404。`SKIPPED_AFTER_PAUSE` 表示本轮已暂停、该仓库没有发起请求。`COOLDOWN` 表示同一进程仍在等待上游恢复；等待到期后由下一次获准任务再试。无明确限流证据的 403 保留访问被拒的事实。等待时间取自合法的 `Retry-After` 或配额耗尽时的 `X-RateLimit-Reset`。[GitHub REST API 请求建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
+`README_NOT_FOUND` 表示公开身份通过核验后 README 接口返回 404。`UNVERIFIED_REDIRECT` 表示材料转址后无法确认属于刚核实的仓库和资源。`SKIPPED_AFTER_PAUSE` 表示本轮已暂停、该仓库没有发起请求。`COOLDOWN` 表示同一进程仍在等待上游恢复。等待期限取自有效的 `Retry-After` 或配额耗尽时的 `X-RateLimit-Reset`；已确认限流而无有效等待信息时至少等待一分钟。到期后由下一次获准任务再试。[GitHub REST API 请求建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
 
 ## 查询契约
 

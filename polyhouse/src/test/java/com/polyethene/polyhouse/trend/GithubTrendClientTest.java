@@ -4,6 +4,9 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.service.trend.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -175,6 +178,92 @@ class GithubTrendClientTest {
                 new GithubTrendingParser(), TrendFixture.json(), settings);
         assertThatThrownBy(client::collect).isInstanceOf(BusinessException.class);
         assertThat(settings.toString()).doesNotContain("fake-fixture-token");
+    }
+
+    @Test void nameTransferCannotReplaceAnotherRankOrProduceDuplicateArchiveNames() {
+        var paths = new ArrayList<String>();
+        var output = client((uri, token) -> {
+            paths.add(uri.getPath());
+            if (uri.getHost().equals("github.com")) return reply(TrendFixture.htmlWithStarIdentity());
+            if (uri.getPath().endsWith("/readme")) return reply(TrendFixture.readme("Public notes"));
+            if (uri.getPath().endsWith("/contents")) return reply("[]");
+            long id = uri.getPath().endsWith("/engine") ? 1 : 2;
+            return reply("{\"id\":" + id + ",\"private\":false,\"full_name\":\"sample/awesome-books\"}");
+        }).collect().projects();
+        assertThat(output).extracting(p -> p.snapshot().fullName()).containsExactly("sample/engine", "sample/awesome-books");
+        assertThat(output.getFirst().snapshot().repositoryId()).isNull();
+        assertThat(output.getFirst().sourceIssue().reason()).isEqualTo(Reason.IDENTITY_CONFLICT);
+        assertThat(output.getLast().readmeText()).isEqualTo("Public notes");
+        assertThat(Collections.frequency(paths, "/repos/sample/awesome-books/readme")).isOne();
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {1, 3})
+    void movedReadmeMustBelongToTheVerifiedRepository(long redirectId) {
+        var calls = new ArrayList<String>();
+        var first = client((uri, token) -> {
+            calls.add(uri.getPath());
+            if (uri.getHost().equals("github.com")) return reply(TrendFixture.htmlWithStarIdentity());
+            if (uri.getPath().equals("/repos/sample/engine"))
+                return reply("{\"id\":1,\"private\":false,\"full_name\":\"sample/new-engine\"}");
+            if (uri.getPath().equals("/repos/sample/new-engine/readme"))
+                return new TrendSourceTransport.Reply(301, "", "/repositories/" + redirectId + "/readme");
+            if (uri.getPath().startsWith("/repositories/")) return reply(TrendFixture.readme("Repository notes"));
+            if (uri.getPath().endsWith("/contents")) return reply("[]");
+            return new TrendSourceTransport.Reply(404, "", null);
+        }).collect().projects().getFirst();
+        if (redirectId == 1) {
+            assertThat(first.readmeText()).isEqualTo("Repository notes");
+            assertThat(first.snapshot().fullName()).isEqualTo("sample/new-engine");
+        } else {
+            assertThat(first.readmeVersion()).isNull();
+            assertThat(first.readmeText()).isEmpty();
+            assertThat(first.snapshot().repositoryId()).isNull();
+            assertThat(first.sourceIssue().reason()).isEqualTo(Reason.UNVERIFIED_REDIRECT);
+            assertThat(calls).doesNotContain("/repositories/3/readme");
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("incompleteDirectories")
+    void incompleteDirectoryEvidenceKeepsArticleEligible(String files) {
+        var result = client((uri, token) -> {
+            if (uri.getHost().equals("github.com")) return reply(TrendFixture.htmlWithStarIdentity());
+            if (uri.getPath().endsWith("/engine")) return new TrendSourceTransport.Reply(404, "", null);
+            if (uri.getPath().endsWith("/readme")) return reply(TrendFixture.readme("Public notes"));
+            if (uri.getPath().endsWith("/contents")) return reply(files);
+            return reply("{\"id\":2,\"private\":false,\"full_name\":\"sample/awesome-books\"}");
+        }).collect().projects().getLast();
+        assertThat(result.snapshot().repoType()).isEqualTo("UNKNOWN");
+        assertThat(result.snapshot().insightStatus()).isEqualTo("NOT_ANALYZED");
+        assertThat(result.readmeText()).isEqualTo("Public notes");
+    }
+
+    private static List<String> incompleteDirectories() {
+        var capped = TrendFixture.json().createArrayNode();
+        for (int i = 0; i < 1000; i++) capped.addObject().put("name", i + ".md").put("type", "file");
+        return List.of("[{\"name\":\"README.md\",\"type\":\"file\"},{\"name\":\"lib\",\"type\":\"symlink\"}]", "[{}]", capped.toString());
+    }
+
+    @Test void explicitSecondaryLimitWithoutHeadersWaitsBeforeNextTask() {
+        var time = Instant.parse("2026-11-20T08:00:00Z");
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenReturn(time);
+        var calls = new AtomicInteger();
+        var client = new GithubTrendClient((uri, token) -> {
+            if (uri.getHost().equals("github.com")) return reply(TrendFixture.htmlWithStarIdentity());
+            calls.incrementAndGet();
+            return new TrendSourceTransport.Reply(403, "{\"message\":\"You have exceeded a secondary rate limit.\"}", null);
+        }, new GithubTrendingParser(), TrendFixture.json(), new TrendProperties(true, null), clock);
+        var first = client.collect().projects().getFirst().sourceIssue();
+        assertThat(first.reason()).isEqualTo(Reason.RATE_LIMITED);
+        assertThat(first.retryAt()).isEqualTo(time.plusSeconds(60));
+        when(clock.instant()).thenReturn(time.plusSeconds(59));
+        assertThat(client.collect().projects()).allSatisfy(p -> assertThat(p.sourceIssue().reason()).isEqualTo(Reason.COOLDOWN));
+        assertThat(calls).hasValue(1);
+        when(clock.instant()).thenReturn(time.plusSeconds(60));
+        client.collect();
+        assertThat(calls).hasValue(2);
     }
 
     private static GithubTrendClient client(TrendSourceTransport transport) {

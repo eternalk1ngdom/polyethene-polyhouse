@@ -85,6 +85,8 @@ public class GithubTrendClient {
             throw failure;
         }
         // 稳定排序保留同一优先级内的榜序；数组按真实排名落位，发布时无需重新编号。
+        // 预留每一行自己的榜单名称，避免仓库改名后出现同名行，让整期归档失败。
+        ranking.forEach(item -> batch.names.add(item.fullName().toLowerCase(Locale.ROOT)));
         var order = ranking.stream().sorted(Comparator.comparing(item ->
                 item.repositoryId() == null || !missingInsightIds.contains(item.repositoryId()))).toList();
         var projects = new TrendCollection.Project[ranking.size()];
@@ -113,6 +115,9 @@ public class GithubTrendClient {
         try {
             var reply = get(URI.create("https://api.github.com/repos/" + name), guard);
             snapshot = metadata(listed, object(reply));
+            if (!snapshot.fullName().equalsIgnoreCase(name) && !batch.names.add(snapshot.fullName().toLowerCase(Locale.ROOT))) {
+                throw new FetchFailure(Reason.IDENTITY_CONFLICT, 200, null);
+            }
         } catch (FetchFailure failure) {
             var issue = batch.failed(name, Stage.METADATA, failure);
             // 来源级中断保留榜单的稳定 ID；明确不可见或冲突的仓库不能借旧稿恢复身份。
@@ -120,24 +125,26 @@ public class GithubTrendClient {
             return new TrendCollection.Project(fallback, null, "", issue);
         }
 
-        String prefix = "https://api.github.com/repos/" + snapshot.fullName();
         var material = new Readme(null, "", "UNAVAILABLE");
         TrendSourceIssue issue = null;
         try {
-            material = readme(get(URI.create(prefix + "/readme"), guard));
+            material = readme(getMaterial(snapshot, "/readme", guard));
         } catch (FetchFailure failure) {
             if (Objects.equals(failure.status, 404)) {
                 failure = new FetchFailure(Reason.README_NOT_FOUND, 404, null);
                 material = new Readme(null, "", "MISSING");
             }
             issue = batch.failed(name, Stage.README, failure);
+            if (issue.reason() == Reason.UNVERIFIED_REDIRECT) return new TrendCollection.Project(listed.withRepositoryId(null), null, "", issue);
         }
         JsonNode files = json.createArrayNode();
         if (batch.pause == null) {
             try {
-                files = array(get(URI.create(prefix + "/contents"), guard));
+                files = array(getMaterial(snapshot, "/contents", guard));
             } catch (FetchFailure failure) {
                 var directoryIssue = batch.failed(name, Stage.DIRECTORY, failure);
+                if (directoryIssue.reason() == Reason.UNVERIFIED_REDIRECT && material.sha == null)
+                    return new TrendCollection.Project(listed.withRepositoryId(null), null, "", directoryIssue);
                 if (issue == null) issue = directoryIssue;
             }
         }
@@ -168,6 +175,15 @@ public class GithubTrendClient {
     }
 
     private TrendSourceTransport.Reply get(URI initial, Runnable guard) {
+        return get(initial, guard, null);
+    }
+
+    private TrendSourceTransport.Reply getMaterial(TrendProjectVO repo, String suffix, Runnable guard) {
+        return get(URI.create("https://api.github.com/repos/" + repo.fullName() + suffix), guard,
+                "/repositories/" + repo.repositoryId() + suffix);
+    }
+
+    private TrendSourceTransport.Reply get(URI initial, Runnable guard, String numericPath) {
         URI target = initial;
         boolean api = "api.github.com".equals(target.getHost());
         var cooldown = api ? apiRetryAt : listingRetryAt;
@@ -178,23 +194,17 @@ public class GithubTrendClient {
             if (clock.instant().isBefore(until)) throw new FetchFailure(Reason.COOLDOWN, null, until);
             final TrendSourceTransport.Reply reply;
             try { reply = transport.get(target, api ? settings.githubToken() : null); }
-            catch (GithubTrendHttp.InvalidResponse failure) { throw new FetchFailure(Reason.INVALID_RESPONSE, failure.status, null); }
+            catch (GithubTrendHttp.BodyFailure failure) {
+                throw new FetchFailure(failure.reason, failure.limits.status(), rememberWait(failure.limits, cooldown, false));
+            }
             catch (BusinessException failure) { throw new FetchFailure(Reason.TRANSPORT_FAILURE, null, null); }
             int status = reply.status();
-            Instant wait = null;
-            if (reply.retrySeconds() != null) wait = clock.instant().plusSeconds(reply.retrySeconds());
-            if (reply.exhausted() && reply.resetEpoch() != null) {
-                var reset = Instant.ofEpochSecond(reply.resetEpoch());
-                if (wait == null || reset.isAfter(wait)) wait = reset;
-            }
-            boolean limited = status == 429 || status == 403 && (reply.exhausted() || reply.retrySeconds() != null);
-            if (limited && wait == null) wait = clock.instant().plusSeconds(60);
-            if (wait != null) cooldown.accumulateAndGet(wait, (a, b) -> a.isAfter(b) ? a : b);
+            var refusal = status == 403 && api ? refusalReason(reply.body()) : Reason.ACCESS_REFUSED;
+            boolean limited = status == 429 || status == 403 && (reply.exhausted() || reply.retrySeconds() != null || refusal == Reason.RATE_LIMITED);
+            Instant wait = rememberWait(reply, cooldown, limited);
             if (status == 200) return reply;
             if (limited) throw new FetchFailure(Reason.RATE_LIMITED, status, wait);
-            if (status == 403 && api && resourceAccessRefused(reply.body()))
-                throw new FetchFailure(Reason.RESOURCE_ACCESS_REFUSED, status, null);
-            if (status == 403 || status == 401) throw new FetchFailure(Reason.ACCESS_REFUSED, status, wait);
+            if (status == 403 || status == 401) throw new FetchFailure(refusal, status, wait);
             if (status >= 500) throw new FetchFailure(Reason.UPSTREAM_ERROR, status, wait);
             if (!Set.of(301, 302, 307, 308).contains(status)) throw new FetchFailure(Reason.HTTP_ERROR, status, wait);
             // 跳转不能离开同一来源；每跳都复核允许路径与执行权。
@@ -207,18 +217,34 @@ public class GithubTrendClient {
             } catch (BusinessException | IllegalArgumentException failure) {
                 throw new FetchFailure(Reason.INVALID_RESPONSE, status, null);
             }
+            // 元数据可通过返回的 ID 核验改名；正文和目录没有该字段，只跟随已核实仓库的同一资源。
+            if (numericPath != null && !target.getRawPath().equalsIgnoreCase(initial.getRawPath())
+                    && !target.getRawPath().equals(numericPath)) throw new FetchFailure(Reason.UNVERIFIED_REDIRECT, status, null);
         }
         throw new FetchFailure(Reason.INVALID_RESPONSE, null, null);
     }
 
-    private boolean resourceAccessRefused(String body) {
-        // 只匹配 GitHub 明确的资源权限错误。未识别的 403 保守暂停，也不记录原文。
-        if (body == null || body.length() > 4096) return false;
+    private Instant rememberWait(TrendSourceTransport.Reply reply, AtomicReference<Instant> cooldown, boolean limited) {
+        Instant wait = reply.retrySeconds() == null ? null : clock.instant().plusSeconds(reply.retrySeconds());
+        if (reply.exhausted() && reply.resetEpoch() != null) {
+            var reset = Instant.ofEpochSecond(reply.resetEpoch());
+            if (wait == null || reset.isAfter(wait)) wait = reset;
+        }
+        if ((limited || reply.exhausted()) && wait == null) wait = clock.instant().plusSeconds(60);
+        return wait == null ? null : cooldown.accumulateAndGet(wait, (a, b) -> a.isAfter(b) ? a : b);
+    }
+
+    private Reason refusalReason(String body) {
+        // GitHub 可在无等待头的 403 正文明确说明二级限流。未知说明保守暂停，原文不入日志。
+        if (body == null || body.length() > 4096) return Reason.ACCESS_REFUSED;
         try {
             var error = json.readTree(body);
-            return error != null && Set.of("Resource not accessible by integration", "Resource not accessible by personal access token")
-                    .contains(error.path("message").asText(""));
-        } catch (java.io.IOException failure) { return false; }
+            String message = error == null ? "" : error.path("message").asText("");
+            if (message.startsWith("You have exceeded a secondary rate limit")) return Reason.RATE_LIMITED;
+            if (Set.of("Resource not accessible by integration", "Resource not accessible by personal access token").contains(message))
+                return Reason.RESOURCE_ACCESS_REFUSED;
+        } catch (java.io.IOException failure) { return Reason.ACCESS_REFUSED; }
+        return Reason.ACCESS_REFUSED;
     }
 
     private JsonNode object(TrendSourceTransport.Reply reply) {
@@ -259,15 +285,20 @@ public class GithubTrendClient {
     private TrendProjectVO classify(TrendProjectVO item, JsonNode files, String readmeStatus) {
         Set<String> names = new HashSet<>();
         Set<String> dirs = new HashSet<>();
+        // 根目录结果最多一千项；达到上限或含未识别条目时不能证明仓库只有资料。
+        boolean complete = !files.isEmpty() && files.size() < 1000;
         for (var file : files) {
-            if ("file".equals(file.path("type").asText())) names.add(file.path("name").asText().toLowerCase(Locale.ROOT));
-            if ("dir".equals(file.path("type").asText())) dirs.add(file.path("name").asText().toLowerCase(Locale.ROOT));
+            String name = file.path("name").asText("").toLowerCase(Locale.ROOT);
+            if (!file.path("name").isTextual() || name.isBlank()) complete = false;
+            else if ("file".equals(file.path("type").asText())) names.add(name);
+            else if ("dir".equals(file.path("type").asText())) dirs.add(name);
+            else complete = false;
         }
         boolean build = names.stream().anyMatch(BUILDS::contains);
         boolean source = dirs.stream().anyMatch(Set.of("src", "lib", "app", "cmd", "crates", "packages")::contains);
         boolean namedResource = item.fullName().toLowerCase(Locale.ROOT)
                 .matches(".*(?:awesome|interview|roadmap|tutorial|books).*" );
-        boolean docsOnly = !files.isEmpty() && dirs.stream().allMatch(Set.of("docs", "images", "assets", ".github", "examples")::contains)
+        boolean docsOnly = complete && dirs.stream().allMatch(Set.of("docs", "images", "assets", ".github", "examples")::contains)
                 && names.stream().allMatch(name -> name.endsWith(".md") || name.endsWith(".txt")
                 || Set.of("license", "licence", ".gitignore", ".gitattributes").contains(name));
         String type = build && source ? "CODE_PROJECT" : namedResource && docsOnly ? "DOC_LIST" : "UNKNOWN";
@@ -297,6 +328,7 @@ public class GithubTrendClient {
     /** 每轮任务持有自己的诊断，首个局部错误与随后可能发生的整批暂停分别保存。 */
     private static final class Batch {
         final Instant captured;
+        final Set<String> names = new HashSet<>();
         String firstRepo;
         TrendSourceIssue firstIssue;
         TrendSourceIssue pause;

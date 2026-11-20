@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.service.trend;
 
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.exception.BusinessException;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -57,7 +58,7 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
             String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (response.statusCode() == 200 && !(uri.getHost().equals("api.github.com")
                     ? contentType.startsWith("application/json") : contentType.startsWith("text/html"))) {
-                throw new InvalidResponse(200);
+                throw new BodyFailure(Reason.INVALID_RESPONSE, response.headers());
             }
             return reply(response.statusCode(), response.headers(), new String(response.body(), StandardCharsets.UTF_8));
         } catch (InterruptedException failure) {
@@ -67,8 +68,11 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
             // 错误页超大或传到一半超时，仍须遵守已经收到的 429 与等待时间。
             var info = received.get();
             if (info != null && info.statusCode() != 200) return reply(info.statusCode(), info.headers(), "");
-            if (failure.getCause() instanceof LimitedResponseBody.TooLarge)
-                throw new InvalidResponse(info == null ? null : info.statusCode());
+            if (info != null) {
+                var reason = failure.getCause() instanceof LimitedResponseBody.TooLarge
+                        ? Reason.INVALID_RESPONSE : Reason.TRANSPORT_FAILURE;
+                throw new BodyFailure(reason, info.headers());
+            }
             throw unavailable();
         } catch (IllegalArgumentException failure) {
             // 异常及 cause 可能包含请求头或输入，不向业务层传播它们。
@@ -89,12 +93,15 @@ public class GithubTrendHttp implements TrendSourceTransport, AutoCloseable {
                 .map(Long::valueOf).orElse(null);
     }
 
-    /** 已收到的单份材料超限或类型错误，不应因此停止其他仓库。 */
-    static final class InvalidResponse extends BusinessException {
-        final Integer status;
-        InvalidResponse(Integer status) {
+    /** 200 响应的正文无法使用时，已收到的限流信息仍适用于后续请求。 */
+    static final class BodyFailure extends BusinessException {
+        final Reason reason;
+        final Reply limits;
+        BodyFailure(Reason reason, HttpHeaders headers) {
             super(ErrorCode.SERVICE_UNAVAILABLE, "GitHub 资料暂时不可用");
-            this.status = status;
+            this.reason = reason;
+            this.limits = new Reply(200, "", null, seconds(headers, "Retry-After"),
+                    headers.firstValue("X-RateLimit-Remaining").filter("0"::equals).isPresent(), seconds(headers, "X-RateLimit-Reset"));
         }
     }
 

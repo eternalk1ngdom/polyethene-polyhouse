@@ -2,6 +2,10 @@ package com.polyethene.polyhouse.trend;
 
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.service.trend.GithubTrendHttp;
+import com.polyethene.polyhouse.service.trend.GithubTrendClient;
+import com.polyethene.polyhouse.service.trend.GithubTrendingParser;
+import com.polyethene.polyhouse.config.TrendProperties;
+import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -9,6 +13,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.net.URI;
 import java.net.http.*;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.time.*;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -83,6 +89,35 @@ class GithubTrendHttpTest {
                 });
         try (var client = new GithubTrendHttp(http)) {
             assertThat(client.get(URI.create("https://github.com/trending?since=daily"), "fake-fixture-token").status()).isEqualTo(200);
+        }
+    }
+
+    @Test void rejectedSuccessBodyStillCarriesTheLastRemainingQuotaWindow() {
+        var http = mock(HttpClient.class);
+        Instant now = Instant.parse("2026-11-20T08:00:00Z");
+        var reset = now.plusSeconds(90);
+        when(http.sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any()))
+                .thenAnswer(invocation -> {
+                    HttpRequest request = invocation.getArgument(0);
+                    boolean listing = request.uri().getHost().equals("github.com");
+                    var headers = listing ? Map.of("Content-Type", List.of("text/html")) : Map.of(
+                            "Content-Type", List.of("text/plain"), "X-RateLimit-Remaining", List.of("0"),
+                            "X-RateLimit-Reset", List.of(Long.toString(reset.getEpochSecond())));
+                    @SuppressWarnings("unchecked") // 本次调用的订阅类型固定为 byte[]。
+                    HttpResponse<byte[]> response = mock(HttpResponse.class);
+                    when(response.statusCode()).thenReturn(200);
+                    when(response.headers()).thenReturn(HttpHeaders.of(headers, (key, value) -> true));
+                    when(response.body()).thenReturn((listing ? TrendFixture.htmlWithStarIdentity() : "").getBytes(StandardCharsets.UTF_8));
+                    return CompletableFuture.completedFuture(response);
+                });
+        try (var transport = new GithubTrendHttp(http)) {
+            var source = new GithubTrendClient(transport, new GithubTrendingParser(), TrendFixture.json(),
+                    new TrendProperties(true, null), Clock.fixed(now, ZoneOffset.UTC));
+            var projects = source.collect().projects();
+            assertThat(projects.getFirst().sourceIssue().reason()).isEqualTo(Reason.INVALID_RESPONSE);
+            assertThat(projects.getFirst().sourceIssue().retryAt()).isEqualTo(reset);
+            assertThat(projects.getLast().sourceIssue().reason()).isEqualTo(Reason.COOLDOWN);
+            verify(http, times(2)).sendAsync(any(), any());
         }
     }
 }
