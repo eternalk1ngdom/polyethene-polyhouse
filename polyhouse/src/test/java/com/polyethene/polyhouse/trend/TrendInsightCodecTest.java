@@ -42,7 +42,10 @@ class TrendInsightCodecTest {
         var expanded = codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
         assertThat(expanded.ruleVersion()).isEqualTo("radar-2");
         assertThat(codec.cached(codec.encode(expanded)).painPoint()).isEqualTo(limit);
-        assertRejected(article.put("painPoint", limit + "文").toString(), "INVALID_VALUE_painPoint");
+        assertRejected(article.put("painPoint", limit + "文").toString(), "TOO_LONG_painPoint");
+        assertRejected(article.put("painPoint", "  ").toString(), "BLANK_painPoint");
+        assertRejected(article.put("painPoint", 17).toString(), "NON_TEXT_painPoint");
+        assertRejected(article.putNull("painPoint").toString(), "NON_TEXT_painPoint");
 
         String thin = "资料只说明它能生成清单，未交代如何收集条目。";
         article.put("painPoint", thin);

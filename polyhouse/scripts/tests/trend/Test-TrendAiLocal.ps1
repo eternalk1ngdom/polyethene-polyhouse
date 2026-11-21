@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'target'))
 $fixtureDirectory = Join-Path $fixtureRoot ('trend-key-test-' + [Guid]::NewGuid().ToString('N'))
-$names = @('POLYHOUSE_DEEPSEEK_API_KEY','POLYHOUSE_TREND_ENABLED','POLYHOUSE_TREND_AI_ENABLED','POLYHOUSE_TREND_JOBS_ENABLED','POLYHOUSE_TREND_SCHEDULE_ENABLED','POLYHOUSE_TREND_CACHE_ENABLED','POLYHOUSE_TREND_LIVE_CNY')
+$names = @('POLYHOUSE_DEEPSEEK_API_KEY','POLYHOUSE_TREND_ENABLED','POLYHOUSE_TREND_AI_ENABLED','POLYHOUSE_TREND_JOBS_ENABLED','POLYHOUSE_TREND_SCHEDULE_ENABLED','POLYHOUSE_TREND_CACHE_ENABLED','POLYHOUSE_TREND_LIVE_CNY','POLYHOUSE_TREND_EDITORIAL_SAMPLE')
 $unchangedFlags = @('POLYHOUSE_TREND_JOBS_ENABLED','POLYHOUSE_TREND_SCHEDULE_ENABLED','POLYHOUSE_TREND_CACHE_ENABLED')
 $original = @{}
 foreach ($name in $names) { $original[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -19,6 +19,7 @@ if ($Action -eq 'Verify' -and (-not $TrendLiveOnly -or $env:POLYHOUSE_TREND_LIVE
 Write-Output ('FixtureJobs:' + $env:POLYHOUSE_TREND_JOBS_ENABLED)
 Write-Output ('FixtureSchedule:' + $env:POLYHOUSE_TREND_SCHEDULE_ENABLED)
 Write-Output ('FixtureCache:' + $env:POLYHOUSE_TREND_CACHE_ENABLED)
+Write-Output ('FixtureEditorial:' + $env:POLYHOUSE_TREND_EDITORIAL_SAMPLE)
 throw 'Expected fake backend failure'
 '@ | Set-Content -LiteralPath (Join-Path $fixtureDirectory 'Invoke-LocalAuth.ps1') -Encoding utf8
     foreach ($name in $names) { if (Test-Path -LiteralPath "Env:$name") { Remove-Item -LiteralPath "Env:$name" } }
@@ -56,6 +57,13 @@ throw 'Expected fake backend failure'
         if (Test-Path -LiteralPath "Env:$name") { throw '真实验收包装未恢复环境' }
     }
     if (($outputs | Out-String).Contains('fixture-deepseek-key-1234')) { throw '真实验收包装回显了假Key' }
+    if (-not $outputs.Contains('FixtureEditorial:false')) { throw '旧入口不应选择新版样本' }
+    $outputs.Clear()
+    try {
+        & (Join-Path $fixtureDirectory 'Invoke-TrendAiLocal.ps1') -Action VerifyLive -CurrencyCny -EditorialSample 6>&1 | ForEach-Object { $outputs.Add($_) }
+        throw '预期假后端失败未出现'
+    } catch { if ($_.Exception.Message -ne 'Expected fake backend failure') { throw } }
+    if (-not $outputs.Contains('FixtureEditorial:true')) { throw '新版样本未与原入口分开' }
     try {
         & (Join-Path $fixtureDirectory 'Invoke-TrendAiLocal.ps1') -Action VerifyLive
         throw '未核对币种也进入了真实验收'

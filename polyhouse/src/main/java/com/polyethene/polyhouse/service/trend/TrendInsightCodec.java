@@ -42,7 +42,8 @@ public class TrendInsightCodec {
                     definition 写一句可独立阅读的中心句（最多 60 字），直接说谁用它做什么、得到什么。
                     painPoint 是“解决什么问题”的正文。承接中心句，用一个具体场景展开：谁原来卡在哪一步，交给项目什么，
                     它用什么办法处理，最后这个人手里多了什么、下一步可以怎么用。选能从资料核对的细节，把术语在句中讲明白。
-                    材料充足时用约 140～220 字写成连贯的一段，最多 250 字。不要重复标题、罗列功能或逐条回答问题。
+                    材料充足时用约 140～220 字写成连贯的一段。painPoint 必须是非空 JSON 字符串，最多 250 个字符，
+                    英文字母、文件路径和标点也计入长度。接近上限时只保留一个完整例子。不要重复标题、罗列功能或逐条回答问题。
                     举例须写明是例子。材料只有一句简介时，可以只写一两句，点明哪个关键环节资料未说明，不能为凑篇幅编造流程或效果。
                     highlights 选 1～3 个有依据的设计，写清做法及作用，每条最多 60 字；与正文互补，没有依据可为空。
                     comparison 仅写资料支持的比较（最多 120 字），无依据用 null。documentedLimitations 只放文档明示的限制，
@@ -158,10 +159,12 @@ public class TrendInsightCodec {
     private static String text(JsonNode root, String field, int max, boolean nullable) {
         var value = root.path(field);
         if (nullable && value.isNull()) return null;
-        if (!value.isTextual() || value.asText().isBlank() || value.asText().length() > max) {
-            throw new OutputRejected("INVALID_VALUE_" + field);
-        }
-        return value.asText();
+        // 原文不落日志，区分写作篇幅和 JSON 类型问题，避免下一次只能猜测退稿原因。
+        if (!value.isTextual()) throw new OutputRejected("NON_TEXT_" + field);
+        String content = value.textValue();
+        if (content.isBlank()) throw new OutputRejected("BLANK_" + field);
+        if (content.length() > max) throw new OutputRejected("TOO_LONG_" + field);
+        return content;
     }
     private static List<String> lines(JsonNode root, String field, int max) {
         var value = root.path(field);

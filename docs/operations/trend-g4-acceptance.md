@@ -32,6 +32,8 @@ JUnit实际经过HTTP、登录、JWT/Redis会话、权限拦截器、MySQL事务
 
 同月正式启用前，须在发布配置与验收记录中为这0.10元保留额度，正式环境月上限先按**9.90元（`polyhouse.trend.ai.monthly-budget-micros=9900000`）**设置；本轮不修改正式配置。重复验收、手动及自动采集不能在不同数据库各获得完整十元额度。应用账本是保守估算，仍须核对平台实际用量/账单，不等同平台余额硬封顶。
 
+2026 年 11 月另有一次已执行的写作验收。包装入口为 `-Action VerifyLive -CurrencyCny -EditorialSample`，固定选择公开的 `cursor/plugins`。固定榜单行只用于定位项目，元数据与 README 走实际采集器。该入口只允许当月的一次固定任务，与上面的 G4 样本共用同一账本。脱敏结果保存在 `.local-backups/trend-live/editorial-radar-2.json`。复核这次失败请直接读该文件，对照对应请求编号的校验日志；再次运行无法补回被拒正文。[11 月 21 日验收记录](../dev-log/v1.0-dev.15.md#单篇真实验收与正文拒收)
+
 2026-11-17再次核对[官方人民币价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，`deepseek-flash`按高峰、输入未命中缓存2元/百万token、输出8元/百万token保守估算；保持原非思考、非流式、JSON模式、最多1500输出token，不启用工具。未升级依赖或修改既有运行配置。
 
 ## 完成标志与结果核对

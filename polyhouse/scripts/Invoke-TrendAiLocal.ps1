@@ -12,11 +12,13 @@ param(
     [ValidateSet('Inspect', 'Run', 'VerifyLive')][string]$Action = 'Inspect',
     [switch]$EnableAi,
     [switch]$CurrencyCny,
+    [switch]$EditorialSample,
     [switch]$SkipWslRedis
 )
 $ErrorActionPreference = 'Stop'
 if ($Action -eq 'VerifyLive' -and -not $CurrencyCny) { throw '真实验收前须核对人民币账户，并显式指定 -CurrencyCny。' }
 if ($CurrencyCny -and $Action -ne 'VerifyLive') { throw '-CurrencyCny仅用于VerifyLive。' }
+if ($EditorialSample -and $Action -ne 'VerifyLive') { throw '单篇写作验收仅用于 VerifyLive。' }
 if ($Action -eq 'Inspect') {
     [pscustomobject]@{
         KeyConfigured = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('POLYHOUSE_DEEPSEEK_API_KEY', 'Process'))
@@ -29,7 +31,7 @@ if ($Action -eq 'Inspect') {
     return
 }
 $names = @('POLYHOUSE_DEEPSEEK_API_KEY', 'POLYHOUSE_TREND_ENABLED', 'POLYHOUSE_TREND_AI_ENABLED',
-    'POLYHOUSE_TREND_LIVE_CNY', 'POLYHOUSE_TREND_JOBS_ENABLED')
+    'POLYHOUSE_TREND_LIVE_CNY', 'POLYHOUSE_TREND_JOBS_ENABLED', 'POLYHOUSE_TREND_EDITORIAL_SAMPLE')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $secureKey = $null
@@ -49,6 +51,8 @@ try {
     }
     if ($Action -eq 'VerifyLive') {
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_LIVE_CNY', 'true', 'Process')
+        [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_EDITORIAL_SAMPLE', $EditorialSample.IsPresent.ToString().ToLowerInvariant(), 'Process')
+        if ($EditorialSample) { Write-Host '新版写作验收：固定 cursor/plugins 一篇，共用原验收账本，不重试。' }
         Write-Host 'G4真实验收：仅本机专属库，一角月预算持久记账，定时关闭；同月重复运行不换号重发。Key不写文件。'
         & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Verify -TrendLiveOnly
     } else {

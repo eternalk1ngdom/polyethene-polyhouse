@@ -7,7 +7,7 @@
 | [GitHub 开源技术雷达](github-tech-radar.md) | G4 真实小样本对账通过，G6 真实联调及本机开发库迁移完成，云端待验 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [星潮前端设计](trend-frontend-design.md) | G6 本地真实浏览器联调通过，保留首版接口与交互基线 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [星潮阅读与发布台改版](startide-reader-redesign.md) | 第 1～3 步已验，第 4 步读者路径、屋主发布与后端联合验证的范围见阶段记录 | [dev.15](../dev-log/v1.0-dev.15.md) |
-| [星潮后端解读质量与可用性](startide-insight-quality.md) | 第 1～2 步已验。第 3 步的 README 选段和[六组文章对照](startide-article-comparison.md)已离线完成；第 4 步发布统计、来源与日期已联调，单篇真实样本与独立试读单列 | [dev.15](../dev-log/v1.0-dev.15.md) |
+| [星潮后端解读质量与可用性](startide-insight-quality.md) | 第 1～2 步已验。第 3 步的 README 选段和[六组文章对照](startide-article-comparison.md)已离线完成；第 4 步发布统计、来源与日期已联调，单篇真实模型返回被拒收，新版试读待有合格稿后进行 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [框架优化与文档重塑](framework-optimization.md) | 已通过 [PR #4](https://github.com/eternalk1ngdom/polyethene-polyhouse/pull/4) 合入 dev `be1a108`，F5 按需跳过；main/部署未更新 | [dev.14](../dev-log/v1.0-dev.14.md) |
 | [文档、上下文与验证工作流整理](context-efficiency.md) | 用户已批准，2026-11-01 已交付；当前文档治理阶段 | [v1.0-dev.9](../dev-log/v1.0-dev.9.md) |
 | [受控内测：账号、权限与资料审核](controlled-beta-account-management.md) | 已批准 S1～S9；P0～P4 功能完成；P5 上线部分已搁置（2026-10-31），历史待人工核对 | [v1.0-dev.7](../dev-log/v1.0-dev.7.md) / [v1.0-dev.8](../dev-log/v1.0-dev.8.md) |
