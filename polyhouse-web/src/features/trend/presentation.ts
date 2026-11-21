@@ -42,3 +42,12 @@ export function insightReasonLabel(reason: string): string {
 export function insightLabel(state: string): string {
   return Object.hasOwn(insightLabels, state) ? insightLabels[state]! : '本期解读暂不可用'
 }
+
+/** 将解读正文按换行拆分为纯文本段落，兼顾旧单段稿与新多段稿的阅读层次。 */
+export function trendParagraphs(value: string): string[] {
+  const parts = value
+    .split(/\r?\n+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+  return parts.length ? parts : [value]
+}

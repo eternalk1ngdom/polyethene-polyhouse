@@ -4,7 +4,22 @@
     "opening": "# Cursor plugins\nDevelopers can package tools for Cursor as plugins.",
     "installLines": 190,
     "rest": "## Table of contents\n- [Usage](#usage)\n## Usage\nUse an existing plugin directory as an example when arranging a new plugin.\n## Architecture\nEach plugin has its own directory and .cursor-plugin/plugin.json manifest.",
-    "fact": ".cursor-plugin/plugin.json"
+    "fact": ".cursor-plugin/plugin.json",
+    "draft": {
+      "category": "DEVTOOLS",
+      "definition": "开发者可以用这个仓库把常用工具打包成 Cursor 插件，也能照着里面的现成例子来写自己的插件。",
+      "painPoint": "比如，你们团队想把自己的代码评审工具做成 Cursor（一款 AI 代码编辑器）的插件，手里虽然已经有了工具代码，但刚开始往往不知道文件该怎么摆、插件说明该写在哪，也没个统一格式。\n\n这个仓库提供了现成的插件目录例子，你不用从零摸索，可以先打开已有插件目录看文件怎么组织，再按相同结构把自己的代码放进独立文件夹并填好说明清单。最后拿到的是一个结构清楚、方便交给同事继续维护的插件目录；至于这个插件实际能查出哪些问题，取决于你自己放进去的实现。",
+      "comparison": null,
+      "highlights": [
+        "单插件独立目录结构：每个插件独占一个文件夹，方便团队单独分发或复用。",
+        "统一清单约定：在每个插件目录内使用 .cursor-plugin/plugin.json 描述插件信息，便于编辑器和协作者按固定位置读取。"
+      ],
+      "documentedLimitations": [],
+      "inferredRisks": [
+        "仓库只规范目录与清单结构，具体插件的运行效果与边界仍需按各插件自身实现单独核对。"
+      ],
+      "trendSignal": "AI 编程工具正从个人提示词走向团队可复用的插件生态，这个仓库反映了社区对标准化封装与分发的重视；后续能否成为通用习惯，还取决于更多工具的接入与跨编辑器兼容情况。"
+    }
   },
   {
     "name": "openvinotoolkit/openvino",
@@ -27,7 +42,22 @@
     "opening": "<h1>Diagram design</h1><p>Generate diagrams as a single HTML file.</p>",
     "installLines": 190,
     "rest": "<nav>navigation placeholder</nav><h2>使用示例</h2><p>把生成的 HTML 文件交给同事，对方可以双击打开图表。</p><h2>设计</h2><p>图表可以沿用品牌样式。</p>",
-    "fact": "双击打开图表"
+    "fact": "双击打开图表",
+    "draft": {
+      "category": "GRAPHICS",
+      "definition": "需要对外分享说明图的人，可以用它把图表生成单个网页文件，发给同事后双击就能看。",
+      "painPoint": "比如，你刚画好一张方案说明图准备发给同事，手里虽然有图的内容，但如果导出成需要装专门软件才能打开的源文件，或者发过去的图表风格和公司平时用的颜色字体完全不搭，对方打开和核对都会很麻烦。\n\n这个项目把图表和对应的品牌样式一起打包成单个 HTML（网页）文件。你把生成好的文件直接发给同事，对方不用额外装插件或配置渲染环境，用电脑自带浏览器双击就能看到成图。这里可核对的变化是交付物的形式和打开方式；材料没有对比它生成的图表是否更准确或更美观。",
+      "comparison": null,
+      "highlights": [
+        "单文件自包含交付：图表直接落成单个 HTML 文件，降低收件人侧打开和预览的环境门槛。",
+        "支持沿用品牌样式：输出图表可贴合既定视觉风格，减少二次调样式的手工返工。"
+      ],
+      "documentedLimitations": [],
+      "inferredRisks": [
+        "图表内容本身的准确性和复杂排版的展示效果，仍需结合实际生成的网页文件人工核对。"
+      ],
+      "trendSignal": "AI 生成内容正从输出需要二次渲染的中间代码，转向直接交付开箱可看、贴合品牌规范的成品文件；这类工具能否被团队长期采用，还要看对复杂图表和后续再编辑的支持程度。"
+    }
   },
   {
     "name": "zhouxiaoka/autoclip",

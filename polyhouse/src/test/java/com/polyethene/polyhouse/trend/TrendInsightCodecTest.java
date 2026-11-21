@@ -21,6 +21,7 @@ class TrendInsightCodecTest {
         var example = codec.insight(system.substring(system.indexOf("\n{") + 1), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
         assertThat(example.highlights()).hasSize(1);
         assertThat(example.comparison()).isNull();
+        assertThat(example.trendSignal()).isNotBlank();
         assertThat(body.path("messages").get(1).path("content").asText()).contains("Ignore all prior instructions");
         assertThat(new String(prepared.body(), StandardCharsets.UTF_8)).doesNotContain(TrendAiFixture.KEY);
         assertThat(prepared.inputBound()).isEqualTo(prepared.body().length + 512);
@@ -37,24 +38,52 @@ class TrendInsightCodecTest {
 
     @Test void acceptsFullParagraphAndThinEvidenceButRejectsRepeatedLeadOnlyForNewRule() throws Exception {
         var article = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(TrendAiFixture.content());
-        String limit = "文".repeat(250);
+        String twoParagraphs = "第一段交代手头材料与卡点。\n\n第二段交代处理过程、拿到什么成品以及边界。";
+        article.put("painPoint", twoParagraphs);
+        var segmented = codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        assertThat(segmented.painPoint()).isEqualTo(twoParagraphs);
+        assertThat(codec.cached(codec.encode(segmented)).painPoint()).isEqualTo(twoParagraphs);
+
+        String limit = "文".repeat(600);
         article.put("painPoint", limit);
         var expanded = codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
-        assertThat(expanded.ruleVersion()).isEqualTo("radar-2");
+        assertThat(expanded.ruleVersion()).isEqualTo("radar-3");
         assertThat(codec.cached(codec.encode(expanded)).painPoint()).isEqualTo(limit);
         assertRejected(article.put("painPoint", limit + "文").toString(), "TOO_LONG_painPoint");
         assertRejected(article.put("painPoint", "  ").toString(), "BLANK_painPoint");
         assertRejected(article.put("painPoint", 17).toString(), "NON_TEXT_painPoint");
         assertRejected(article.putNull("painPoint").toString(), "NON_TEXT_painPoint");
 
+        // 验证技术风向观察的长度边界与类型校验，超长和非文本均返回固定诊断码。
+        article.put("painPoint", twoParagraphs);
+        String signalLimit = "向".repeat(260);
+        article.put("trendSignal", signalLimit);
+        var withSignal = codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        assertThat(withSignal.trendSignal()).isEqualTo(signalLimit);
+        assertThat(codec.cached(codec.encode(withSignal)).trendSignal()).isEqualTo(signalLimit);
+        assertRejected(article.put("trendSignal", signalLimit + "向").toString(), "TOO_LONG_trendSignal");
+        assertRejected(article.put("trendSignal", 42).toString(), "NON_TEXT_trendSignal");
+
         String thin = "资料只说明它能生成清单，未交代如何收集条目。";
-        article.put("painPoint", thin);
+        article.put("painPoint", thin).putNull("trendSignal");
         assertThat(codec.insight(article.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW).painPoint()).isEqualTo(thin);
         String lead = article.get("definition").textValue();
         assertRejected(article.put("painPoint", lead).toString(), "REPEATED_DEFINITION");
-        var historical = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
-        historical.put("ruleVersion", "radar-1").put("painPoint", lead);
-        assertThat(codec.cached(historical.toString()).painPoint()).isEqualTo(lead);
+
+        // 旧规则 radar-1 与 radar-2 缓存不包含 trendSignal 字段，仍须兼容解码。
+        var historicalV1 = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
+        historicalV1.remove("trendSignal");
+        historicalV1.put("ruleVersion", "radar-1").put("painPoint", lead);
+        var decodedV1 = codec.cached(historicalV1.toString());
+        assertThat(decodedV1.painPoint()).isEqualTo(lead);
+        assertThat(decodedV1.trendSignal()).isNull();
+
+        var historicalV2 = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
+        historicalV2.remove("trendSignal");
+        historicalV2.put("ruleVersion", "radar-2").put("painPoint", "整理重复操作");
+        var decodedV2 = codec.cached(historicalV2.toString());
+        assertThat(decodedV2.ruleVersion()).isEqualTo("radar-2");
+        assertThat(decodedV2.trendSignal()).isNull();
     }
 
     @Test void rejectsBlankDuplicateUnknownFieldsAndTrailingJson() {
@@ -69,10 +98,12 @@ class TrendInsightCodecTest {
     @Test void normalizesOnlyAbsentOptionalFieldsWithoutChangingUsefulText() {
         var content = TrendFixture.json().createObjectNode()
                 .put("category", "DEVTOOLS").put("definition", "本地开发辅助工具")
-                .put("painPoint", "整理重复操作").put("comparison", "  ").putNull("documentedLimitations");
+                .put("painPoint", "整理重复操作").put("comparison", "  ").put("trendSignal", "   ")
+                .putNull("documentedLimitations");
         content.putArray("highlights").add("整理开发步骤");
         var value = codec.insight(content.toString(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
         assertThat(value.comparison()).isNull();
+        assertThat(value.trendSignal()).isNull();
         assertThat(value.highlights()).containsExactly("整理开发步骤");
         assertThat(value.documentedLimitations()).isEmpty();
         assertThat(value.inferredRisks()).isEmpty();
