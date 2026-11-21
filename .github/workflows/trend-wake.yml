@@ -1,0 +1,35 @@
+name: Trend Render wake
+
+on:
+  schedule:
+    # UTC 22:20-23:55 = next day Beijing 06:20-07:55.
+    - cron: '20-55/5 22 * * *'
+    - cron: '*/5 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trend-render-wake
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    # Unset variables disable the job; manual runs also require the default branch.
+    if: vars.TREND_WAKE_ENABLED == 'true' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TREND_WAKE_ENABLED: ${{ vars.TREND_WAKE_ENABLED }}
+      TREND_WAKE_BASE_URL: ${{ vars.TREND_WAKE_BASE_URL }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Probe application within the daily window
+        run: java --source 21 polyhouse/scripts/com/polyethene/polyhouse/ops/trend/TrendWake.java

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ElIcon } from 'element-plus'
 import { ArrowRight, Crop, Picture, Switch } from '@element-plus/icons-vue'
+import tideVoyage from '../assets/startide-voyage.webp'
 /** 用本项目自己的排版解释工具用途，不使用第三方作品或假处理结果。 */
 interface Props {
-  /** 封面类别来自注册表。 */
-  kind: 'text' | 'image'
+  /** 首页用入口类别选择插画，三类入口共用封面尺寸。 */
+  kind: 'trend' | 'text' | 'image'
 }
 defineProps<Props>()
 </script>
@@ -28,7 +29,7 @@ defineProps<Props>()
       </div>
       <span class="art-caption">PolyReplace<span>文字的事，简单一点。</span></span></template
     >
-    <template v-else
+    <template v-else-if="kind === 'image'"
       ><span class="art-label">MAKE ROOM FOR THE PERFECT FIT</span>
       <div class="image-composition">
         <div class="image-sheet">
@@ -46,6 +47,11 @@ defineProps<Props>()
       </div>
       <span class="art-caption">TargetKB<span>每一张，都刚刚好。</span></span></template
     >
+    <template v-else>
+      <span class="art-label">GITHUB TRENDING</span>
+      <img class="trend-voyage" :src="tideVoyage" alt="" width="1200" height="600" decoding="async" />
+      <span class="art-caption">StarTide<span>每天，发现开源新星。</span></span>
+    </template>
   </div>
 </template>
 <style scoped>
@@ -65,6 +71,9 @@ defineProps<Props>()
 }
 .image {
   background: var(--ph-peach);
+}
+.trend {
+  background: var(--star-tide-cover);
 }
 .art-label {
   font-size: 9px;
@@ -254,6 +263,14 @@ defineProps<Props>()
 .size-note strong {
   font-style: italic;
   font-weight: 400;
+}
+.trend-voyage {
+  position: absolute;
+  inset: 9% 0 auto;
+  width: 100%;
+  /* 窄双列的卡片已达到最小高度，底部仍须容纳两行题签和阅读入口。 */
+  height: min(68%, calc(91% - 74px));
+  pointer-events: none;
 }
 /* 卡片在平板双列时也可能很窄，不能只按手机视口启用紧凑排版。 */
 @container tool-artwork (max-width: 400px) {

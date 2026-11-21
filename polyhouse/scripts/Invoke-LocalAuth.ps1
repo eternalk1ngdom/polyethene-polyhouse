@@ -7,6 +7,11 @@ Verify -AccountManagementOnly：只在随机隔离库执行 P3 管理验收。
 Verify -AccountProvisioningOnly：只在随机隔离库执行开户验收，包含本测试专属屋主。
 Verify -AccountSecurityOnly：只在随机隔离库执行账号安全验收，不运行历史 OWNER 夹具。
 Verify -ProfileModerationOnly -WorkspaceBrowser：U4 保留随机后端与本机桥接，等待显式完成后校验并清理。
+Verify -TrendOnly：只验技术雷达随机隔离库，不创建账号、连接 Redis 或付费AI。
+Verify -TrendRedisOnly：只在本机Redis的随机测试键验证内容缓存Lua，不改正式内容键/认证键，不连接数据库。
+Verify -TrendHttpOnly：自动创建临时Redis，验收随机库中的真实认证/HTTP/任务/费用链路，不访问外网。
+Verify -TrendBrowserOnly：启动隔离前后端和浏览器，按真实接口验收发布和阅读。另加 -TrendBrowserLiveGithub 才读 GitHub 日榜，全程关闭 AI。
+Verify -TrendLiveOnly：自动创建临时Redis，使用持久专属验收库和至多一角月预算进行真实小样本，须通过隐藏输入包装调用。
 Inspect 只返回配置状态，Run 默认保持 Ubuntu WSL 并检查无认证 Redis 就绪后启动 Spring Boot；
 SkipWslRedis 供其他 Redis 环境自行管理依赖。所有进程环境在退出时恢复。
 #>
@@ -25,12 +30,27 @@ param(
     # P4 审核只在临时库和本次专属图片目录验收。
     [switch]$ProfileModerationOnly,
     # U4 显式保留隔离 HTTP 服务，供 CUA 浏览器验收；普通验证不会等待人工操作。
-    [switch]$WorkspaceBrowser
+    [switch]$WorkspaceBrowser,
+    # 技术雷达只运行自己的随机库专项，不能落入默认全量 OWNER 夹具。
+    [switch]$TrendOnly,
+    # 只执行内容缓存的随机Redis键专项，绝不落入账号或付费夹具。
+    [switch]$TrendRedisOnly,
+    # G4真实HTTP链路仍只用假外部服务；真实Key不会传给该专项。
+    [switch]$TrendHttpOnly,
+    # 整站浏览器验收沿用免费随机库和临时 Redis，普通 Run 不进入此分支。
+    [switch]$TrendBrowserOnly,
+    [switch]$TrendBrowserLiveGithub,
+    # G4真实外部样本单独显式选择，保留专属库及费用，不能混入免费验收。
+    [switch]$TrendLiveOnly,
+    # 可选临时Redis本机端口，只用于专项，不改私有预设或普通启动配置。
+    [ValidateRange(1024, 65535)][int]$TrendRedisPort
 )
 
 $ErrorActionPreference = 'Stop'
-if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
-if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if (([int][bool]$AccountSecurityOnly + [int][bool]$AccountProvisioningOnly + [int][bool]$AccountManagementOnly + [int][bool]$ProfileModerationOnly + [int][bool]$TrendOnly + [int][bool]$TrendRedisOnly + [int][bool]$TrendHttpOnly + [int][bool]$TrendLiveOnly + [int][bool]$TrendBrowserOnly) -gt 1) { throw '请只选择一种隔离验收范围。' }
+if (($AccountSecurityOnly -or $AccountProvisioningOnly -or $AccountManagementOnly -or $ProfileModerationOnly -or $TrendOnly -or $TrendRedisOnly -or $TrendHttpOnly -or $TrendLiveOnly -or $TrendBrowserOnly) -and $Action -ne 'Verify') { throw '隔离验收选项仅用于 Verify。' }
+if ($TrendBrowserLiveGithub -and -not $TrendBrowserOnly) { throw '真实 GitHub 来源选项只用于浏览器专项。' }
+if ($PSBoundParameters.ContainsKey('TrendRedisPort') -and (-not $TrendRedisOnly -or -not $SkipWslRedis)) { throw '临时Redis端口只用于 -TrendRedisOnly -SkipWslRedis。' }
 if ($WorkspaceBrowser -and (-not $ProfileModerationOnly -or $Action -ne 'Verify')) { throw '工作台浏览器验收必须同时选择 Verify -ProfileModerationOnly。' }
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $workspacePath = Join-Path $projectDirectory '.idea/workspace.xml'
@@ -87,6 +107,8 @@ if (-not $databaseConfigured -or -not $keyValid) {
 
 $previousEnvironment = @{}
 $wslKeeper = $null
+$trendContainer = $null
+$trendHttpPort = $null
 Push-Location -LiteralPath $projectDirectory
 try {
     foreach ($name in $preset.Keys) {
@@ -102,7 +124,34 @@ try {
     if ($redisHost -and $redisHost -notin @('localhost', '127.0.0.1', '::1')) {
         throw '本机验收入口只允许本机 Redis。'
     }
-    if ($Action -eq 'Run') {
+    if ($TrendHttpOnly -or $TrendLiveOnly -or $TrendBrowserOnly) {
+        if ($TrendLiveOnly -and ([Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_LIVE_CNY', 'Process') -cne 'true' -or
+            [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('POLYHOUSE_DEEPSEEK_API_KEY', 'Process')))) {
+            throw '真实样本须经隐藏输入包装，并先核对人民币计价；不要把Key传入命令参数。'
+        }
+        & docker image inspect redis:7-alpine --format '{{.Id}}' *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'G4需要已缓存的redis:7-alpine镜像；本脚本不自动拉取或修改原Redis。' }
+        $containerName = 'polyhouse-trend-g4-' + [Guid]::NewGuid().ToString('N')
+        # Windows PowerShell 5.1的原生参数传递会丢掉空字符串；显式双引号保留Redis禁RDB配置。
+        $passing = Get-Variable -Name PSNativeCommandArgumentPassing -ErrorAction SilentlyContinue
+        $emptySave = if ($null -eq $passing -or $passing.Value -eq 'Legacy') { '""' } else { '' }
+        # 只绑定本机随机端口，无宿主数据卷、禁持久化并限制资源；不重启或清空用户现有Redis。
+        & docker run --detach --rm --pull=never --name $containerName --publish '127.0.0.1::6379' --memory 64m --cpus 0.5 --pids-limit 64 --cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs '/data:rw,noexec,nosuid,size=8m' --entrypoint redis-server redis:7-alpine --save $emptySave --appendonly no --maxmemory 32mb --maxmemory-policy noeviction *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'G4临时Redis未能启动，未开始验收。' }
+        $trendContainer = $containerName
+        $mapping = (& docker port $trendContainer 6379/tcp | Out-String).Trim()
+        if ($mapping -notmatch '^127\.0\.0\.1:(\d+)$') { throw 'G4临时Redis端口绑定不符合本机限制。' }
+        $trendHttpPort = [int]$Matches[1]
+        $ready = $false
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            $pong = & docker exec $trendContainer redis-cli ping 2>$null
+            if ($LASTEXITCODE -eq 0 -and $pong -ceq 'PONG') { $ready = $true; break }
+            Start-Sleep -Milliseconds 100
+        }
+        if (-not $ready) { throw 'G4临时Redis未就绪，未开始验收。' }
+        Write-Host 'G4临时Redis已就绪；只使用测试专属库，结束后清理本次容器。'
+    }
+    if ($Action -eq 'Run' -or $TrendRedisOnly) {
         if (-not $SkipWslRedis) {
             # 本机约定为 Ubuntu 无认证 Redis。持有独立 WSL 进程直到后端退出，
             # 避免把 systemd 的 enabled 状态误当成 Windows 侧持续可访问。
@@ -139,14 +188,31 @@ try {
                 Start-Sleep -Milliseconds 200
             }
             if (-not $ready) { throw '本机 Redis 未就绪，后端尚未启动。请检查 Ubuntu 的 redis-server 和 Windows 本机端口转发。' }
-            Write-Host '本机 Redis 已就绪；后端运行期间保持 Ubuntu WSL 活跃。'
+            Write-Host '本机 Redis 已就绪；本次运行/验证期间保持 Ubuntu WSL 活跃。'
         }
+    }
+    if ($Action -eq 'Run') {
         & mvn spring-boot:run
         if ($LASTEXITCODE -ne 0) { throw '本地后端启动失败，请查看不含凭据的应用诊断。' }
     } else {
         & mvn -q compile -DskipTests
         if ($LASTEXITCODE -ne 0) { throw '后端编译失败。' }
-        if ($ProfileModerationOnly) {
+        if ($TrendBrowserOnly) {
+            $liveGithubEnabled = $TrendBrowserLiveGithub.ToString().ToLowerInvariant()
+            & mvn -q '-Dtest=TrendBrowserAcceptanceTest' '-Dpolyhouse.trend.browser=true' "-Dpolyhouse.trend.browser.live-github=$liveGithubEnabled" "-Dpolyhouse.trend.http.redis.port=$trendHttpPort" test
+        } elseif ($TrendHttpOnly -or $TrendLiveOnly) {
+            $className = if ($TrendLiveOnly) { 'TrendLiveAcceptanceTest' } else { 'TrendHttpAcceptanceTest' }
+            $flag = if ($TrendLiveOnly) { '-Dpolyhouse.trend.live.acceptance=true' } else { '-Dpolyhouse.trend.http=true' }
+            & mvn -q "-Dtest=$className" $flag "-Dpolyhouse.trend.http.redis.port=$trendHttpPort" test
+        } elseif ($TrendRedisOnly) {
+            $trendRedisArguments = @('-q', '-Dtest=TrendCacheRedisIntegrationTest', '-Dpolyhouse.trend.redis=true')
+            if ($PSBoundParameters.ContainsKey('TrendRedisPort')) {
+                $trendRedisArguments += @('-Dspring.data.redis.host=127.0.0.1', "-Dspring.data.redis.port=$TrendRedisPort")
+            }
+            & mvn @trendRedisArguments test
+        } elseif ($TrendOnly) {
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest,TrendFeeIntegrationTest,TrendScheduleIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+        } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test
             } else {
@@ -163,6 +229,10 @@ try {
                 '-Dpolyhouse.auth.integration=true' '-Dpolyhouse.jwt.runtime=true' test
         }
         if ($LASTEXITCODE -ne 0) {
+            if ($TrendBrowserOnly) { throw '星潮浏览器联调未通过，请检查 target/trend-browser-result.log 和 Surefire 汇总。' }
+            if ($TrendHttpOnly -or $TrendLiveOnly) { throw 'G4专项未通过；检查安全状态及Surefire结果，真实样本不可盲目换号重试。' }
+            if ($TrendOnly) { throw '技术雷达隔离验收失败，请检查 Surefire 汇总。' }
+            if ($TrendRedisOnly) { throw '技术雷达Redis专项失败，请检查本机连接及Surefire汇总。' }
             if ($ProfileModerationOnly) { throw '资料审核隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountManagementOnly) { throw '账号管理隔离验收失败，请检查 Surefire 汇总。' }
             if ($AccountProvisioningOnly) { throw '账号开户隔离验收失败，请检查 Surefire 汇总。' }
@@ -171,6 +241,11 @@ try {
         }
     }
 } finally {
+    if ($null -ne $trendContainer) {
+        if ($trendContainer -notmatch '^polyhouse-trend-g4-[0-9a-f]{32}$') { throw '拒绝清理不属于本次G4的容器。' }
+        & docker rm --force $trendContainer *> $null
+        if ($LASTEXITCODE -ne 0) { Write-Warning '本次G4临时容器清理失败，请按本次专属名称核对；未停止其他容器。' }
+    }
     # 只释放本次启动的辅助进程，不停止 Redis 服务、不关闭整个 WSL。
     if ($null -ne $wslKeeper -and -not $wslKeeper.HasExited) {
         Stop-Process -Id $wslKeeper.Id -ErrorAction Continue

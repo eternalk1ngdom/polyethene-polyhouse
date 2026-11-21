@@ -1,0 +1,18 @@
+[
+  {"id":1229774092,"name":"elementalsouls/Claude-BugHunter","stars":12961,"added":1349,"status":"STALE","analyzedAt":"2026-11-18T11:21:45.644860800Z"},
+  {"id":1073224795,"name":"obra/superpowers","stars":322299,"added":2028,"status":"STALE","analyzedAt":"2026-11-18T10:10:14.995484900Z"},
+  {"id":1176011916,"name":"HKUDS/CLI-Anything","stars":60778,"added":898,"status":"STALE","analyzedAt":"2026-11-18T11:21:49.230425500Z"},
+  {"id":834369920,"name":"jingyaogong/minimind","stars":67191,"added":238,"status":"STALE","analyzedAt":"2026-11-18T10:10:28.099974400Z"},
+  {"id":1140229822,"name":"cursor/plugins","stars":17639,"added":384,"status":"STALE","analyzedAt":"2026-11-18T11:21:47.299405800Z"},
+  {"id":787076358,"name":"firecrawl/firecrawl","stars":204527,"added":825,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":37912398,"name":"nginx/nginx","stars":32409,"added":73,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":153097643,"name":"openvinotoolkit/openvino","stars":11622,"added":246,"status":"STALE","analyzedAt":"2026-11-18T11:22:01.342474300Z"},
+  {"id":1212769188,"name":"cathrynlavery/diagram-design","stars":68837,"added":271,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":1140843380,"name":"mvanhorn/last30days-skill","stars":70998,"added":954,"status":"STALE","analyzedAt":"2026-11-18T10:09:59.348182Z"},
+  {"id":1135847870,"name":"google-labs-code/stitch-skills","stars":10815,"added":302,"status":"STALE","analyzedAt":"2026-11-18T10:10:10.663493700Z"},
+  {"id":1261204838,"name":"mjmirza/app-store-compliance","stars":2120,"added":377,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":1133141258,"name":"Tracer-Cloud/opensre","stars":13256,"added":38,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":519859998,"name":"toeverything/AFFiNE","stars":75329,"added":182,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":679086250,"name":"XiaoYouChR/Ghost-Downloader-3","stars":13072,"added":341,"status":"UNAVAILABLE","analyzedAt":null},
+  {"id":1015815983,"name":"zhouxiaoka/autoclip","stars":11582,"added":126,"status":"UNAVAILABLE","analyzedAt":null}
+]

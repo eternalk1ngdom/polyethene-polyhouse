@@ -5,6 +5,7 @@ import { ElIcon, ElPopover } from 'element-plus'
 import { ArrowDown, User } from '@element-plus/icons-vue'
 import BrandLogo from './BrandLogo.vue'
 import { toolRegistry } from '../config/toolRegistry'
+import { starTide } from '../config/starTide'
 import AuthDialog from './AuthDialog.vue'
 import DeregisterDialog from './DeregisterDialog.vue'
 import PasswordChangeDialog from './PasswordChangeDialog.vue'
@@ -46,6 +47,9 @@ watch(
       </RouterLink>
       <nav class="primary-nav" aria-label="主导航">
         <RouterLink to="/" exact-active-class="is-active">首页</RouterLink>
+        <RouterLink :to="starTide.route" active-class="is-active">
+          {{ starTide.title }}<span class="nav-description">{{ starTide.tag }}</span>
+        </RouterLink>
         <RouterLink
           v-for="tool in toolRegistry"
           :key="tool.code"

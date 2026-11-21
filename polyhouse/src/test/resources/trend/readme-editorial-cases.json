@@ -1,0 +1,62 @@
+[
+  {
+    "name": "cursor/plugins",
+    "opening": "# Cursor plugins\nDevelopers can package tools for Cursor as plugins.",
+    "installLines": 190,
+    "rest": "## Table of contents\n- [Usage](#usage)\n## Usage\nUse an existing plugin directory as an example when arranging a new plugin.\n## Architecture\nEach plugin has its own directory and .cursor-plugin/plugin.json manifest.",
+    "fact": ".cursor-plugin/plugin.json"
+  },
+  {
+    "name": "openvinotoolkit/openvino",
+    "opening": "# OpenVINO\nConvert a trained model and run inference on a target device.",
+    "installLines": 190,
+    "rest": "## Usage\nConvert a trained PyTorch model before running predictions.\n## Supported platforms\nThe listed targets include x86 and ARM CPUs, Intel GPUs and Intel NPUs.",
+    "fact": "Intel GPUs and Intel NPUs",
+    "draft": {
+      "category": "AI_INFRA",
+      "definition": "开发者可以用 OpenVINO 转换训练好的模型，让目标设备用它执行预测。",
+      "painPoint": "比如，团队已经用 PyTorch 训练好图像模型，接下来想让一台配备 CPU 的电脑用它做预测。OpenVINO 提供从训练框架里的模型到目标设备上运行推理的转换和执行工具。开发者可以拿同一张图片，对照转换前后的预测结果，再决定这份模型能否交付。这里讨论的是已有模型怎样运行。它在这台电脑上能快多少、输出有无精度差异，需要拿实际模型检查。",
+      "comparison": null,
+      "highlights": ["转换环节衔接 PyTorch 等训练框架；运行环节面向目标设备。排查部署问题时，可以分别检查模型能否转换，以及转换后能否在目标设备上运行。"],
+      "documentedLimitations": ["材料列举了 x86 和 ARM CPU、Intel GPU、Intel NPU。"],
+      "inferredRisks": ["换设备或转换模型时可能遇到算子兼容或精度差异，须用实际输入核对。"]
+    }
+  },
+  {
+    "name": "cathrynlavery/diagram-design",
+    "opening": "<h1>Diagram design</h1><p>Generate diagrams as a single HTML file.</p>",
+    "installLines": 190,
+    "rest": "<nav>navigation placeholder</nav><h2>使用示例</h2><p>把生成的 HTML 文件交给同事，对方可以双击打开图表。</p><h2>设计</h2><p>图表可以沿用品牌样式。</p>",
+    "fact": "双击打开图表"
+  },
+  {
+    "name": "zhouxiaoka/autoclip",
+    "opening": "AutoClip\n========\n把长视频剪成短视频。",
+    "installLines": 0,
+    "rest": "输入与输出\n----------\n输入可以是播客、访谈或课程的视频。输出包括短视频、字幕、封面和发布文案。",
+    "fact": "字幕、封面和发布文案"
+  },
+  {
+    "name": "sample/awesome-books",
+    "opening": "# Reading list\nA bibliography grouped by subject.",
+    "installLines": 0,
+    "rest": "## Usage\nPick a subject and follow the listed reading links.",
+    "fact": "listed reading links"
+  },
+  {
+    "name": "sample/meeting-notes",
+    "opening": "把会议录音整理为纪要。",
+    "installLines": 0,
+    "rest": "",
+    "fact": "会议录音整理为纪要",
+    "draft": {
+      "category": "OTHER",
+      "definition": "这个工具可以把会议录音整理为纪要。",
+      "painPoint": "开完会需要整理记录的人，可以把录音交给这个工具，得到一份会议纪要。材料没有交代它能否区分发言人，也没有说明是否会提取待办事项。",
+      "comparison": null,
+      "highlights": [],
+      "documentedLimitations": [],
+      "inferredRisks": []
+    }
+  }
+]

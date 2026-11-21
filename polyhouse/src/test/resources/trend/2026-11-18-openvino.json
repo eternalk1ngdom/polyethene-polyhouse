@@ -1,0 +1,21 @@
+{
+  "category": "AI_INFRA",
+  "definition": "开源工具包，用于优化和部署深度学习模型推理。",
+  "painPoint": "降低深度学习模型在边缘到云平台部署的资源需求，提升视觉、语音、生成式AI等任务的推理性能。",
+  "comparison": null,
+  "highlights": [
+    "支持PyTorch、TensorFlow、ONNX、Keras、PaddlePaddle、JAX/Flax等框架模型转换与部署",
+    "支持CPU（x86、ARM）、Intel集成/独立GPU及Intel NPU推理",
+    "可通过Optimum Intel集成Hugging Face Hub的transformers和diffusers模型"
+  ],
+  "documentedLimitations": ["推理设备支持范围限于CPU（x86、ARM）、Intel集成与独立GPU、Intel NPU"],
+  "inferredRisks": [
+    "对非Intel硬件加速器的支持有限，可能限制异构平台部署灵活性",
+    "从原始框架转换模型可能引入算子兼容性或精度差异",
+    "边缘设备上的模型优化需针对具体硬件调优，增加工程复杂度"
+  ],
+  "analyzedAt": "2026-11-18T11:22:01.342474300Z",
+  "readmeVersion": "7fa8d27f1e8f8e7d675aebc7a0a7c718c5b26d32",
+  "model": "deepseek-flash",
+  "ruleVersion": "radar-1"
+}

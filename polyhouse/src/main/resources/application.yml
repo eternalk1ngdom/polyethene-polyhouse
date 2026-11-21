@@ -46,6 +46,29 @@ mybatis-plus:
 
 # 聚妙屋自定义安全配置
 polyhouse:
+  # 通用配置关闭星潮。本机默认值见 application-default.yml，密钥仍由运行环境注入。
+  trend:
+    enabled: ${POLYHOUSE_TREND_ENABLED:false}
+    github-token: ${POLYHOUSE_GITHUB_TOKEN:}
+    # 手动任务依赖增量表，开关独立于后面的每日调度。
+    jobs:
+      enabled: ${POLYHOUSE_TREND_JOBS_ENABLED:false}
+    # 自动受理独立关闭；时间固定按Asia/Shanghai解释，休眠时不补造历史日报。
+    schedule:
+      enabled: ${POLYHOUSE_TREND_SCHEDULE_ENABLED:false}
+      daily-time: ${POLYHOUSE_TREND_DAILY_TIME:06:30}
+      retry-delay-minutes: 45
+    # 单条公开内容缓存；数据库指针仍是权威，不用于防重或存放私有材料。
+    cache:
+      enabled: ${POLYHOUSE_TREND_CACHE_ENABLED:false}
+    # Key 只注入后端进程；月额度使用人民币微元，最高仍为已批准的十元。
+    ai:
+      enabled: ${POLYHOUSE_TREND_AI_ENABLED:false}
+      api-key: ${POLYHOUSE_DEEPSEEK_API_KEY:}
+      model: deepseek-flash
+      input-yuan-per-million: 2
+      output-yuan-per-million: 8
+      monthly-budget-micros: 10000000
   jwt:
     # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}

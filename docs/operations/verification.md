@@ -48,6 +48,8 @@ npm run lint:check
 
 编译通过和 Spring 上下文启动成功不等于数据库或 Redis 已完成连接验证；实际数据读写需要另行集成测试。普通测试不会执行 MySQL 查询，MySQL 和 Redis 实例测试默认跳过。
 
+技术雷达`./polyhouse/scripts/Invoke-LocalAuth.ps1 -Action Verify -TrendOnly`仅验证随机MySQL库，含归档、预算、任务/费用、定时窗口/身份及回退，不运行账号/OWNER夹具、不连接真实Redis/AI。内容Lua另用`-Action Verify -TrendRedisOnly`验证本机随机Redis键，不碰正式内容/认证键、不连MySQL；自行管理Redis加`-SkipWslRedis`，临时端口可加`-TrendRedisPort`。普通测试不启用`polyhouse.trend.integration`、`polyhouse.trend.redis`或`polyhouse.trend.live`。入口/边界见[模块说明](github-tech-radar.md)，Java夹具归`trend/`，包装以[安全说明](deepseek-key-safety.md)的假后端脚本验，不传真实Key。
+
 ## 自动化浏览器访问本机服务
 
 开发终端显示 Vite `ready`，只说明进程完成启动。浏览器连接超时时，先在实际运行浏览器的宿主机终端检查监听和 HTTP 响应，避免把不同隔离环境的结果混用：
