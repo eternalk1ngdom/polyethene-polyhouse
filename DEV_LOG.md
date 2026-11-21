@@ -4,7 +4,7 @@
 
 - 当前：[星潮采集、生成与发布](docs/dev-log/v1.0-dev.15.md#工程收口与文章交接)完成本机阶段核对。11 月 21 日常规采集截图已有本期新稿，读者反馈正文难懂。[文章结构专项](docs/plans/startide-insight-quality.md#文章结构专项候选)留给后续独立分支。11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
-- 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
+- 集成：星潮通过[合入前复验](docs/dev-log/v1.0-dev.15.md#合入-dev-前复验)，用户授权任务分支经 PR 进入 GitHub `dev`。后续文章专项以集成后的 `dev` 为基线。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
