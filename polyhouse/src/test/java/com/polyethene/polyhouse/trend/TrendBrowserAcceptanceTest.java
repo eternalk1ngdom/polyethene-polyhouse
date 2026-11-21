@@ -9,6 +9,7 @@ import com.polyethene.polyhouse.service.TrendArchiveService;
 import com.polyethene.polyhouse.service.TrendJobRunner;
 import com.polyethene.polyhouse.service.trend.DeepSeekGateway;
 import com.polyethene.polyhouse.service.trend.GithubTrendClient;
+import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -45,6 +46,7 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
     private static final String HISTORY_DAY = "2025-01-15";
     private static TrendAcceptanceSandbox sandbox;
     @Autowired private TrendArchiveService archive;
+    @Autowired private TrendInsightCodec codec;
     @Autowired private TrendJobRunner runner;
     @SpyBean private GithubTrendClient github;
     @MockBean private DeepSeekGateway ai;
@@ -72,7 +74,9 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
         if (!live) {
             // 发布后从匿名接口核对同仓库的成功旧稿，防止仅验证“没有扣费”漏掉整期缺文。
             jdbc.update("INSERT INTO tool_trend_ai_repository(repository_id, payload) VALUES(?, ?)",
-                    2L, TrendFixture.json().writeValueAsString(previous));
+                    2L, codec.encode(previous));
+            jdbc.update("INSERT INTO tool_trend_ai_repository(repository_id, payload) VALUES(?, ?)",
+                    3L, codec.encode(TrendAiFixture.insight(Instant.now().minusSeconds(86400))));
         }
         doAnswer(invocation -> {
             if (attempts.incrementAndGet() != 1) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
@@ -120,6 +124,8 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
             var items = report.path("items");
             assertThat(items.get(0).path("insight").isNull() || items.get(0).path("insight").isMissingNode()).isTrue();
             assertThat(items.get(1).path("insightStatus").asText()).isEqualTo("STALE");
+            assertThat(items.get(1).path("insightReason").asText()).isEqualTo("NOT_ANALYZED");
+            assertThat(items.get(2).path("insightStatus").asText()).isEqualTo("REUSED");
             assertThat(TrendFixture.json().treeToValue(items.get(1).get("insight"), previous.getClass())).isEqualTo(previous);
         }
         org.slf4j.LoggerFactory.getLogger(getClass()).info("星潮浏览器验收通过：{}日榜 {} 项，无 AI 请求", live ? "GitHub 实时" : "固定", projects.get());
@@ -149,7 +155,7 @@ class TrendBrowserAcceptanceTest extends TrendHttpAcceptanceSupport {
         String name = "sample/browser-project-" + rank;
         var snapshot = new TrendProjectVO(rank, Integer.toString(rank), name, "https://github.com/" + name,
                 "Browser acceptance fixture", rank % 2 == 0 ? "TypeScript" : "Java", 10L, 2L, 1L, "MIT",
-                false, "CODE_PROJECT", "BUILD_AND_SOURCE", "AVAILABLE", "MISSING", "NOT_ANALYZED");
-        return new TrendCollection.Project(snapshot, null, "");
+                false, "CODE_PROJECT", "BUILD_AND_SOURCE", "AVAILABLE", rank == 3 ? "AVAILABLE" : "MISSING", "NOT_ANALYZED");
+        return new TrendCollection.Project(snapshot, rank == 3 ? TrendAiFixture.SHA : null, rank == 3 ? "fixture notes" : "");
     }
 }

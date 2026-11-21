@@ -242,9 +242,10 @@ public class TrendJobStore {
     private void requireReady() {
         if (!module.enabled() || !jobs.enabled()) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "技术雷达任务尚未启用");
     }
-    private static TrendJobVO view(TrendJobRecord job) {
+    private TrendJobVO view(TrendJobRecord job) {
         return new TrendJobVO(job.id(), job.state(), job.phase(), job.aiRequested(), instant(job.createdAt()), instant(job.startedAt()),
-                instant(job.completedAt()), instant(job.deadline()), job.reportId(), job.reason(), job.actorId() == null ? "SCHEDULED" : "MANUAL");
+                instant(job.completedAt()), instant(job.deadline()), job.reportId(), job.reason(), job.actorId() == null ? "SCHEDULED" : "MANUAL",
+                job.reportId() == null ? null : archive.summary(job.reportId()));
     }
     private static Instant instant(LocalDateTime value) { return value == null ? null : value.toInstant(ZoneOffset.UTC); }
     private static LocalDateTime earlier(LocalDateTime a, LocalDateTime b) { return a.isBefore(b) ? a : b; }

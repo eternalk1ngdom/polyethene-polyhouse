@@ -4,7 +4,7 @@ import { ElIcon } from 'element-plus'
 import { TopRight, StarFilled } from '@element-plus/icons-vue'
 import voyage from '../../assets/startide-voyage.webp'
 import type { TrendProject, TrendReport } from '../../api/trend'
-import { insightLabel, trendNumber, trendTime } from './presentation'
+import { insightLabel, insightReasonLabel, trendNumber, trendTime } from './presentation'
 
 interface Props {
   /** 日报内的仓库快照，同名仓库在不同期次可有不同解读。 */
@@ -14,11 +14,17 @@ interface Props {
 }
 const props = defineProps<Props>()
 const insight = computed(() => props.project.insight)
+const readmeLabels: Record<string, string> = {
+  AVAILABLE: '本期已取得',
+  MISSING: '仓库未提供',
+  UNAVAILABLE: '本期未取得',
+}
 const facts = computed(() => [
   ['总星标', trendNumber(props.project.totalStars)],
   ['Fork', trendNumber(props.project.forksCount)],
   ['主语言', props.project.primaryLanguage ?? '未知'],
   ['许可证', props.project.license ?? '未识别'],
+  ['README', readmeLabels[props.project.readmeStatus] ?? '未知'],
   [
     '归档状态',
     props.project.archived === null ? '未知' : props.project.archived ? '已归档' : '未归档',
@@ -49,9 +55,16 @@ const facts = computed(() => [
                 ? '本期 AI 解读'
                 : 'AI · ' + insightLabel(project.insightStatus)
             }}</strong>
-            <small v-if="project.insightStatus === 'STALE'"
+            <small v-if="project.insightStatus === 'REUSED'">
+              本期于 {{ trendTime(report.capturedAt) }} 核对资料，原稿生成于
+              {{ trendTime(insight.analyzedAt) }}（北京时间）
+            </small>
+            <small v-else-if="project.insightStatus === 'STALE'"
               >原生成于 {{ trendTime(insight.analyzedAt) }}（北京时间）</small
             >
+            <small v-if="project.insightStatus === 'STALE' && project.insightReason">
+              {{ insightReasonLabel(project.insightReason) }}
+            </small>
             <p>{{ insight.definition }}</p>
           </header>
           <section>
@@ -98,7 +111,13 @@ const facts = computed(() => [
           <h2>GitHub 原始简介</h2>
           <p>{{ project.description ?? '仓库未提供简介。' }}</p>
         </section>
-        <p v-if="!insight" class="note">{{ insightLabel(project.insightStatus) }}</p>
+        <p v-if="!insight" class="note">
+          {{
+            project.insightReason
+              ? insightReasonLabel(project.insightReason)
+              : insightLabel(project.insightStatus)
+          }}
+        </p>
       </div>
       <aside aria-label="本期仓库资料">
         <h2>仓库快照</h2>

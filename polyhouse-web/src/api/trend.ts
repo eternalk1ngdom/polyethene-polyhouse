@@ -32,6 +32,7 @@ export interface TrendProject {
   metadataStatus: string
   readmeStatus: string
   insightStatus: string
+  insightReason: string | null
   insight: TrendInsight | null
 }
 
@@ -67,6 +68,22 @@ export interface TrendJob {
   reportId: string | null
   reason: string | null
   trigger: 'MANUAL' | 'SCHEDULED'
+  summary: TrendPublicationSummary | null
+}
+
+export interface TrendPublicationSummary {
+  total: number
+  generated: number
+  reused: number
+  stale: number
+  skipped: number
+  missing: number
+  rejected: number
+  pending: number
+  readmeAvailable: number
+  eligible: number
+  currentEligible: number
+  missingDescription: number
 }
 
 export interface TrendJobSubmission {
@@ -198,6 +215,7 @@ function project(value: unknown): TrendProject {
     metadataStatus: text(row.metadataStatus),
     readmeStatus: text(row.readmeStatus),
     insightStatus: text(row.insightStatus),
+    insightReason: optional(row.insightReason, text),
     insight: optional(row.insight, insight),
   }
 }
@@ -225,6 +243,24 @@ function periods(value: unknown): TrendPeriods {
   }
 }
 
+function publicationSummary(value: unknown): TrendPublicationSummary {
+  const row = object(value)
+  return {
+    total: whole(row.total),
+    generated: whole(row.generated),
+    reused: whole(row.reused),
+    stale: whole(row.stale),
+    skipped: whole(row.skipped),
+    missing: whole(row.missing),
+    rejected: whole(row.rejected),
+    pending: whole(row.pending),
+    readmeAvailable: whole(row.readmeAvailable),
+    eligible: whole(row.eligible),
+    currentEligible: whole(row.currentEligible),
+    missingDescription: whole(row.missingDescription),
+  }
+}
+
 function job(value: unknown): TrendJob {
   const row = object(value)
   return {
@@ -239,6 +275,7 @@ function job(value: unknown): TrendJob {
     reportId: optional(row.reportId, id),
     reason: optional(row.reason, text),
     trigger: choice(row.trigger, ['MANUAL', 'SCHEDULED']),
+    summary: optional(row.summary, publicationSummary),
   }
 }
 

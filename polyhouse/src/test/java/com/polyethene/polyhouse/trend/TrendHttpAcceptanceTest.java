@@ -5,6 +5,7 @@ import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
 import com.polyethene.polyhouse.service.TrendJobRunner;
+import com.polyethene.polyhouse.service.TrendArchiveService;
 import com.polyethene.polyhouse.service.trend.DeepSeekGateway;
 import com.polyethene.polyhouse.service.trend.GithubTrendClient;
 import org.junit.jupiter.api.*;
@@ -38,6 +39,7 @@ import static org.mockito.Mockito.*;
 class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
     private static TrendAcceptanceSandbox sandbox;
     @Autowired private TrendJobRunner runner;
+    @Autowired private TrendArchiveService archive;
     @MockBean private GithubTrendClient source;
     @MockBean private DeepSeekGateway gateway;
     private final AtomicInteger collected = new AtomicInteger();
@@ -126,6 +128,18 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
         assertThat(collected.get()).isEqualTo(1); verify(gateway, times(1)).complete(any());
     }
 
+    @Test void longEditionSurvivesRealRedisCorruptionAndAnonymousReadBack() throws Exception {
+        String id = UUID.randomUUID().toString();
+        archive.publish(id, TrendAiFixture.longEdition());
+        var first = data(call("GET", "/api/trend/report", null, null));
+        assertThat(first.path("items").size()).isEqualTo(25);
+        assertThat(redis.opsForHash().get(CACHE_KEY, "id")).isEqualTo(id);
+        redis.opsForHash().put(CACHE_KEY, "payload", "{");
+        assertThat(data(call("GET", "/api/trend/report", null, null))).isEqualTo(first);
+        assertThat(redis.opsForHash().get(CACHE_KEY, "payload").toString()).contains(id);
+        verifyNoInteractions(source, gateway);
+    }
+
     @Test void sameReadmeReusesInsightNewVersionPublishesAndFailedUpdateKeepsOldReport() throws Exception {
         String token = login(actor(UserRoleEnum.OWNER, false));
         assertThat(awaitTerminal(submit(token))).isEqualTo("SUCCEEDED");
@@ -134,6 +148,11 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
         var latest = data(call("GET", "/api/trend/report", null, null));
         assertThat(latest.path("reportId").asText()).isNotEqualTo(first);
         assertThat(latest.path("items").get(0).path("insightStatus").asText()).isEqualTo("REUSED");
+        var older = data(call("GET", "/api/manage/trend/jobs?jobId=" + first, token, null)).path("summary");
+        var newer = data(call("GET", "/api/manage/trend/jobs?jobId=" + latest.path("reportId").asText(), token, null)).path("summary");
+        assertThat(older.path("generated").intValue()).isOne();
+        assertThat(older.path("reused").intValue()).isZero();
+        assertThat(newer.path("reused").intValue()).isOne();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tool_trend_report_version", Integer.class)).isEqualTo(2);
         fail.set(true); expireCooldown(); assertThat(awaitTerminal(submit(token))).isEqualTo("FAILED");
         assertThat(data(call("GET", "/api/trend/report", null, null)).path("reportId").asText()).isEqualTo(latest.path("reportId").asText());

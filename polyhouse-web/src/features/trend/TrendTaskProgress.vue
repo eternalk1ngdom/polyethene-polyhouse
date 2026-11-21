@@ -60,6 +60,33 @@ const stopped = computed(() => props.job?.state === 'FAILED' || props.job?.state
     <div class="body">
       <div class="result" aria-live="polite">
         <h3 :data-state="job?.state">{{ headline }}</h3>
+        <template v-if="published && job?.summary">
+          <p>
+            收录 {{ job.summary.total }} 项 · 新生成 {{ job.summary.generated }} 篇 · 有效复用
+            {{ job.summary.reused }} 篇 · 沿用旧稿 {{ job.summary.stale }} 篇
+          </p>
+          <p v-if="job.summary.skipped || job.summary.missing">
+            无需解读 {{ job.summary.skipped }} 项 · 缺少正文 {{ job.summary.missing }} 项
+          </p>
+          <p v-if="job.summary.rejected || job.summary.pending">
+            本次生成记录：未通过校验 {{ job.summary.rejected }} 项 · 结果待核对
+            {{ job.summary.pending }} 项
+          </p>
+          <details>
+            <summary>资料与正文覆盖</summary>
+            <p>取得 README {{ job.summary.readmeAvailable }} / {{ job.summary.total }} 项</p>
+            <p v-if="job.summary.eligible">
+              材料齐全且需要分析的 {{ job.summary.eligible }} 项中，{{
+                job.summary.currentEligible
+              }}
+              项有当前有效解读。
+            </p>
+            <p v-else>本期没有材料齐全且需要分析的项目。</p>
+            <p v-if="job.summary.missingDescription">
+              缺少正文的项目中，{{ job.summary.missingDescription }} 项也没有仓库简介。
+            </p>
+          </details>
+        </template>
         <p v-if="note">{{ note }}</p>
         <p v-if="job">
           {{ job.trigger === 'MANUAL' ? '手动触发' : '定时触发' }} ·

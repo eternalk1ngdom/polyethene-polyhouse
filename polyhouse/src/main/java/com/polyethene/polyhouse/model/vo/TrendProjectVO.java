@@ -1,5 +1,7 @@
 package com.polyethene.polyhouse.model.vo;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * 当期基础资料快照；不包含 README 正文、上游错误或内部令牌。
  * @param rankNum 来源榜单排名，筛选后也不重排为新的官方排名
@@ -19,12 +21,22 @@ package com.polyethene.polyhouse.model.vo;
  * @param readmeStatus AVAILABLE、MISSING 或 UNAVAILABLE，区分不存在与获取失败
  * @param insightStatus 区分 ANALYZED、REUSED、STALE 及缺失原因，不伪造 AI 已完成
  * @param insight 当前选用的解读，缺失为 null；旧日报未有此字段也可读取
+ * @param insightReason 本次未出新稿的公开原因；历史未记录或已成功时为空
  */
 public record TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
                              String description, String primaryLanguage, Long totalStars, Long starsAdded,
                              Long forksCount, String license, Boolean archived, String repoType,
                              String classificationReason, String metadataStatus, String readmeStatus,
-                             String insightStatus, TrendInsightVO insight) {
+                             String insightStatus, TrendInsightVO insight,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) String insightReason) {
+    /** 保留既有采集与测试投影，缺失的原因不从历史状态倒推。 */
+    public TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
+                          String description, String primaryLanguage, Long totalStars, Long starsAdded,
+                          Long forksCount, String license, Boolean archived, String repoType,
+                          String classificationReason, String metadataStatus, String readmeStatus, String insightStatus, TrendInsightVO insight) {
+        this(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage, totalStars, starsAdded, forksCount,
+                license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, insight, null);
+    }
     /** 基础采集仍不依赖 AI，兼容既有内部投影及历史 JSON 缺失解读字段。 */
     public TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
                            String description, String primaryLanguage, Long totalStars, Long starsAdded,
@@ -38,13 +50,18 @@ public record TrendProjectVO(int rankNum, String repositoryId, String fullName, 
     public TrendProjectVO withRepositoryId(String id) {
         return new TrendProjectVO(rankNum, id, fullName, repoUrl, description, primaryLanguage,
                 totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
-                metadataStatus, readmeStatus, insightStatus, insight);
+                metadataStatus, readmeStatus, insightStatus, insight, insightReason);
     }
 
     /** 只替换解读投影，保留本次榜单的基础资料，不回写其他日报。 */
     public TrendProjectVO withInsight(String status, TrendInsightVO value) {
+        return withInsight(status, value, null);
+    }
+
+    /** 旧稿来源与本次分析结果独立归档，保留被拒稿或预算不足等事实。 */
+    public TrendProjectVO withInsight(String status, TrendInsightVO value, String reason) {
         return new TrendProjectVO(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage,
                 totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
-                metadataStatus, readmeStatus, status, value);
+                metadataStatus, readmeStatus, status, value, reason);
     }
 }

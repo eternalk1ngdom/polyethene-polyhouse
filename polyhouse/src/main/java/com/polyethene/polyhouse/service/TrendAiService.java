@@ -102,9 +102,10 @@ public class TrendAiService {
 
     private TrendCollection.Project generate(String executionId, TrendCollection.Project project, long repo,
             String previousPayload, TrendInsightVO previous, AtomicBoolean paused, Runnable guard) {
-        if (paused.get() || !settings.ready() || project.readmeVersion() == null
+        if (paused.get() || !settings.ready()) return fallback(project, previous, "UNAVAILABLE");
+        if (project.readmeVersion() == null
                 || !project.readmeVersion().matches("(?:[a-f0-9]{40}|[a-f0-9]{64})")
-                || project.readmeText() == null || project.readmeText().isBlank()) return fallback(project, previous, "UNAVAILABLE");
+                || project.readmeText() == null || project.readmeText().isBlank()) return fallback(project, previous, "MATERIAL_UNAVAILABLE");
         try {
             var prepared = codec.prepare(project, settings.model());
             String id = UUID.nameUUIDFromBytes((executionId + ":" + repo).getBytes(StandardCharsets.UTF_8)).toString();
@@ -188,7 +189,9 @@ public class TrendAiService {
             // STALE 对读者说明稿件来源，诊断保留这次为何没有成功生成，尤其是已结算的拒收稿。
             LOGGER.info("星潮沿用旧稿：仓库={}，本次解读结果={}，资料诊断={}", project.snapshot().repositoryId(), reason, project.sourceIssue());
         }
-        return result(project, old, old == null ? reason : "STALE");
+        String status = old != null ? "STALE" : "MATERIAL_UNAVAILABLE".equals(reason) ? "UNAVAILABLE" : reason;
+        return new TrendCollection.Project(project.snapshot().withInsight(status, old, reason), project.readmeVersion(),
+                project.readmeText(), project.sourceIssue());
     }
     private static TrendCollection.Project result(TrendCollection.Project project, TrendInsightVO insight, String status) {
         return new TrendCollection.Project(project.snapshot().withInsight(status, insight), project.readmeVersion(),

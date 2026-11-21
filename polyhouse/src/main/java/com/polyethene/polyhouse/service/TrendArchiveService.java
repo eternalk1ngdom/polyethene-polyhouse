@@ -8,6 +8,7 @@ import com.polyethene.polyhouse.mapper.TrendMapper;
 import com.polyethene.polyhouse.model.entity.TrendCollection;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
+import com.polyethene.polyhouse.model.vo.TrendPublicationSummaryVO;
 import com.polyethene.polyhouse.service.trend.GithubTrendingParser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -32,6 +33,19 @@ public class TrendArchiveService {
         this.json = json;
         transaction = new TransactionTemplate(manager);
         transaction.setTimeout(5);
+    }
+
+    /** 屋主查询或重放旧任务时，按归档编号读取，即使同一天已再次发布也可还原本次结果。 */
+    TrendPublicationSummaryVO summary(String reportId) {
+        var record = mapper.findVersion(reportId);
+        if (record == null) return null;
+        try {
+            return TrendPublicationSummaryVO.from(reports.decode(record));
+        } catch (BusinessException failure) {
+            // 单个历史快照损坏时，任务的发布状态仍可核对。
+            org.slf4j.LoggerFactory.getLogger(TrendArchiveService.class).warn("星潮历史任务摘要不可读：版本={}", reportId);
+            return null;
+        }
     }
 
     /** 同一 UUID 幂等；较旧采集不能覆盖较新内容，保留旧版本以供追溯。 */

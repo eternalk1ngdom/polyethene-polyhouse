@@ -3,6 +3,8 @@ package com.polyethene.polyhouse.trend;
 import com.polyethene.polyhouse.config.*;
 import com.polyethene.polyhouse.model.entity.*;
 import com.polyethene.polyhouse.model.vo.TrendInsightVO;
+import com.polyethene.polyhouse.model.vo.TrendReportVO;
+import com.polyethene.polyhouse.model.vo.TrendPublicationSummaryVO;
 import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
 import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Stage;
 import com.polyethene.polyhouse.service.*;
@@ -220,6 +222,28 @@ class TrendAiServiceTest {
         verify(gateway, times(1)).complete(any());
         verify(ledger).settle(anyString(), eq(100), eq(20), isNull());
         assertThat(output.getAll()).contains("INVALID_JSON").doesNotContain(rawResponse, TrendAiFixture.KEY, "Ignore all prior instructions");
+    }
+
+    @Test void rejectedArticleKeepsItsReasonAlongsideThePriorText() {
+        var old = TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofDays(20)));
+        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(old)));
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply("{}", 100, 20));
+        var item = service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection())
+                .projects().getFirst().snapshot();
+        assertThat(item.insight()).isEqualTo(old);
+        assertThat(item.insightStatus()).isEqualTo("STALE");
+        assertThat(item.insightReason()).isEqualTo("INVALID_OUTPUT");
+        var base = TrendFixture.report();
+        var report = new TrendReportVO(base.reportId(), base.periodType(), base.periodKey(),
+                base.capturedAt(), base.publishedAt(), base.sourceUrl(), false, List.of(item));
+        var summary = TrendPublicationSummaryVO.from(report);
+        assertThat(summary.stale()).isOne();
+        assertThat(summary.rejected()).isOne();
+        assertThat(summary.missing()).isZero();
+        assertThat(summary.eligible()).isOne();
+        assertThat(summary.currentEligible()).isZero();
+        verify(ledger).settle(anyString(), eq(100), eq(20), isNull());
     }
 
     @Test void unknownNetworkResultRetainsBudgetButProvenNotSentCancels() {

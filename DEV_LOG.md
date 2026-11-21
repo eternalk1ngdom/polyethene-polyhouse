@@ -2,7 +2,7 @@
 
 更新时间：2026-11-21（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：[星潮后端专项](docs/plans/startide-insight-quality.md)第 1～2 步已验，11 月 20 日下午断源的首个故障仍无现场证据。第 3 步已实现中心句与展开正文、README 分节选段，并完成[六组试读对照](docs/plans/startide-article-comparison.md)。三份长样本的后段证据均进入模型请求；独立读者试读及真实生成待验。[前端](docs/plans/startide-reader-redesign.md)整体验收暂缓。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)默认开启阅读与手动更新。G4 历史真实样本及 ¥0.01 账单已核对，保留验收库。
+- 当前：[星潮解读专项](docs/plans/startide-insight-quality.md)第 1～3 步工程复核完成；第 4 步任务统计、未生成原因和复用时间已通过[发布联调](docs/dev-log/v1.0-dev.15.md#发布结果稿件来源与真实旧稿复核)。[六组试读](docs/plans/startide-article-comparison.md)及四篇真实旧稿已核对。11 月 20 日下午首个故障仍缺现场证据。本轮不建跨天材料库，单篇新版真实验收与独立试读分别跟进。[本机启动](docs/operations/github-tech-radar.md#本机启动与首次阅读)保留原入口。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 分支：`codex/github-tech-radar` 源自 dev `c06ed41`，含 PR #5 `c7d391f` 及交接；main/部署未变，远端/部署另行授权。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。

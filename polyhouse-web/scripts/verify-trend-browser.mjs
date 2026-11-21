@@ -66,7 +66,21 @@ try {
   await page.getByText('已受理本次更新。', { exact: true }).waitFor()
   await page.reload()
   await page.getByRole('heading', { name: /^已发布/ }).waitFor({ timeout: 210_000 })
-  await page.getByText(/手动触发.*仅采集资料/).waitFor()
+  stage = '读取已发布任务的来源与版本摘要'
+  await page.locator('.task .result p').filter({ hasText: /手动触发\s*·\s*仅采集资料/ }).waitFor()
+  stage = '验证本任务的文章数与覆盖分母'
+  const summary = page.locator('.task .result p').filter({ hasText: /收录\s*\d+\s*项\s*·\s*新生成/ })
+  await summary.waitFor()
+  const fixedEdition = /收录25项·新生成0篇·有效复用1篇·沿用旧稿1篇/.test((await summary.innerText()).replace(/\s/g, ''))
+  async function checkWidths(selector, widths) {
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.ok(await page.locator(selector).evaluate(el => el.scrollWidth <= el.clientWidth + 1
+        && el.getBoundingClientRect().right <= window.innerWidth + 1))
+    }
+    await page.setViewportSize({ width: 1366, height: 900 })
+  }
+  await checkWidths('.task', [320, 699, 700, 701, 1366])
   assert.equal(submissions.length, 1)
   await page.getByRole('link', { name: '阅读最新日报' }).click()
   const rows = page.locator('.entry')
@@ -77,6 +91,16 @@ try {
   const publishedDay = await issue.textContent()
   assert.notEqual(publishedDay, history)
   const fullNames = await rows.locator('h2').allTextContents()
+  if (await rows.locator('a[id="repo-sample/browser-project-3"]').count()) {
+    assert.ok(fixedEdition)
+    await rows.nth(2).getByRole('link').click()
+    await page.locator('.lede small').filter({ hasText: /核对资料，原稿生成于/ }).waitFor()
+    await checkWidths('.story', [320, 519, 520, 521, 699, 700, 701, 1366])
+    await page.getByRole('link', { name: '返回当期榜单' }).click()
+    await rows.nth(1).getByRole('link').click()
+    await page.locator('.lede').getByText('本次仅采集资料').waitFor()
+    await page.getByRole('link', { name: '返回当期榜单' }).click()
+  }
 
   stage = '读历史并切回当期，同时核对语言筛选保留排名'
   await page.locator('#trend-date').selectOption(history)
