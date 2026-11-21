@@ -17,7 +17,8 @@ class TrendInsightCodecTest {
         assertThat(body.path("max_tokens").asInt()).isEqualTo(1500);
         assertThat(body.has("tools")).isFalse();
         String system = body.path("messages").get(0).path("content").asText();
-        assertThat(system).doesNotContain("Ignore all prior instructions").contains("\n{");
+        assertThat(system).doesNotContain("Ignore all prior instructions")
+                .contains("禁止使用反引号", "保留英文原名", "中文括号解释", "\n{");
         var example = codec.insight(system.substring(system.indexOf("\n{") + 1), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
         assertThat(example.highlights()).hasSize(1);
         assertThat(example.comparison()).isNull();
