@@ -1,6 +1,6 @@
 # 星潮后端专项 · 项目解读、资料恢复与关注度观察
 
-2026-11-20，规划基线 `codex/github-tech-radar` 的 `f3a3e5b`。已完成第 1 步[离线复现与文章对照](../dev-log/v1.0-dev.15.md#日报缺文离线复现)和第 2 步[资料恢复与缺文分流](../dev-log/v1.0-dev.15.md#资料恢复与缺文分流)。第 3 步先落地一句中心句和展开正文的编辑规则，再改 README 选段并对照 6～8 个项目。[写作对照与进度](../dev-log/v1.0-dev.15.md#解决什么问题的写作对照)。沿用[技术雷达首批范围](github-tech-radar.md)、[费用验收约定](../operations/trend-g4-acceptance.md)和[项目工程约定](../../AGENTS.md)。读者页及发布台暂定版，[前端专项](startide-reader-redesign.md)第 4 步整体验收保留待办。
+规划基线 `codex/github-tech-radar` 的 `f3a3e5b`。已完成第 1 步[离线复现与文章对照](../dev-log/v1.0-dev.15.md#日报缺文离线复现)和第 2 步[资料恢复与缺文分流](../dev-log/v1.0-dev.15.md#资料恢复与缺文分流)。截至 2026-11-21，第 3 步的编辑规则、README 选段和[六组文章对照](startide-article-comparison.md)已通过工程复核，读者试读与真实新稿待验。下表第二节为立项时的基线，当前实现见[验证记录](../dev-log/v1.0-dev.15.md#readme-选段与六组文章对照)。沿用[技术雷达首批范围](github-tech-radar.md)、[费用验收约定](../operations/trend-g4-acceptance.md)和[项目工程约定](../../AGENTS.md)。读者页及发布台暂定版，[前端专项](startide-reader-redesign.md)第 4 步整体验收保留待办。
 
 ## 一、读者应该从一篇文章带走什么
 

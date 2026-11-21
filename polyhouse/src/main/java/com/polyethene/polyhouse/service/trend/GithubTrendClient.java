@@ -11,7 +11,6 @@ import com.polyethene.polyhouse.model.vo.TrendProjectVO;
 import com.polyethene.polyhouse.model.entity.TrendSourceIssue;
 import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Reason;
 import com.polyethene.polyhouse.model.entity.TrendSourceIssue.Stage;
-import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -166,10 +165,7 @@ public class GithubTrendClient {
             bytes = Base64.getDecoder().decode(material.path("content").asText().replace("\n", "").replace("\r", ""));
         } catch (IllegalArgumentException failure) { throw invalid(); }
         if (bytes.length != material.path("size").asInt()) throw invalid();
-        var document = Jsoup.parse(new String(bytes, StandardCharsets.UTF_8));
-        document.select("script,style,svg,img").remove();
-        String text = document.text().replaceAll("!\\[[^\\]\\r\\n]{0,200}\\]\\([^\\)\\r\\n]{0,1000}\\)", "");
-        text = text.substring(0, Math.min(text.length(), 5000));
+        String text = TrendReadmeExcerpt.select(new String(bytes, StandardCharsets.UTF_8));
         if (text.isBlank()) throw invalid();
         return new Readme(material.path("sha").asText(), text, "AVAILABLE");
     }

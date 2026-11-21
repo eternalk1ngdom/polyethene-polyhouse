@@ -19,7 +19,7 @@ public record TrendCollection(Instant capturedAt, List<Project> projects) {
      * 仅在当前流水线使用的正文材料，不包含任何凭据。
      * @param snapshot 脱敏基础资料
      * @param readmeVersion GitHub 内容 SHA，未知为 null
-     * @param readmeText 已清洗并截断至五千字符的文本，失败为空
+     * @param readmeText 本次任务按用途、机制和边界选出的原文，总计最多五千字符，失败为空
      * @param sourceIssue 本项目首个采集问题，随内存材料传给解读服务；历史调用可为空
      */
     public record Project(TrendProjectVO snapshot, String readmeVersion, String readmeText, TrendSourceIssue sourceIssue) {
