@@ -98,7 +98,7 @@
 
 ## 文章结构专项候选
 
-已在独立分支 `codex/startide-article-structure`（源自 `dev` `19ffc99`）上进入实施。素材包括[六组离线文章对照](startide-article-comparison.md)和[11 月 21 日真实读者反馈](../dev-log/v1.0-dev.15.md#工程收口与文章交接)。用户已确认以下单篇结构与两步优化方向：
+已在独立分支 `feat/startide-article-structure`（源自 `dev` `19ffc99`）上进入实施。素材包括[六组离线文章对照](startide-article-comparison.md)和[11 月 21 日真实读者反馈](../dev-log/v1.0-dev.15.md#工程收口与文章交接)。用户已确认以下单篇结构与两步优化方向：
 
 ### 第一步：单篇结构改版（`radar-3`，本轮实施）
 
