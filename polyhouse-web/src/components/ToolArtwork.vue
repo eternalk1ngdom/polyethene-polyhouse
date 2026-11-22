@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import tideVoyage from '../assets/startide-voyage.webp'
 import paperButterfly from '../assets/polyreplace-paper-butterfly.webp'
-import archBridge from '../assets/targetkb-arch-bridge.webp'
+import foldingFan from '../assets/targetkb-folding-fan.webp'
 
 /** 首页用入口类别选择装饰插画，链接的可访问名称由首页提供。 */
 interface Props {
@@ -25,8 +25,8 @@ const covers = {
     caption: '文字的事，简单一点。',
   },
   image: {
-    image: archBridge,
-    height: 438,
+    image: foldingFan,
+    height: 800,
     label: 'MAKE ROOM FOR THE PERFECT FIT',
     name: 'TargetKB',
     caption: '每一张，都刚刚好。',
@@ -86,11 +86,17 @@ const covers = {
 }
 .text .illustration,
 .image .illustration {
-  /* 纸蝶的翼形和桥洞的弧线在各宽度下保持原比例。 */
+  /* 保持插画原比例，避免不同宽度的卡面拉伸纸张折面。 */
   object-fit: contain;
 }
 .text .illustration {
   object-position: left center;
+}
+.image .illustration {
+  /* 扇缘较高，给左上题签和底部入口各留出独立空间。 */
+  --fan-top: max(9%, 54px);
+  top: var(--fan-top);
+  height: min(68%, calc(100% - var(--fan-top) - 74px));
 }
 @media (min-width: 1000px) {
   .text .illustration {
@@ -115,6 +121,9 @@ const covers = {
   font-size: 10px;
 }
 @media (max-width: 760px) {
+  .image .illustration {
+    --fan-top: max(9%, 45px);
+  }
   .artwork {
     padding: 20px;
     aspect-ratio: 1.45;
