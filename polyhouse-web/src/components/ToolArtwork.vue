@@ -92,6 +92,13 @@ const covers = {
 .text .illustration {
   object-position: left center;
 }
+@media (min-width: 1000px) {
+  .text .illustration {
+    /* 宽双列给纸蝶更多高度；窄双列沿用原位，避免飞行弧线穿过左上角题签。 */
+    top: 4%;
+    height: min(75%, calc(96% - 74px));
+  }
+}
 .art-caption {
   position: absolute;
   bottom: 24px;
