@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import tideVoyage from '../assets/startide-voyage.webp'
 import paperButterfly from '../assets/polyreplace-paper-butterfly.webp'
-import foldingFan from '../assets/targetkb-folding-fan.webp'
+import turningPages from '../assets/targetkb-turning-pages.webp'
 
 /** 首页用入口类别选择装饰插画，链接的可访问名称由首页提供。 */
 interface Props {
@@ -25,8 +25,8 @@ const covers = {
     caption: '文字的事，简单一点。',
   },
   image: {
-    image: foldingFan,
-    height: 600,
+    image: turningPages,
+    height: 500,
     label: 'MAKE ROOM FOR THE PERFECT FIT',
     name: 'TargetKB',
     caption: '每一张，都刚刚好。',
@@ -93,10 +93,10 @@ const covers = {
   object-position: left center;
 }
 .image .illustration {
-  /* 扇缘较高，给左上题签和底部入口各留出独立空间。 */
-  --fan-top: max(9%, 54px);
-  top: var(--fan-top);
-  height: min(68%, calc(100% - var(--fan-top) - 74px));
+  /* 给翻起的书页留出高度，同时避开左上题签与底部入口。 */
+  --art-top: max(9%, 54px);
+  top: var(--art-top);
+  height: min(68%, calc(100% - var(--art-top) - 74px));
 }
 @media (min-width: 1000px) {
   .text .illustration {
@@ -122,7 +122,7 @@ const covers = {
 }
 @media (max-width: 760px) {
   .image .illustration {
-    --fan-top: max(9%, 45px);
+    --art-top: max(9%, 45px);
   }
   .artwork {
     padding: 20px;
