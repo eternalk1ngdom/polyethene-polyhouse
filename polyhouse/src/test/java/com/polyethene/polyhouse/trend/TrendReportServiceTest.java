@@ -86,6 +86,28 @@ class TrendReportServiceTest {
         assertThat(service.missingInsightIds()).isEmpty();
     }
 
+    @Test void windowStatsReadsBoundedSevenDayRangeAndRejectsInvalidInputOrDamagedArchive() throws Exception {
+        assertCode(() -> service.window(new TrendWindowQueryDTO("WEEKLY", null)), ErrorCode.INVALID_PARAMETER);
+        assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", "2026-02-30")), ErrorCode.INVALID_PARAMETER);
+        assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", null)), ErrorCode.NOT_FOUND);
+
+        var view = TrendFixture.report();
+        LocalDate anchor = view.periodKey();
+        var header = new TrendReportRecord(view.reportId(), anchor, null, null);
+        var full = new TrendReportRecord(view.reportId(), anchor, null, TrendFixture.json().writeValueAsString(view));
+        when(mapper.latestHeader()).thenReturn(header);
+        when(mapper.publishedRange(anchor.minusDays(6), anchor)).thenReturn(List.of(full));
+        var stats = service.window(new TrendWindowQueryDTO(null, null));
+        assertThat(stats.anchorDate()).isEqualTo(anchor);
+        assertThat(stats.coveredDays()).isEqualTo(1);
+        assertThat(stats.missingDates()).hasSize(6);
+
+        // 区间内任一快照损坏时拒绝伪装为完整窗口统计。
+        when(mapper.publishedRange(anchor.minusDays(6), anchor))
+                .thenReturn(List.of(full, new TrendReportRecord("bad-id", anchor.minusDays(1), null, "{}")));
+        assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", null)), ErrorCode.SERVICE_UNAVAILABLE);
+    }
+
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
                 failure -> assertThat(failure.getErrorCode()).isEqualTo(expected));

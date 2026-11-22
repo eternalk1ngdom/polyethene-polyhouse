@@ -1,6 +1,13 @@
 import { onScopeDispose, ref, watch, type ComputedRef } from 'vue'
 import { ApiError } from '../../api/index'
-import { getTrendPeriods, getTrendReport, isTrendDate, type TrendReport } from '../../api/trend'
+import {
+  getTrendPeriods,
+  getTrendReport,
+  getTrendWindow,
+  isTrendDate,
+  type TrendReport,
+  type TrendWindowStats,
+} from '../../api/trend'
 
 /** 目录和详情共用当前期的快照。切期取消旧请求，离开星潮即释放。 */
 export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: ComputedRef<boolean>) {
@@ -13,13 +20,55 @@ export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: Comp
   const loadingDates = ref(false)
   const dateError = ref(false)
   const dateBlockedUntil = ref(0)
+  const windowStats = ref<TrendWindowStats | null>(null)
+  const windowError = ref('')
+  const loadingWindow = ref(false)
   let reportBlockedUntil = 0
+  let windowBlockedUntil = 0
   let reportRequest: AbortController | undefined
   let datesRequest: AbortController | undefined
+  let windowRequest: AbortController | undefined
+
+  async function loadWindow(anchorKey?: string) {
+    const key = anchorKey ?? report.value?.periodKey
+    windowRequest?.abort()
+    windowError.value = ''
+    loadingWindow.value = false
+    if (!key || !isTrendDate(key)) {
+      windowStats.value = null
+      return
+    }
+    if (Date.now() < windowBlockedUntil) {
+      windowError.value = '近 7 日统计请求过于频繁，请稍后重试。'
+      return
+    }
+    const request = new AbortController()
+    windowRequest = request
+    loadingWindow.value = true
+    try {
+      const result = await getTrendWindow(key, request.signal)
+      if (!request.signal.aborted) windowStats.value = result
+    } catch (failure: unknown) {
+      if (request.signal.aborted) return
+      windowStats.value = null
+      if (failure instanceof ApiError && failure.status === 429) {
+        windowBlockedUntil = Date.now() + (failure.retryAfterSeconds ?? 2) * 1000
+        windowError.value = '近 7 日统计请求过于频繁，请稍后重试。'
+      } else {
+        windowError.value = '近 7 日榜内统计暂时无法读取，不影响当期日报阅读。'
+      }
+    } finally {
+      if (!request.signal.aborted) loadingWindow.value = false
+    }
+  }
 
   async function loadReport() {
     reportRequest?.abort()
+    windowRequest?.abort()
     report.value = null
+    windowStats.value = null
+    windowError.value = ''
+    loadingWindow.value = false
     noReport.value = false
     reportError.value = ''
     loadingReport.value = false
@@ -87,9 +136,20 @@ export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: Comp
     },
     { immediate: true },
   )
+  // 在日报期号就绪后串行加载 7 日统计，既保证锚点一致又避免与日报/历史并发触碰读限流。
+  watch(
+    [inDirectory, () => report.value?.periodKey],
+    ([visible, periodKey]) => {
+      if (!visible || !periodKey) return
+      if (windowStats.value?.anchorDate === periodKey) return
+      void loadWindow(periodKey)
+    },
+    { immediate: true },
+  )
   onScopeDispose(() => {
     reportRequest?.abort()
     datesRequest?.abort()
+    windowRequest?.abort()
   })
   return {
     report,
@@ -102,5 +162,9 @@ export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: Comp
     dateError,
     loadingDates,
     loadDates,
+    windowStats,
+    windowError,
+    loadingWindow,
+    loadWindow,
   }
 }

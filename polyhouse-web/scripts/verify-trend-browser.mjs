@@ -90,6 +90,12 @@ try {
   const issue = page.locator('.section-head time')
   const publishedDay = await issue.textContent()
   assert.notEqual(publishedDay, history)
+  const windowOverview = page.locator('.window-overview')
+  await windowOverview.getByRole('heading', { name: '近 7 日榜内观察', exact: true }).waitFor()
+  await windowOverview.getByRole('button', { name: '展开明细' }).click()
+  await windowOverview.getByRole('heading', { name: '分类分布', exact: true }).waitFor()
+  await checkWidths('.window-overview', [320, 619, 620, 621, 1366])
+  await windowOverview.getByRole('button', { name: '收起明细' }).click()
   const fullNames = await rows.locator('h2').allTextContents()
   if (await rows.locator('a[id="repo-sample/browser-project-3"]').count()) {
     assert.ok(fixedEdition)

@@ -10,6 +10,7 @@ import { useUserStore } from '../stores/useUserStore'
 import { trendTime } from '../features/trend/presentation'
 import { useTrendEdition } from '../features/trend/useTrendEdition'
 import TrendProjectEntry from '../features/trend/TrendProjectEntry.vue'
+import TrendWindowOverview from '../features/trend/TrendWindowOverview.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +31,10 @@ const {
   dateError,
   loadingDates,
   loadDates,
+  windowStats,
+  windowError,
+  loadingWindow,
+  loadWindow,
 } = useTrendEdition(edition, directory)
 const selectedDate = computed(() => (isTrendDate(edition.value) ? edition.value : ''))
 const dateOptions = computed(() =>
@@ -196,6 +201,14 @@ watch(
         <p v-if="!report.insightComplete" class="notice">
           部分解读暂缺或沿用旧版，榜单资料仍可阅读。
         </p>
+        <TrendWindowOverview
+          :stats="windowStats"
+          :loading="loadingWindow"
+          :error="windowError"
+          :resolve-detail-href="(name) => router.resolve(detailLocation(name)).href"
+          @retry="loadWindow()"
+          @open-project="openProject"
+        />
         <div class="columns">
           <span role="status">{{
             language

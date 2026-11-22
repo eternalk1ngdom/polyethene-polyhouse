@@ -87,6 +87,7 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
     @Test void anonymousReadsAndAllNonOwnerRolesCannotTriggerOrInspectPaidWork() throws Exception {
         assertThat(call("GET", "/api/trend/periods", null, null).statusCode()).isEqualTo(200);
         assertThat(call("GET", "/api/trend/report", null, null).statusCode()).isEqualTo(404);
+        assertThat(call("GET", "/api/trend/window", null, null).statusCode()).isEqualTo(404);
         assertThat(call("POST", "/api/manage/trend/jobs", null, Map.of("requestId", UUID.randomUUID().toString())).statusCode()).isEqualTo(401);
         for (var role : List.of(UserRoleEnum.USER, UserRoleEnum.ADMIN, UserRoleEnum.INSIDER)) {
             String token = login(actor(role, false));
@@ -118,6 +119,12 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
         assertThat(data(report).path("insightComplete").asBoolean()).isTrue();
         assertThat(data(report).path("items").get(0).path("insightStatus").asText()).isEqualTo("ANALYZED");
         assertThat(report.body()).doesNotContain(TrendAiFixture.KEY, "readmeText", "credentialVersion", "passwordHash");
+        var window = call("GET", "/api/trend/window", null, null);
+        assertThat(window.statusCode()).isEqualTo(200);
+        assertThat(window.headers().firstValue("Cache-Control")).contains("no-store");
+        assertThat(data(window).path("windowDays").asInt()).isEqualTo(7);
+        assertThat(data(window).path("coveredDays").asInt()).isEqualTo(1);
+        assertThat(data(window).path("windowSummary").path("radar3ReadyCount").asInt()).isEqualTo(1);
         assertThat(redis.opsForHash().get(CACHE_KEY, "id")).isEqualTo(data(report).path("reportId").asText());
         assertThat(redis.getExpire(CACHE_KEY)).isBetween(1L, 900L);
         var fees = call("GET", "/api/manage/trend/fees", token, null);

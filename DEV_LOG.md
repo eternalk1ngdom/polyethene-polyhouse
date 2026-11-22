@@ -1,8 +1,8 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-21（Asia/Shanghai）。**v1.0 开发中。**
+更新时间：2026-11-22（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：分支 `feat/startide-article-structure`（源自 `dev` `19ffc99`）已完成[`radar-3` 文章结构与技术风向观察](docs/dev-log/v1.0-dev.15.md#文章结构专项radar-3与技术风向观察)离线闭环及 `cursor/plugins` 单篇真实验收（1/1 一次通过、本机结算 ¥0.008452，平台账单待对账）；待用户试读真稿后决定推送合入 `dev`，真实浏览器补验与[第二步 7 日风向统计](docs/plans/startide-insight-quality.md#文章结构专项候选)随后推进。11 月 20 日下午断源的首个故障仍缺现场证据。
+- 当前：分支 `feat/startide-window-stats`（源自 `dev` `f75046a`，已合入 PR #7 `radar-3`）已完成星潮第二步 2A「[7 日榜内风向统计](docs/dev-log/v1.0-dev.15.md#7-日榜内风向统计2a)」前后端离线与隔离库/HTTP 闭环（零模型费用、零 DDL）；待用户确认后评估推送并经 PR 合入 `dev`。真实浏览器补验（缺 Playwright 模块）、平台账单对账及 2B「[可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)」（待攒够 5～7 期 `radar-3` 日报）留待后续推进。11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 集成：星潮通过[合入前复验](docs/dev-log/v1.0-dev.15.md#合入-dev-前复验)，用户授权任务分支经 PR 进入 GitHub `dev`。后续文章专项以集成后的 `dev` 为基线。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。

@@ -74,4 +74,14 @@ public interface TrendMapper {
         """)
     @Options(timeout = 3)
     List<LocalDate> periods(@Param("before") LocalDate before, @Param("limit") int limit);
+
+    /** 按当前公开指针读取指定闭区间内的已发布日报，同日重发只保留最新版本，用于近 7 日确定性统计。 */
+    @Select("""
+        SELECT v.id, v.period_date, v.captured_at, v.payload FROM tool_trend_daily d
+        JOIN tool_trend_report_version v ON v.id=d.report_id
+        WHERE d.period_date BETWEEN #{start} AND #{end}
+        ORDER BY d.period_date DESC
+        """)
+    @Options(timeout = 3)
+    List<TrendReportRecord> publishedRange(@Param("start") LocalDate start, @Param("end") LocalDate end);
 }
