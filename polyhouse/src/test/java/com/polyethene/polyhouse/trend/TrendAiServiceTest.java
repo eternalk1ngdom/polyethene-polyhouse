@@ -65,6 +65,7 @@ class TrendAiServiceTest {
         var kept = basic.enrich(UUID.randomUUID().toString(), source).projects().getFirst().snapshot();
         assertThat(kept.insightStatus()).isEqualTo("STALE");
         assertThat(kept.insight()).isEqualTo(previous);
+        assertThat(kept.insight().trendSignal()).isNull();
         verifyNoInteractions(gateway);
 
         grant();
@@ -72,7 +73,8 @@ class TrendAiServiceTest {
         var updated = new TrendAiService(ledger, gateway, codec, TrendAiFixture.settings(), module, clock)
                 .enrich(UUID.randomUUID().toString(), source).projects().getFirst().snapshot();
         assertThat(updated.insightStatus()).isEqualTo("ANALYZED");
-        assertThat(updated.insight().ruleVersion()).isEqualTo("radar-2");
+        assertThat(updated.insight().ruleVersion()).isEqualTo(TrendInsightCodec.RULE);
+        assertThat(updated.insight().trendSignal()).isNotBlank();
         assertThat(updated.insight().analyzedAt()).isEqualTo(now);
         verify(gateway).complete(any());
         verify(ledger).settle(anyString(), eq(300), eq(180), notNull());
