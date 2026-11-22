@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import tideVoyage from '../assets/startide-voyage.webp'
 import paperButterfly from '../assets/polyreplace-paper-butterfly.webp'
-import foldedSunset from '../assets/targetkb-folded-sunset.webp'
+import paperFox from '../assets/targetkb-paper-fox.webp'
 
 /** 首页用入口类别选择装饰插画，链接的可访问名称由首页提供。 */
 interface Props {
@@ -12,21 +12,18 @@ defineProps<Props>()
 const covers = {
   trend: {
     image: tideVoyage,
-    height: 600,
     label: 'GITHUB TRENDING',
     name: 'StarTide',
     caption: '每天，发现开源新星。',
   },
   text: {
     image: paperButterfly,
-    height: 600,
     label: 'THE ART OF LESS REPETITION',
     name: 'PolyReplace',
     caption: '文字的事，简单一点。',
   },
   image: {
-    image: foldedSunset,
-    height: 451,
+    image: paperFox,
     label: 'MAKE ROOM FOR THE PERFECT FIT',
     name: 'TargetKB',
     caption: '每一张，都刚刚好。',
@@ -42,7 +39,7 @@ const covers = {
       :src="covers[kind].image"
       alt=""
       width="1200"
-      :height="covers[kind].height"
+      height="600"
       decoding="async"
     />
     <span class="art-caption"
@@ -86,7 +83,7 @@ const covers = {
 }
 .text .illustration,
 .image .illustration {
-  /* 纸蝶的翼形和落日的圆弧在各宽度下保持原比例。 */
+  /* 纸蝶的翼形和纸狐的折面在各宽度下保持原比例。 */
   object-fit: contain;
 }
 .text .illustration {
