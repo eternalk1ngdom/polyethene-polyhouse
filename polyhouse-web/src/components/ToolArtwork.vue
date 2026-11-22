@@ -26,7 +26,7 @@ const covers = {
   },
   image: {
     image: foldingFan,
-    height: 512,
+    height: 600,
     label: 'MAKE ROOM FOR THE PERFECT FIT',
     name: 'TargetKB',
     caption: '每一张，都刚刚好。',
