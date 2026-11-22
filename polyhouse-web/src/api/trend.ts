@@ -55,6 +55,101 @@ export interface TrendPeriods {
   nextBefore: string | null
 }
 
+const windowSampleStatuses = ['INSUFFICIENT', 'LIMITED', 'SUFFICIENT'] as const
+
+export type TrendWindowSampleStatus = (typeof windowSampleStatuses)[number]
+
+/** 锚点当日的分母与分类覆盖摘要。 */
+export interface TrendWindowAnchorSummary {
+  totalItems: number
+  classifiedItems: number
+  unclassifiedItems: number
+  docListItems: number
+  missingInsightItems: number
+}
+
+/** 7 日去重仓库池的分母与资料质量摘要。 */
+export interface TrendWindowSummary {
+  uniqueRepoCount: number
+  totalAppearances: number
+  classifiedRepoCount: number
+  unclassifiedRepoCount: number
+  docListRepoCount: number
+  missingInsightRepoCount: number
+  starsKnownRepoCount: number
+  staleClassifiedRepoCount: number
+  oldestStaleAnalyzedAt: string | null
+  unverifiedIdentityCount: number
+  radar3ReadyCount: number
+}
+
+/** 分类下可供核对的代表仓库摘要。 */
+export interface TrendWindowSampleRepo {
+  repositoryId: string | null
+  identityVerified: boolean
+  fullName: string
+  repoUrl: string
+  inAnchorDay: boolean
+  appearanceDays: number
+  latestRank: number
+  latestStarsAdded: number | null
+}
+
+/** 单个技术分类在 7 日窗口与锚点当日的确定性聚合结果。 */
+export interface TrendWindowCategoryStat {
+  category: string
+  anchorDayCount: number
+  anchorDayShare: number | null
+  windowUniqueCount: number
+  windowAppearances: number
+  windowShare: number | null
+  shareDelta: number | null
+  starsSampleCount: number
+  medianStarsAdded: number | null
+  maxRepoStarsAdded: number | null
+  staleClassifiedCount: number
+  oldestStaleAnalyzedAt: string | null
+  sampleRepos: TrendWindowSampleRepo[]
+}
+
+/** 窗口内多日重复上榜仓库的观察条目。 */
+export interface TrendWindowRecurringRepo {
+  repositoryId: string | null
+  identityVerified: boolean
+  fullName: string
+  repoUrl: string
+  inAnchorDay: boolean
+  category: string | null
+  definition: string | null
+  appearanceDays: number
+  consecutiveDays: number
+  anchorStreakDays: number
+  latestRank: number
+  bestRank: number
+  latestStarsAdded: number | null
+  medianStarsAdded: number | null
+  appearedDates: string[]
+  insightStatus: string
+  insightAnalyzedAt: string | null
+}
+
+/** 7 日榜内风向确定性统计视图，全部指标来自已发布日报快照。 */
+export interface TrendWindowStats {
+  periodType: 'DAILY'
+  anchorDate: string
+  windowStart: string
+  windowEnd: string
+  windowDays: number
+  coveredDays: number
+  coveredDates: string[]
+  missingDates: string[]
+  sampleStatus: TrendWindowSampleStatus
+  anchorSummary: TrendWindowAnchorSummary
+  windowSummary: TrendWindowSummary
+  categories: TrendWindowCategoryStat[]
+  recurringRepos: TrendWindowRecurringRepo[]
+}
+
 const jobStates = ['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'INTERRUPTED'] as const
 const jobPhases = ['QUEUED', 'COLLECTING', 'ANALYZING', 'PUBLISHING', 'DONE'] as const
 
@@ -146,6 +241,35 @@ function whole(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : invalid()
 }
 
+function ratio(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : invalid()
+}
+
+function signedRatio(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -1 && value <= 1
+    ? value
+    : invalid()
+}
+
+function nonNegativeNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : invalid()
+}
+
+function repoIdentity(row: Record<string, unknown>): { fullName: string; repoUrl: string } {
+  const fullName = text(row.fullName)
+  // 原始描述和解读只渲染为文字，仓库链接也须与允许的 GitHub 路径一致。
+  if (
+    !/^[\w.-]+\/[\w.-]+$/.test(fullName) ||
+    fullName.split('/').some((part) => part === '.' || part === '..')
+  )
+    invalid()
+  const repoUrl = `https://github.com/${fullName}`
+  if (row.repoUrl !== repoUrl) invalid()
+  return { fullName, repoUrl }
+}
+
 function truth(value: unknown): boolean {
   return typeof value === 'boolean' ? value : invalid()
 }
@@ -192,15 +316,7 @@ function insight(value: unknown): TrendInsight {
 
 function project(value: unknown): TrendProject {
   const row = object(value)
-  const fullName = text(row.fullName)
-  // 原始描述和解读只渲染为文字，仓库链接也须与允许的 GitHub 路径一致。
-  if (
-    !/^[\w.-]+\/[\w.-]+$/.test(fullName) ||
-    fullName.split('/').some((part) => part === '.' || part === '..')
-  )
-    invalid()
-  const repoUrl = `https://github.com/${fullName}`
-  if (row.repoUrl !== repoUrl) invalid()
+  const { fullName, repoUrl } = repoIdentity(row)
   return {
     rankNum: whole(row.rankNum),
     repositoryId: optional(row.repositoryId, text),
@@ -243,6 +359,111 @@ function periods(value: unknown): TrendPeriods {
     periodType: choice(row.periodType, ['DAILY']),
     items: list(row.items, 30, date),
     nextBefore: optional(row.nextBefore, date),
+  }
+}
+
+function windowAnchorSummary(value: unknown): TrendWindowAnchorSummary {
+  const row = object(value)
+  return {
+    totalItems: whole(row.totalItems),
+    classifiedItems: whole(row.classifiedItems),
+    unclassifiedItems: whole(row.unclassifiedItems),
+    docListItems: whole(row.docListItems),
+    missingInsightItems: whole(row.missingInsightItems),
+  }
+}
+
+function windowSummary(value: unknown): TrendWindowSummary {
+  const row = object(value)
+  return {
+    uniqueRepoCount: whole(row.uniqueRepoCount),
+    totalAppearances: whole(row.totalAppearances),
+    classifiedRepoCount: whole(row.classifiedRepoCount),
+    unclassifiedRepoCount: whole(row.unclassifiedRepoCount),
+    docListRepoCount: whole(row.docListRepoCount),
+    missingInsightRepoCount: whole(row.missingInsightRepoCount),
+    starsKnownRepoCount: whole(row.starsKnownRepoCount),
+    staleClassifiedRepoCount: whole(row.staleClassifiedRepoCount),
+    oldestStaleAnalyzedAt: optional(row.oldestStaleAnalyzedAt, instant),
+    unverifiedIdentityCount: whole(row.unverifiedIdentityCount),
+    radar3ReadyCount: whole(row.radar3ReadyCount),
+  }
+}
+
+function windowSampleRepo(value: unknown): TrendWindowSampleRepo {
+  const row = object(value)
+  const { fullName, repoUrl } = repoIdentity(row)
+  return {
+    repositoryId: optional(row.repositoryId, text),
+    identityVerified: truth(row.identityVerified),
+    fullName,
+    repoUrl,
+    inAnchorDay: truth(row.inAnchorDay),
+    appearanceDays: whole(row.appearanceDays),
+    latestRank: whole(row.latestRank),
+    latestStarsAdded: optional(row.latestStarsAdded, whole),
+  }
+}
+
+function windowCategoryStat(value: unknown): TrendWindowCategoryStat {
+  const row = object(value)
+  return {
+    category: text(row.category),
+    anchorDayCount: whole(row.anchorDayCount),
+    anchorDayShare: optional(row.anchorDayShare, ratio),
+    windowUniqueCount: whole(row.windowUniqueCount),
+    windowAppearances: whole(row.windowAppearances),
+    windowShare: optional(row.windowShare, ratio),
+    shareDelta: optional(row.shareDelta, signedRatio),
+    starsSampleCount: whole(row.starsSampleCount),
+    medianStarsAdded: optional(row.medianStarsAdded, nonNegativeNumber),
+    maxRepoStarsAdded: optional(row.maxRepoStarsAdded, whole),
+    staleClassifiedCount: whole(row.staleClassifiedCount),
+    oldestStaleAnalyzedAt: optional(row.oldestStaleAnalyzedAt, instant),
+    sampleRepos: list(row.sampleRepos, 50, windowSampleRepo),
+  }
+}
+
+function windowRecurringRepo(value: unknown): TrendWindowRecurringRepo {
+  const row = object(value)
+  const { fullName, repoUrl } = repoIdentity(row)
+  return {
+    repositoryId: optional(row.repositoryId, text),
+    identityVerified: truth(row.identityVerified),
+    fullName,
+    repoUrl,
+    inAnchorDay: truth(row.inAnchorDay),
+    category: optional(row.category, text),
+    definition: optional(row.definition, text),
+    appearanceDays: whole(row.appearanceDays),
+    consecutiveDays: whole(row.consecutiveDays),
+    anchorStreakDays: whole(row.anchorStreakDays),
+    latestRank: whole(row.latestRank),
+    bestRank: whole(row.bestRank),
+    latestStarsAdded: optional(row.latestStarsAdded, whole),
+    medianStarsAdded: optional(row.medianStarsAdded, nonNegativeNumber),
+    appearedDates: list(row.appearedDates, 7, date),
+    insightStatus: text(row.insightStatus),
+    insightAnalyzedAt: optional(row.insightAnalyzedAt, instant),
+  }
+}
+
+function windowStats(value: unknown): TrendWindowStats {
+  const row = object(value)
+  return {
+    periodType: choice(row.periodType, ['DAILY']),
+    anchorDate: date(row.anchorDate),
+    windowStart: date(row.windowStart),
+    windowEnd: date(row.windowEnd),
+    windowDays: whole(row.windowDays),
+    coveredDays: whole(row.coveredDays),
+    coveredDates: list(row.coveredDates, 7, date),
+    missingDates: list(row.missingDates, 7, date),
+    sampleStatus: choice(row.sampleStatus, windowSampleStatuses),
+    anchorSummary: windowAnchorSummary(row.anchorSummary),
+    windowSummary: windowSummary(row.windowSummary),
+    categories: list(row.categories, 8, windowCategoryStat),
+    recurringRepos: list(row.recurringRepos, 15, windowRecurringRepo),
   }
 }
 
@@ -321,6 +542,14 @@ export function getTrendReport(periodKey?: string, signal?: AbortSignal): Promis
 /** 传入后端提供的排他游标分页，空列表与无服务分别处理。 */
 export function getTrendPeriods(before?: string, signal?: AbortSignal): Promise<TrendPeriods> {
   return apiRequest({ url: '/trend/periods', params: { before }, signal }, periods)
+}
+
+/** 公共 7 日榜内风向统计不携带会话，零模型调用，只基于已入库日报做确定性聚合。 */
+export function getTrendWindow(
+  periodKey?: string,
+  signal?: AbortSignal,
+): Promise<TrendWindowStats> {
+  return apiRequest({ url: '/trend/window', params: { periodKey }, signal }, windowStats)
 }
 
 /** 同一操作使用原编号重试，后台决定是否受理或回送已有任务。 */

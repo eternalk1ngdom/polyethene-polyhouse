@@ -4,8 +4,10 @@ import com.polyethene.polyhouse.common.annotation.SkipBearerAuth;
 import com.polyethene.polyhouse.common.result.Result;
 import com.polyethene.polyhouse.model.dto.TrendPeriodsQueryDTO;
 import com.polyethene.polyhouse.model.dto.TrendReportQueryDTO;
+import com.polyethene.polyhouse.model.dto.TrendWindowQueryDTO;
 import com.polyethene.polyhouse.model.vo.TrendPeriodsVO;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
+import com.polyethene.polyhouse.model.vo.TrendWindowStatsVO;
 import com.polyethene.polyhouse.service.TrendReportService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -31,5 +33,12 @@ public class TrendController {
     @GetMapping("/report")
     public Result<TrendReportVO> report(@Valid @ModelAttribute TrendReportQueryDTO request) {
         return Result.success(reports.report(request));
+    }
+
+    /** 基于已入库的近 7 日已发布日报做确定性风向统计，零模型费用且绝不自动生成。 */
+    @SkipBearerAuth
+    @GetMapping("/window")
+    public Result<TrendWindowStatsVO> window(@Valid @ModelAttribute TrendWindowQueryDTO request) {
+        return Result.success(reports.window(request));
     }
 }

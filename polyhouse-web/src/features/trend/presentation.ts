@@ -51,3 +51,46 @@ export function trendParagraphs(value: string): string[] {
     .filter((part) => part.length > 0)
   return parts.length ? parts : [value]
 }
+
+const categoryLabels: Record<string, string> = {
+  AI_AGENT: 'AI 智能体',
+  AI_INFRA: 'AI 基础设施',
+  FRONTEND: '前端开发',
+  BACKEND: '后端服务',
+  DEVTOOLS: '开发工具',
+  DESKTOP: '桌面应用',
+  GRAPHICS: '图形与视觉',
+  OTHER: '其他方向',
+}
+
+/** 将后端固定八大类枚举转为通俗中文标签，未知代号安全回退而不暴露内部字段。 */
+export function categoryLabel(category: string | null): string {
+  if (!category) return '未分类'
+  return Object.hasOwn(categoryLabels, category) ? categoryLabels[category]! : '其他方向'
+}
+
+/** 将 0～1 比例格式化为整数百分比；分母为空时显式返回横线而非 0%。 */
+export function trendPercent(value: number | null): string {
+  if (value === null) return '—'
+  return `${Math.round(value * 100)}%`
+}
+
+/** 将占比变化格式化为带符号百分点；仅在存在有效对比基准时使用。 */
+export function trendDeltaPercent(value: number | null): string {
+  if (value === null) return '—'
+  const points = Math.round(value * 100)
+  if (points === 0) return '持平'
+  return points > 0 ? `+${points} 个百分点` : `${points} 个百分点`
+}
+
+/** 中位数可能因偶数样本出现 .5，整数保留千分位，小数保留一位；缺失不显示为 0。 */
+export function trendMedianNumber(value: number | null): string {
+  if (value === null) return '未知'
+  if (Number.isInteger(value)) return numberFormatter.format(value)
+  return numberFormatter.format(Math.floor(value)) + '.5'
+}
+
+/** 将 YYYY-MM-DD 北京期号简写为 MM-DD，直接截取避免跨时区偏移。 */
+export function shortTrendDate(isoDate: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? isoDate.slice(5) : isoDate
+}

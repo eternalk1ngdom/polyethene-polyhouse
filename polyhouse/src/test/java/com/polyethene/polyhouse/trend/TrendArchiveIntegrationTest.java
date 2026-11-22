@@ -126,6 +126,22 @@ class TrendArchiveIntegrationTest {
         assertThat(next.nextBefore()).isNull();
     }
 
+    @Test void windowStatsUsesOnlyCurrentPublishedVersionPerDayAndExposesGaps() {
+        // 11-16 同日重发两次，11-14 发布一次，11-15 缺采；7 日统计只能按最新指针计 2 天且不重复计数。
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-16T01:00:00Z"));
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-16T03:00:00Z"));
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-14T02:00:00Z"));
+        var stats = reports.window(new TrendWindowQueryDTO(null, null));
+        assertThat(stats.anchorDate()).isEqualTo(LocalDate.of(2026, 11, 16));
+        assertThat(stats.coveredDays()).isEqualTo(2);
+        assertThat(stats.coveredDates()).containsExactly(LocalDate.of(2026, 11, 16), LocalDate.of(2026, 11, 14));
+        assertThat(stats.missingDates()).contains(LocalDate.of(2026, 11, 15));
+        assertThat(stats.windowSummary().totalAppearances()).isEqualTo(4);
+        assertThat(stats.recurringRepos()).hasSize(2);
+        assertThat(stats.recurringRepos().getFirst().appearanceDays()).isEqualTo(2);
+        assertThat(stats.recurringRepos().getFirst().consecutiveDays()).isEqualTo(1);
+    }
+
     @Test void publicationFailureRollsBackBothCandidateAndDayPointer() {
         var failing = mock(TrendMapper.class, org.mockito.AdditionalAnswers.delegatesTo(mapper));
         doReturn(0).when(failing).publish(any(), any());

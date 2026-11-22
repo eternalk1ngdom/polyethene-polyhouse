@@ -21,7 +21,8 @@ public class TrendInsightCodec {
     private static final int MAX_CONTENT_CHARS = 8192;
     private static final int MAX_PAIN_POINT_CHARS = 600;
     private static final int MAX_TREND_SIGNAL_CHARS = 260;
-    private static final Set<String> CATEGORIES = Set.of("AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
+    /** 固定八大业务分类，供单篇解读校验与跨日榜内统计共用单一来源。 */
+    public static final Set<String> CATEGORIES = Set.of("AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
     private static final Set<String> FIELDS = Set.of("category", "definition", "painPoint", "comparison",
             "highlights", "documentedLimitations", "inferredRisks", "trendSignal");
     private final ObjectMapper json;

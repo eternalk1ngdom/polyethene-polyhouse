@@ -90,6 +90,13 @@ try {
   const issue = page.locator('.section-head time')
   const publishedDay = await issue.textContent()
   assert.notEqual(publishedDay, history)
+  await page.getByRole('button', { name: '近 7 日风向', exact: true }).click()
+  const windowView = page.locator('.window-view')
+  await windowView.getByRole('heading', { name: '近 7 日榜内风向观察', exact: true }).waitFor()
+  await windowView.getByRole('heading', { name: '分类分布', exact: true }).waitFor()
+  await checkWidths('.window-view', [320, 619, 620, 621, 1366])
+  await page.getByRole('button', { name: '开源日报', exact: true }).click()
+  await rows.first().waitFor()
   const fullNames = await rows.locator('h2').allTextContents()
   if (await rows.locator('a[id="repo-sample/browser-project-3"]').count()) {
     assert.ok(fixedEdition)
