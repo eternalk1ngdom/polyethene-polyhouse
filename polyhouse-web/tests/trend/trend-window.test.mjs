@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { createRenderer, h } from 'vue'
+import { createRenderer, h, nextTick } from 'vue'
 import { compileScript, compileTemplate, parse } from 'vue/compiler-sfc'
 import ts from 'typescript'
 
@@ -82,6 +82,26 @@ function makeWindowPayload(patch = {}) {
             latestRank: 2,
             latestStarsAdded: 100,
           },
+          {
+            repositoryId: '104',
+            identityVerified: true,
+            fullName: 'acme/lint',
+            repoUrl: 'https://github.com/acme/lint',
+            inAnchorDay: true,
+            appearanceDays: 1,
+            latestRank: 3,
+            latestStarsAdded: 90,
+          },
+          {
+            repositoryId: '109',
+            identityVerified: true,
+            fullName: 'acme/fourth-tool',
+            repoUrl: 'https://github.com/acme/fourth-tool',
+            inAnchorDay: false,
+            appearanceDays: 1,
+            latestRank: 4,
+            latestStarsAdded: 80,
+          },
         ],
       },
     ],
@@ -155,6 +175,19 @@ test('presentation 分类与统计格式化函数处理缺失值、.5 中位数�
   assert.equal(trendMedianNumber(1200), '1,200')
   assert.equal(trendMedianNumber(1200.5), '1,200.5')
   assert.equal(shortTrendDate('2026-11-22'), '11-22')
+})
+
+test('languageColor 返回 GitHub Linguist 官方主色与未知/冷门语言兜底色', async () => {
+  const languageColorsUrl = await transpileTs('../../src/features/trend/languageColors.ts')
+  const { languageColor } = await import(languageColorsUrl)
+
+  assert.equal(languageColor('Python'), '#3572A5')
+  assert.equal(languageColor('typescript'), '#3178C6')
+  assert.equal(languageColor('C++'), '#f34b7d')
+  assert.equal(languageColor('Shell'), '#89e051')
+  assert.equal(languageColor(null), '#b7c3ca')
+  assert.equal(languageColor('   '), '#b7c3ca')
+  assert.equal(languageColor('ObscureLangXYZ'), '#6e7f8d')
 })
 
 test('getTrendWindow 严格解码 7 日统计结构并拒绝越界比例或非法仓库链接', async () => {
@@ -256,7 +289,13 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
         node.attrs[key] = next
       },
       parentNode: (node) => node.parent ?? null,
-      nextSibling: () => null,
+      nextSibling(node) {
+        if (!node.parent) return null
+        const idx = node.parent.children.indexOf(node)
+        return idx >= 0 && idx + 1 < node.parent.children.length
+          ? node.parent.children[idx + 1]
+          : null
+      },
     })
     const root = createNode('root')
     const app = renderer.createApp({
@@ -285,7 +324,7 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
       ? node.text
       : (node.children || []).map((child) => textOf(child)).join('')
 
-  // 1. 充足样本：直接铺开 KPI、占比条、较前序变化、旧稿提示、多日上榜条目与站内/外链分化
+  // 1. 充足样本：所有分类默认展示前 3 个代表项目，超过 3 个可点击「展开全部 N 个」
   const fullMount = mountOverview(makeWindowPayload())
   const fullText = textOf(fullMount.root)
   assert.ok(fullText.includes('近 7 日榜内风向观察'))
@@ -295,6 +334,16 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
   assert.ok(fullText.includes('旧稿归类提示'))
   assert.ok(fullText.includes('缺采日期：11-20、11-16'))
   assert.ok(findAll(fullMount.root, (n) => n.attrs?.class === 'share-track').length > 0)
+  // 默认只显示前 3 个代表项目，第 4 个隐藏，点击展开后出现
+  assert.ok(fullText.includes('acme/lint'))
+  assert.ok(!fullText.includes('acme/fourth-tool'))
+  const expandBtn = findAll(fullMount.root, (n) => n.tag === 'button' && n.attrs?.class === 'more-repos-btn')[0]
+  assert.ok(expandBtn)
+  assert.equal(textOf(expandBtn).trim(), '展开全部 4 个')
+  expandBtn.attrs.onClick()
+  await nextTick()
+  assert.ok(textOf(fullMount.root).includes('acme/fourth-tool'))
+  assert.equal(textOf(expandBtn).trim(), '收起')
 
   const links = findAll(fullMount.root, (n) => n.tag === 'a')
   const inDayLink = links.find((a) => textOf(a).includes('acme/agent-new'))

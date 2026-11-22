@@ -115,6 +115,7 @@ test('trend API 解码支持 radar-3 技术风向字段并兼容省略该字段�
 
 test('TrendProjectDetail 渲染分段正文、新标题与可选的技术风向观察卡片', async () => {
   const presentationUrl = await transpileTs('../../src/features/trend/presentation.ts')
+  const languageColorsUrl = await transpileTs('../../src/features/trend/languageColors.ts')
   const iconsUrl = dataUrl('export const ElIcon = {}, TopRight = {}, StarFilled = {};')
   const assetUrl = dataUrl('export default "voyage.webp";')
   const { descriptor } = parse(
@@ -129,6 +130,7 @@ test('TrendProjectDetail 渲染分段正文、新标题与可选的技术风向�
     .replaceAll("from 'element-plus'", `from '${iconsUrl}'`)
     .replaceAll("from '@element-plus/icons-vue'", `from '${iconsUrl}'`)
     .replaceAll("from '../../assets/startide-voyage.webp'", `from '${assetUrl}'`)
+    .replaceAll("from './languageColors'", `from '${languageColorsUrl}'`)
     .replaceAll("from './presentation'", `from '${presentationUrl}'`)
 
   const templateCode = compileTemplate({

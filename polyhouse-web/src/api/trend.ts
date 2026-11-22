@@ -420,7 +420,7 @@ function windowCategoryStat(value: unknown): TrendWindowCategoryStat {
     maxRepoStarsAdded: optional(row.maxRepoStarsAdded, whole),
     staleClassifiedCount: whole(row.staleClassifiedCount),
     oldestStaleAnalyzedAt: optional(row.oldestStaleAnalyzedAt, instant),
-    sampleRepos: list(row.sampleRepos, 3, windowSampleRepo),
+    sampleRepos: list(row.sampleRepos, 50, windowSampleRepo),
   }
 }
 

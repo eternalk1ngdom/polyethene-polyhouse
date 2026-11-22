@@ -4,6 +4,7 @@ import { ElIcon } from 'element-plus'
 import { TopRight, StarFilled } from '@element-plus/icons-vue'
 import voyage from '../../assets/startide-voyage.webp'
 import type { TrendProject, TrendReport } from '../../api/trend'
+import { languageColor } from './languageColors'
 import {
   insightLabel,
   insightReasonLabel,
@@ -149,7 +150,14 @@ const facts = computed(() => [
         <dl>
           <template v-for="[label, value] in facts" :key="label"
             ><dt>{{ label }}</dt>
-            <dd>{{ value }}</dd></template
+            <dd>
+              <span
+                v-if="label === '主语言'"
+                class="lang-dot"
+                aria-hidden="true"
+                :style="{ backgroundColor: languageColor(project.primaryLanguage) }"
+              />{{ value }}
+            </dd></template
           >
         </dl>
         <p class="note">采集于 {{ trendTime(report.capturedAt) }}（北京时间）</p>
@@ -386,6 +394,15 @@ dd {
 }
 aside dd {
   text-align: right;
+}
+.lang-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  box-shadow: inset 0 0 0 1px rgba(20, 47, 70, 0.16);
 }
 .note {
   margin: 16px 0 0;

@@ -202,6 +202,26 @@ class TrendWindowAggregatorTest {
         assertThat(stats.categories().getFirst().shareDelta()).isNull();
     }
 
+    @Test void categoryReturnsMoreThanThreeSampleReposInDeterministicOrder() {
+        LocalDate anchor = LocalDate.of(2026, 11, 22);
+        Instant now = Instant.parse("2026-11-22T02:00:00Z");
+        var d22 = report(anchor, "2026-11-22T02:10:00Z", List.of(
+                project(1, "401", "acme/alpha", 500L, "CODE_PROJECT", "ANALYZED", insight("DEVTOOLS", now, "radar-3", "信号")),
+                project(2, "402", "acme/beta", 300L, "CODE_PROJECT", "ANALYZED", insight("DEVTOOLS", now, "radar-3", "信号")),
+                project(3, "403", "acme/gamma", 200L, "CODE_PROJECT", "ANALYZED", insight("DEVTOOLS", now, "radar-3", "信号")),
+                project(4, "404", "acme/delta", 100L, "CODE_PROJECT", "ANALYZED", insight("DEVTOOLS", now, "radar-3", "信号"))
+        ));
+        var d21 = report(LocalDate.of(2026, 11, 21), "2026-11-21T02:10:00Z", List.of(
+                project(5, "404", "acme/delta", 90L, "CODE_PROJECT", "ANALYZED", insight("DEVTOOLS", now, "radar-3", "信号"))
+        ));
+        var stats = TrendWindowAggregator.aggregate(anchor, List.of(d22, d21));
+        assertThat(stats.categories()).hasSize(1);
+        // acme/delta 上榜 2 天排第一，其余均上榜 1 天按锚点排名升序排列，全部 4 个均完整返回。
+        assertThat(stats.categories().getFirst().sampleRepos())
+                .extracting("fullName")
+                .containsExactly("acme/delta", "acme/alpha", "acme/beta", "acme/gamma");
+    }
+
     private static TrendReportVO report(LocalDate date, String capturedAt, List<TrendProjectVO> items) {
         return new TrendReportVO(UUID.randomUUID().toString(), "DAILY", date, Instant.parse(capturedAt),
                 Instant.parse(capturedAt).plusSeconds(30), GithubTrendingParser.SOURCE, false, items);

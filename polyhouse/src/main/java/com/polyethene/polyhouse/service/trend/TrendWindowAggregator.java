@@ -16,7 +16,8 @@ import java.util.*;
 public final class TrendWindowAggregator {
     /** 固定观察 7 个连续自然日（含锚点日），不回溯猜造未采集日期。 */
     public static final int WINDOW_DAYS = 7;
-    private static final int MAX_SAMPLE_REPOS = 3;
+    /** 单类去重仓库上限：7 日窗口单类通常仅十余条，返回最多 50 条供前端默认看前 3 并按需展开全部。 */
+    private static final int MAX_SAMPLE_REPOS = 50;
     private static final int MAX_RECURRING_REPOS = 15;
 
     private TrendWindowAggregator() { }

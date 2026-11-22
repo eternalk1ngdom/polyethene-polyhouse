@@ -77,7 +77,7 @@ public record TrendWindowStatsVO(String periodType, LocalDate anchorDate, LocalD
      * @param maxRepoStarsAdded 该类去重仓库最新期有效新增星标的最大值（便于识别单明星项目影响；无样本为 null）
      * @param staleClassifiedCount 该类依赖 STALE 旧解读分类的去重仓库数
      * @param oldestStaleAnalyzedAt 该类旧解读归类中最老的原稿时间（UTC），无则为 null
-     * @param sampleRepos 该类代表仓库（最多 3 个），小样本时直接列举核对
+     * @param sampleRepos 该类按上榜天数与排名排序的代表仓库列表（最多 50 个），前端默认展示前 3 个并支持展开全部
      */
     public record CategoryStat(String category, int anchorDayCount, Double anchorDayShare,
                                int windowUniqueCount, int windowAppearances, Double windowShare,

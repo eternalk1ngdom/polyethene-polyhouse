@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElIcon } from 'element-plus'
 import { StarFilled, TopRight } from '@element-plus/icons-vue'
-import type { TrendWindowStats } from '../../api/trend'
+import type { TrendWindowCategoryStat, TrendWindowSampleRepo, TrendWindowStats } from '../../api/trend'
 import {
   categoryLabel,
   shortTrendDate,
@@ -32,6 +32,16 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+const DEFAULT_SAMPLE_LIMIT = 3
+const expandedCategories = ref<Record<string, boolean>>({})
+
+watch(
+  () => props.stats?.anchorDate,
+  () => {
+    expandedCategories.value = {}
+  },
+)
+
 const isSmallSample = computed(() => props.stats?.sampleStatus === 'INSUFFICIENT')
 
 const sampleBadge = computed(() => {
@@ -48,6 +58,23 @@ const missingDatesText = computed(() =>
 function barWidth(share: number | null): string {
   if (share === null) return '0%'
   return `${Math.max(4, Math.round(share * 100))}%`
+}
+
+function isCategoryExpanded(category: string): boolean {
+  return Boolean(expandedCategories.value[category])
+}
+
+function toggleCategory(category: string) {
+  expandedCategories.value = {
+    ...expandedCategories.value,
+    [category]: !expandedCategories.value[category],
+  }
+}
+
+function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
+  return isCategoryExpanded(cat.category)
+    ? cat.sampleRepos
+    : cat.sampleRepos.slice(0, DEFAULT_SAMPLE_LIMIT)
 }
 </script>
 
@@ -192,27 +219,52 @@ function barWidth(share: number | null): string {
                 · 最早 {{ trendTime(cat.oldestStaleAnalyzedAt) }}</template
               >
             </p>
-            <div v-if="isSmallSample || cat.windowUniqueCount < 3" class="sample-repos">
-              <span class="muted">代表项目：</span>
-              <template v-for="(repo, idx) in cat.sampleRepos" :key="repo.fullName">
-                <a
-                  v-if="repo.inAnchorDay"
-                  class="repo-link"
-                  :href="resolveDetailHref(repo.fullName)"
-                  @click="emit('openProject', $event, repo.fullName)"
-                  >{{ repo.fullName }}</a
+            <div v-if="cat.sampleRepos.length" class="sample-repos">
+              <div class="sample-head">
+                <span class="sample-label">代表项目</span>
+                <button
+                  v-if="cat.sampleRepos.length > DEFAULT_SAMPLE_LIMIT"
+                  type="button"
+                  class="more-repos-btn"
+                  :aria-expanded="isCategoryExpanded(cat.category)"
+                  @click="toggleCategory(cat.category)"
                 >
-                <a
-                  v-else
-                  class="repo-link"
-                  :href="repo.repoUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >{{ repo.fullName
-                  }}<ElIcon class="ext-icon" aria-hidden="true"><TopRight /></ElIcon
-                ></a>
-                <span v-if="idx < cat.sampleRepos.length - 1" class="muted">、</span>
-              </template>
+                  {{
+                    isCategoryExpanded(cat.category)
+                      ? '收起'
+                      : `展开全部 ${cat.sampleRepos.length} 个`
+                  }}
+                </button>
+              </div>
+              <ul class="sample-chips">
+                <li v-for="repo in visibleRepos(cat)" :key="repo.fullName" class="sample-chip">
+                  <a
+                    v-if="repo.inAnchorDay"
+                    class="repo-link"
+                    :href="resolveDetailHref(repo.fullName)"
+                    @click="emit('openProject', $event, repo.fullName)"
+                    >{{ repo.fullName }}</a
+                  >
+                  <a
+                    v-else
+                    class="repo-link"
+                    :href="repo.repoUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{{ repo.fullName
+                    }}<ElIcon class="ext-icon" aria-hidden="true"><TopRight /></ElIcon
+                  ></a>
+                  <span class="chip-meta">
+                    <template v-if="repo.appearanceDays >= 2">{{ repo.appearanceDays }}天</template>
+                    <template v-if="repo.appearanceDays >= 2 && repo.latestStarsAdded !== null">
+                      ·
+                    </template>
+                    <template v-if="repo.latestStarsAdded !== null"
+                      >+{{ trendNumber(repo.latestStarsAdded) }}</template
+                    >
+                  </span>
+                </li>
+              </ul>
             </div>
           </article>
         </div>
@@ -398,11 +450,12 @@ function barWidth(share: number | null): string {
   font-weight: 600;
 }
 .kpi-value {
-  font:
-    700 24px/1.2 Georgia,
-    serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   color: #142f46;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .kpi-sub {
   font-size: 12px;
@@ -527,10 +580,76 @@ function barWidth(share: number | null): string {
   color: #6b460a;
 }
 .sample-repos {
-  margin-top: 7px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #d3dfe0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sample-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+.sample-label {
   font-size: 12px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: #52667c;
+}
+.more-repos-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  margin: -10px -10px -10px 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #1d4e6b;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.more-repos-btn:hover {
+  background: #eaf1f2;
+}
+.more-repos-btn:active {
+  border-color: #154e78;
+  background: #e1ecef;
+}
+.more-repos-btn:focus-visible {
+  outline: none;
+  border-color: #154e78;
+  box-shadow: inset 0 0 0 1px #154e78;
+}
+.sample-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sample-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid #d7e2e4;
+  border-radius: 7px;
+  background: #f5f8f8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.chip-meta {
+  color: #52667c;
+  font-size: 11px;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .repo-link {
   color: #192743;
@@ -567,10 +686,12 @@ function barWidth(share: number | null): string {
   font-variant-numeric: tabular-nums;
 }
 .rec-days strong {
-  font:
-    italic 21px/1.3 Georgia,
-    serif;
+  font-size: 20px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1.25;
   color: #28566f;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .rec-days strong span {
   font-style: normal;
