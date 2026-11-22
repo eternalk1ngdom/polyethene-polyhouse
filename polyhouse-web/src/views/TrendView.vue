@@ -19,6 +19,7 @@ const owner = computed(
   () => user.isLoggedIn && user.user?.role === 'OWNER' && !user.requiresPasswordChange,
 )
 const directory = computed(() => route.name === starTide.name)
+const isWindowView = computed(() => directory.value && route.query.view === 'window')
 const edition = computed(() => (directory.value ? route.query.date : route.params.date))
 const {
   report,
@@ -35,7 +36,7 @@ const {
   windowError,
   loadingWindow,
   loadWindow,
-} = useTrendEdition(edition, directory)
+} = useTrendEdition(edition, directory, isWindowView)
 const selectedDate = computed(() => (isTrendDate(edition.value) ? edition.value : ''))
 const dateOptions = computed(() =>
   [...new Set([selectedDate.value, ...dates.value].filter(Boolean))].sort().reverse(),
@@ -62,18 +63,37 @@ const project = computed(() =>
 const listHeading = ref<HTMLElement>()
 const detailPanel = ref<HTMLElement>()
 
-function directoryLocation(date: string, lang: string, at?: string) {
-  return { name: starTide.name, query: { date: date || undefined, lang: lang || undefined, at } }
+function directoryLocation(date: string, lang: string, at?: string, view?: 'window') {
+  return {
+    name: starTide.name,
+    query: {
+      date: date || undefined,
+      lang: view === 'window' ? undefined : lang || undefined,
+      view: view === 'window' ? 'window' : undefined,
+      at,
+    },
+  }
 }
+const returnView = computed<'window' | undefined>(() =>
+  route.query.view === 'window' ? 'window' : undefined,
+)
 const returnTo = computed(() =>
-  directoryLocation(selectedDate.value, language.value, project.value?.fullName ?? repoName.value),
+  directoryLocation(
+    selectedDate.value,
+    language.value,
+    project.value?.fullName ?? repoName.value,
+    returnView.value,
+  ),
 )
 function detailLocation(name: string) {
   const [owner, repo] = name.split('/')
   return {
     name: 'star-tide-project',
     params: { date: report.value?.periodKey, owner, repo },
-    query: { lang: language.value || undefined },
+    query: {
+      lang: isWindowView.value ? undefined : language.value || undefined,
+      view: isWindowView.value ? 'window' : undefined,
+    },
   }
 }
 function ordinaryClick(event: MouseEvent) {
@@ -83,8 +103,13 @@ async function openProject(event: MouseEvent, name: string) {
   if (!ordinaryClick(event) || !report.value) return
   event.preventDefault()
   const destination = detailLocation(name)
-  // 先固定实际期号，跨午夜或刷新详情后仍可后退到同一期与原位置。
-  const origin = directoryLocation(report.value.periodKey, language.value, name)
+  // 先固定实际期号与当前视图，跨午夜或刷新详情后仍可后退到同一期与原位置。
+  const origin = directoryLocation(
+    report.value.periodKey,
+    language.value,
+    name,
+    isWindowView.value ? 'window' : undefined,
+  )
   await router.replace({ ...origin, state: { tideScroll: window.scrollY }, force: true })
   await router.push({ ...destination, state: { tideOrigin: router.currentRoute.value.fullPath } })
 }
@@ -100,8 +125,21 @@ function goBack(event: MouseEvent) {
     router.back()
   else void router.replace(returnTo.value)
 }
+function selectView(view: 'daily' | 'window') {
+  if ((view === 'window') === isWindowView.value) return
+  void router.replace(
+    directoryLocation(selectedDate.value, language.value, undefined, view === 'window' ? 'window' : undefined),
+  )
+}
 function selectDate(event: Event) {
-  void router.push(directoryLocation((event.target as HTMLSelectElement).value, ''))
+  void router.push(
+    directoryLocation(
+      (event.target as HTMLSelectElement).value,
+      '',
+      undefined,
+      isWindowView.value ? 'window' : undefined,
+    ),
+  )
 }
 function selectLanguage(event: Event) {
   void router.replace(
@@ -140,6 +178,26 @@ watch(
           <h1>星潮 <em lang="en">StarTide</em></h1>
         </header>
         <div class="toolbar">
+          <div class="view-switch" role="group" aria-label="星潮阅读视图">
+            <button
+              type="button"
+              class="view-tab"
+              :class="{ active: !isWindowView }"
+              :aria-pressed="!isWindowView"
+              @click="selectView('daily')"
+            >
+              开源日报
+            </button>
+            <button
+              type="button"
+              class="view-tab"
+              :class="{ active: isWindowView }"
+              :aria-pressed="isWindowView"
+              @click="selectView('window')"
+            >
+              近 7 日风向
+            </button>
+          </div>
           <label class="control"
             ><ElIcon aria-hidden="true"><Calendar /></ElIcon>日报日期
             <select id="trend-date" :value="selectedDate" @change="selectDate">
@@ -150,7 +208,7 @@ watch(
           <ElButton v-if="cursor" :loading="loadingDates" @click="loadDates(true)"
             >更早日期</ElButton
           >
-          <label class="control" v-if="languages.length || language"
+          <label class="control" v-if="!isWindowView && (languages.length || language)"
             >编程语言
             <select id="trend-language" :value="language" @change="selectLanguage">
               <option value="">全部语言</option>
@@ -174,7 +232,8 @@ watch(
         </p>
       </template>
       <a v-else class="utility back" :href="router.resolve(returnTo).href" @click="goBack"
-        ><ElIcon aria-hidden="true"><Back /></ElIcon> 返回当期榜单</a
+        ><ElIcon aria-hidden="true"><Back /></ElIcon>
+        {{ returnView === 'window' ? '返回近 7 日风向' : '返回当期榜单' }}</a
       >
       <div v-if="loadingReport" class="state" role="status">正在读取日报…</div>
       <div v-else-if="reportError" class="state" role="alert">
@@ -187,21 +246,8 @@ watch(
         <RouterLink v-if="selectedDate" :to="starTide.route">返回最新一期</RouterLink>
       </div>
       <template v-else-if="report && directory">
-        <div class="section-head">
-          <h2 ref="listHeading" tabindex="-1">开源项目日报</h2>
-          <p class="meta">
-            <time :datetime="report.periodKey">{{ report.periodKey }}</time>
-            <span>本期 {{ report.items.length }} 个项目</span>
-            <span>采集于 {{ trendTime(report.capturedAt) }}（北京时间）</span>
-          </p>
-          <a class="utility" :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
-            >GitHub 日榜 <ElIcon aria-hidden="true"><TopRight /></ElIcon
-          ></a>
-        </div>
-        <p v-if="!report.insightComplete" class="notice">
-          部分解读暂缺或沿用旧版，榜单资料仍可阅读。
-        </p>
         <TrendWindowOverview
+          v-if="isWindowView"
           :stats="windowStats"
           :loading="loadingWindow"
           :error="windowError"
@@ -209,25 +255,41 @@ watch(
           @retry="loadWindow()"
           @open-project="openProject"
         />
-        <div class="columns">
-          <span role="status">{{
-            language
-              ? `筛选后 ${entries.length} / ${report.items.length} 条 · 保留来源排名`
-              : '排名 ／ 项目'
-          }}</span
-          ><span>本期新增星标</span>
-        </div>
-        <TrendProjectEntry
-          v-for="item in entries"
-          :key="item.fullName"
-          :project="item"
-          :href="router.resolve(detailLocation(item.fullName)).href"
-          @open="openProject"
-        />
-        <p v-if="!entries.length" class="state">
-          本期没有符合条件的项目。
-          <RouterLink :to="directoryLocation(selectedDate, '')">查看全部</RouterLink>
-        </p>
+        <template v-else>
+          <div class="section-head">
+            <h2 ref="listHeading" tabindex="-1">开源项目日报</h2>
+            <p class="meta">
+              <time :datetime="report.periodKey">{{ report.periodKey }}</time>
+              <span>本期 {{ report.items.length }} 个项目</span>
+              <span>采集于 {{ trendTime(report.capturedAt) }}（北京时间）</span>
+            </p>
+            <a class="utility" :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
+              >GitHub 日榜 <ElIcon aria-hidden="true"><TopRight /></ElIcon
+            ></a>
+          </div>
+          <p v-if="!report.insightComplete" class="notice">
+            部分解读暂缺或沿用旧版，榜单资料仍可阅读。
+          </p>
+          <div class="columns">
+            <span role="status">{{
+              language
+                ? `筛选后 ${entries.length} / ${report.items.length} 条 · 保留来源排名`
+                : '排名 ／ 项目'
+            }}</span
+            ><span>本期新增星标</span>
+          </div>
+          <TrendProjectEntry
+            v-for="item in entries"
+            :key="item.fullName"
+            :project="item"
+            :href="router.resolve(detailLocation(item.fullName)).href"
+            @open="openProject"
+          />
+          <p v-if="!entries.length" class="state">
+            本期没有符合条件的项目。
+            <RouterLink :to="directoryLocation(selectedDate, '')">查看全部</RouterLink>
+          </p>
+        </template>
       </template>
       <section v-else-if="report" ref="detailPanel" aria-label="当期项目详情">
         <RouterView v-if="project" :project="project" :report="report" />
@@ -313,6 +375,43 @@ watch(
   flex-wrap: wrap;
   padding: 14px 0;
   border-bottom: 1px solid #c8d5db;
+}
+.view-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid #b6c5cc;
+  border-radius: 10px;
+  background: #edf2f2;
+  max-width: 100%;
+}
+.view-tab {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #354b59;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.view-tab:hover {
+  background: #e1eaec;
+}
+.view-tab:active {
+  border-color: #154e78;
+}
+.view-tab.active {
+  background: #ffffff;
+  border-color: #9daeb8;
+  color: #142f46;
+}
+.view-tab:focus-visible {
+  outline: none;
+  border-color: #154e78;
+  box-shadow: inset 0 0 0 1px #154e78;
 }
 .owner-link {
   margin-inline-start: auto;

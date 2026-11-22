@@ -9,8 +9,12 @@ import {
   type TrendWindowStats,
 } from '../../api/trend'
 
-/** 目录和详情共用当前期的快照。切期取消旧请求，离开星潮即释放。 */
-export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: ComputedRef<boolean>) {
+/** 目录和详情共用当前期的快照。切期取消旧请求，7 日统计按视图切换懒加载，离开星潮即释放。 */
+export function useTrendEdition(
+  edition: ComputedRef<unknown>,
+  inDirectory: ComputedRef<boolean>,
+  windowVisible: ComputedRef<boolean>,
+) {
   const report = ref<TrendReport | null>(null)
   const reportError = ref('')
   const loadingReport = ref(false)
@@ -136,9 +140,9 @@ export function useTrendEdition(edition: ComputedRef<unknown>, inDirectory: Comp
     },
     { immediate: true },
   )
-  // 在日报期号就绪后串行加载 7 日统计，既保证锚点一致又避免与日报/历史并发触碰读限流。
+  // 仅当用户切换到「近 7 日风向」视图且当期锚点就绪时才按需加载，不增加普通日报的请求与限流压力。
   watch(
-    [inDirectory, () => report.value?.periodKey],
+    [windowVisible, () => report.value?.periodKey],
     ([visible, periodKey]) => {
       if (!visible || !periodKey) return
       if (windowStats.value?.anchorDate === periodKey) return

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { createRenderer, h, nextTick } from 'vue'
+import { createRenderer, h } from 'vue'
 import { compileScript, compileTemplate, parse } from 'vue/compiler-sfc'
 import ts from 'typescript'
 
@@ -195,9 +195,9 @@ test('getTrendWindow 严格解码 7 日统计结构并拒绝越界比例或非�
   delete globalThis.__polyhouseWindowTestPayload
 })
 
-test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本展示及链接去向', async () => {
+test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示、占比条及链接去向', async () => {
   const presentationUrl = await transpileTs('../../src/features/trend/presentation.ts')
-  const iconsUrl = dataUrl('export const ElIcon = {}, ArrowDown = {}, TopRight = {}, StarFilled = {};')
+  const iconsUrl = dataUrl('export const ElIcon = {}, TopRight = {}, StarFilled = {};')
   const { descriptor } = parse(
     await readFile(new URL('../../src/features/trend/TrendWindowOverview.vue', import.meta.url), 'utf8'),
   )
@@ -230,10 +230,6 @@ test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本
       createComment: () => ({ tag: '#comment', text: '', parent: null }),
       insert(child, parent, anchor) {
         if (!parent) return
-        if (child.parent) {
-          const oldIdx = child.parent.children.indexOf(child)
-          if (oldIdx >= 0) child.parent.children.splice(oldIdx, 1)
-        }
         child.parent = parent
         if (anchor) {
           const index = parent.children.indexOf(anchor)
@@ -260,13 +256,7 @@ test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本
         node.attrs[key] = next
       },
       parentNode: (node) => node.parent ?? null,
-      nextSibling(node) {
-        if (!node.parent) return null
-        const idx = node.parent.children.indexOf(node)
-        return idx >= 0 && idx + 1 < node.parent.children.length
-          ? node.parent.children[idx + 1]
-          : null
-      },
+      nextSibling: () => null,
     })
     const root = createNode('root')
     const app = renderer.createApp({
@@ -277,7 +267,7 @@ test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本
             stats,
             loading: false,
             error: '',
-            resolveDetailHref: (name) => `#/tools/star-tide/2026-11-22/${name}`,
+            resolveDetailHref: (name) => `#/tools/star-tide/2026-11-22/${name}?view=window`,
           },
         ),
     })
@@ -295,33 +285,26 @@ test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本
       ? node.text
       : (node.children || []).map((child) => textOf(child)).join('')
 
-  // 1. 充足样本：默认折叠 -> 点击展开 -> 核对占比变化、旧稿提示、站内/外链分化
+  // 1. 充足样本：直接铺开 KPI、占比条、较前序变化、旧稿提示、多日上榜条目与站内/外链分化
   const fullMount = mountOverview(makeWindowPayload())
-  const toggleBtn = findAll(fullMount.root, (n) => n.tag === 'button')[0]
-  assert.equal(toggleBtn.attrs['aria-expanded'], false)
-  assert.equal(findAll(fullMount.root, (n) => n.attrs?.id === 'trend-window-panel').length, 0)
+  const fullText = textOf(fullMount.root)
+  assert.ok(fullText.includes('近 7 日榜内风向观察'))
+  assert.ok(fullText.includes('开发工具'))
+  assert.ok(fullText.includes('较前序 +25 个百分点'))
+  assert.ok(fullText.includes('+375.5'))
+  assert.ok(fullText.includes('旧稿归类提示'))
+  assert.ok(fullText.includes('缺采日期：11-20、11-16'))
+  assert.ok(findAll(fullMount.root, (n) => n.attrs?.class === 'share-track').length > 0)
 
-  toggleBtn.attrs.onClick()
-  await nextTick()
-  assert.equal(toggleBtn.attrs['aria-expanded'], true)
-  const panel = findAll(fullMount.root, (n) => n.attrs?.id === 'trend-window-panel')[0]
-  assert.ok(panel)
-  const panelText = textOf(panel)
-  assert.ok(panelText.includes('开发工具'))
-  assert.ok(panelText.includes('较前序 +25 个百分点'))
-  assert.ok(panelText.includes('中位 +375.5'))
-  assert.ok(panelText.includes('旧稿归类提示'))
-  assert.ok(panelText.includes('缺采日期：11-20、11-16'))
-
-  const links = findAll(panel, (n) => n.tag === 'a')
+  const links = findAll(fullMount.root, (n) => n.tag === 'a')
   const inDayLink = links.find((a) => textOf(a).includes('acme/agent-new'))
   const offDayLink = links.find((a) => textOf(a).includes('acme/ui'))
-  assert.equal(inDayLink.attrs.href, '#/tools/star-tide/2026-11-22/acme/agent-new')
+  assert.equal(inDayLink.attrs.href, '#/tools/star-tide/2026-11-22/acme/agent-new?view=window')
   assert.equal(offDayLink.attrs.href, 'https://github.com/acme/ui')
   assert.equal(offDayLink.attrs.target, '_blank')
   fullMount.unmount()
 
-  // 2. 小样本（INSUFFICIENT）：展示温和警告，不显示占比变化
+  // 2. 小样本（INSUFFICIENT）：展示温和警告，不显示占比条与较前序变化
   const smallMount = mountOverview(
     makeWindowPayload({
       coveredDays: 2,
@@ -330,11 +313,10 @@ test('TrendWindowOverview 默认折叠，展开后区分充足样本与小样本
       sampleStatus: 'INSUFFICIENT',
     }),
   )
-  findAll(smallMount.root, (n) => n.tag === 'button')[0].attrs.onClick()
-  await nextTick()
   const smallText = textOf(smallMount.root)
   assert.ok(smallText.includes('样本偏少'))
   assert.ok(smallText.includes('不足 3 天'))
   assert.ok(!smallText.includes('较前序'))
+  assert.equal(findAll(smallMount.root, (n) => n.attrs?.class === 'share-track').length, 0)
   smallMount.unmount()
 })
