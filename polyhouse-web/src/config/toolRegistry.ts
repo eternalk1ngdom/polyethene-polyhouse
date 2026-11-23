@@ -4,6 +4,8 @@ export interface ToolRegistryItem {
   code: string
   /** 对外显示的工具名称。 */
   title: string
+  /** 工具开放后，卡面用具体动作说明点开能做什么。 */
+  actionLabel: string
   /** 统一维护入口，保证首页和导航指向同一地址。 */
   route: string
   /** 图标名由展示层映射到 Element Plus 图标，配置不引入组件。 */
@@ -29,6 +31,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
   {
     code: 'poly-replace',
     title: '妙替',
+    actionLabel: '替换文本',
     route: '/replace',
     icon: 'Switch',
     tag: '文本替换',
@@ -42,6 +45,7 @@ export const toolRegistry: readonly ToolRegistryItem[] = [
   {
     code: 'target-kb',
     title: '妙压',
+    actionLabel: '压缩图片',
     route: '/targetkb',
     icon: 'Crop',
     tag: '图片处理',
