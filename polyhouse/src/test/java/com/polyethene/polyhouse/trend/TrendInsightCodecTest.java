@@ -181,7 +181,11 @@ class TrendInsightCodecTest {
         assertRejected(codec.envelope(unfinished.getBytes(StandardCharsets.UTF_8)).content(), "NO_COMPLETE_TEXT");
         assertRejected("   ", "EMPTY_CONTENT");
         assertRejected(content + "{}", "INVALID_JSON");
-        assertRejected(content.replace("\"definition\":\"本地开发辅助工具\",", ""), "FIELD_SET_MISMATCH");
+        assertRejected(content.replace("\"DEVTOOLS\"", "\"DEVTOOLS\",\"category\":\"OTHER\""), "DUPLICATE_JSON_KEY");
+        assertRejected(content.replace("\"definition\":\"本地开发辅助工具\",", ""), "MISSING_definition");
+        assertRejected(content.replace("\"category\":", "\"description\":\"raw\",\"category\":"), "UNEXPECTED_FIELD_description");
+        assertRejected(content.replace("\"category\":", "\"description_zh\":\"译文\",\"category\":"), "UNEXPECTED_FIELD_description_zh");
+        assertRejected(content.replace("\"category\":", "\"secretArbitraryKey\":true,\"category\":"), "UNEXPECTED_FIELDS");
         assertRejected(content.replace("[\"根据项目资料提取步骤\"]", "\"根据项目资料提取步骤\""), "INVALID_LIST_highlights");
     }
 

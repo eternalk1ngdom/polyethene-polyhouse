@@ -28,6 +28,12 @@ public class TrendInsightCodec {
     public static final Set<String> CATEGORIES = Set.of("AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
     private static final Set<String> FIELDS = Set.of("category", "definition", "painPoint", "comparison",
             "highlights", "documentedLimitations", "inferredRisks", "trendSignal", "descriptionZh");
+    /** 必填核心字段固定顺序，用于缺键时输出程序内安全诊断码。 */
+    private static final List<String> REQUIRED_FIELDS = List.of("category", "definition", "painPoint");
+    /** 模型常见误抄/命名偏差键名白名单；仅用于安全日志归因，绝不回显任意未信任键名。 */
+    private static final List<String> KNOWN_EXTRA_FIELDS = List.of(
+            "description", "description_zh", "descriptionZH", "repository", "language", "license", "readme",
+            "pain_point", "trend_signal", "documented_limitations", "inferred_risks");
     private final ObjectMapper json;
 
     /** 限制只作用本模块副本，不改变认证或其他接口的 JSON 行为。 */
@@ -64,14 +70,14 @@ public class TrendInsightCodec {
                     trendSignal 是“技术风向观察”（最多 200 字，最多 260 字符，材料过薄看不出方向时填 null）。
                     站在技术演进与开发者工作流视角，简明指出该项目折射出哪条技术方向变化（从什么旧做法转向什么新做法）、它把哪一步变轻或标准化了，并说明还需观察什么验证信号。
                     严禁把单项目或单日热度夸大为已定型的行业风口，不写当日排名或涨星数。
-                    descriptionZh 是输入资料中 GitHub 原始 description 的简明简体中文译文（纯文本，最多 160 字，最多 240 字符）。
-                    当 description 非空且主要为英文或其他非中文时，忠实直译其原意，不扩写不评价；若 description 为空或本身已是中文，则填 null。
+                    descriptionZh 是 GitHub 仓库原始简介的简明简体中文译文（纯文本，最多 160 字，最多 240 字符）。
+                    当仓库原始简介非空且主要为英文或其他非中文时，忠实直译其原意，不扩写不评价；若原始简介为空、本身已是中文或已包含完整中文句意，则填 null。
                     comparison 仅写资料明确支持的比较（最多 120 字），无依据用 null。
                     documentedLimitations 只放项目文档明示的限制；许可证未确认、字段缺失等资料采集状态绝不是项目限制，不要写入此栏。
                     inferredRisks 只放有具体前提的推断风险。两栏各最多 3 条，每条 80 字以内，允许空数组。
                     不编造性能数据、用户口碑、实测结果或商业替代关系，不把相互冲突的数字当定论。
                     category 从 AI_AGENT,AI_INFRA,FRONTEND,BACKEND,DEVTOOLS,DESKTOP,GRAPHICS,OTHER 选一。
-                    只输出一个完整 JSON 对象。以下为虚构项目的写法示范，请严格效仿其两段结构、术语中文括注、纯文本格式与各栏分工，严禁照抄示范中的虚构内容：
+                    只输出一个完整 JSON 对象，顶层键名必须严格且仅包含以下 9 个（不得新增、拼错或漏掉任何键，严禁把输入资料中的 repository、description、language、license、readme 抄进输出）：category、definition、painPoint、comparison、highlights、documentedLimitations、inferredRisks、trendSignal、descriptionZh。以下为虚构项目的写法示范，请严格效仿其两段结构、术语中文括注、纯文本格式与各栏分工，严禁照抄示范中的虚构内容：
                     {"category":"DEVTOOLS","definition":"需要维护多份服务配置的开发者，可以用它在线下提交前统一检查配置格式，拿到逐行报错清单。","painPoint":"比如，团队维护十几个微服务的 YAML（常见配置文件格式）文件，每次改完参数都要等提交 PR（合并请求）后靠远程流水线跑几分钟，才发现少写了一个缩进或漏填必填项，来回修改很耗时。\\n\\n这个工具提供本地 CLI（命令行工具），你在电脑上对着配置目录执行一次检查，它会按内置规则逐项核对字段名和类型，直接输出定位到具体行号的错误清单。你拿到的是提交前就能修好的干净配置；至于配置里的业务阈值设得合不合理，它不负责判断。","comparison":null,"highlights":["规则按 JSON Schema（数据结构校验规范）声明，团队无需改工具源码就能增减必填字段约束。","默认离线运行且退出码按错误级别区分，可直接挂进本地 Git 钩子拦截不合规改动。"],"documentedLimitations":[],"inferredRisks":["自定义校验规则写错时可能误报，上线前需拿已有配置文件试跑核对。"],"trendSignal":"配置校验正从远程持续集成阶段前移到本地提交前，通过统一规则文件把排查成本降到秒级；是否值得引入，还需观察团队配置变更频率与既有流水线的配合成本。","descriptionZh":"在提交前校验微服务 YAML 配置的本地命令行检查工具。"}
                     """;
             String material = json.writeValueAsString(Map.of("repository", item.fullName(), "description", Objects.toString(item.description(), ""),
@@ -121,7 +127,13 @@ public class TrendInsightCodec {
             if (!(json.readTree(content) instanceof ObjectNode node)) throw new OutputRejected("JSON_NOT_OBJECT");
             normalizeOptionalFields(node);
             return readInsight(node, sha, model, analyzedAt, RULE);
-        } catch (JsonProcessingException failure) { throw new OutputRejected("INVALID_JSON"); }
+        } catch (JsonProcessingException failure) {
+            String message = failure.getOriginalMessage();
+            if (message != null && message.startsWith("Duplicate field")) {
+                throw new OutputRejected("DUPLICATE_JSON_KEY");
+            }
+            throw new OutputRejected("INVALID_JSON");
+        }
     }
 
     private static void normalizeOptionalFields(ObjectNode node) {
@@ -141,7 +153,7 @@ public class TrendInsightCodec {
         if (node.toString().length() > MAX_CONTENT_CHARS) throw new OutputRejected("CONTENT_TOO_LONG");
         Set<String> fields = new HashSet<>();
         node.fieldNames().forEachRemaining(fields::add);
-        if (!FIELDS.equals(fields)) throw new OutputRejected("FIELD_SET_MISMATCH");
+        if (!FIELDS.equals(fields)) throw new OutputRejected(fieldMismatchReason(fields));
         String category = text(node, "category", 20, false);
         if (!CATEGORIES.contains(category)) throw new OutputRejected("UNKNOWN_CATEGORY");
         String definition = text(node, "definition", 100, false);
@@ -182,6 +194,20 @@ public class TrendInsightCodec {
             readInsight(content, saved.readmeVersion(), saved.model(), saved.analyzedAt(), saved.ruleVersion());
             return saved;
         } catch (JsonProcessingException | IllegalArgumentException failure) { throw invalid(); }
+    }
+
+    private static String fieldMismatchReason(Set<String> fields) {
+        // 仅输出程序内固定白名单诊断码，绝不把模型返回的任意未信任键名写入日志。
+        for (String required : REQUIRED_FIELDS) {
+            if (!fields.contains(required)) return "MISSING_" + required;
+        }
+        for (String known : KNOWN_EXTRA_FIELDS) {
+            if (fields.contains(known)) return "UNEXPECTED_FIELD_" + known;
+        }
+        for (String field : fields) {
+            if (!FIELDS.contains(field)) return "UNEXPECTED_FIELDS";
+        }
+        return "FIELD_SET_MISMATCH";
     }
 
     private static int tokens(JsonNode value) {
