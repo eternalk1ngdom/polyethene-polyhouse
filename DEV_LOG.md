@@ -1,6 +1,8 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-23（Asia/Shanghai）。**v1.0 开发中。**
+更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。**
+
+- [个人空间卡面](docs/plans/profile-card-backgrounds.md)已完成默认候选母稿与六款横幅选型图，下一步选定默认主题并适配个人页；硬币解锁待立项。[记录](docs/dev-log/v1.0-dev.15.md#个人空间卡面选型)
 
 - [前端精修 F4 与 F5](docs/dev-log/v1.0-dev.15.md#前端精修-f4-与-f5)已完成：分支 `feat/frontend-polish-f4-f5` 零后端完成后台视觉统一、星潮语义变量收敛与去米黄改纯白 `#ffffff`，构建、356 项单测、技能校验与 7 页×6 断点走查通过，待确认合入 `dev`；[F1/F3](docs/dev-log/v1.0-dev.15.md#前端精修-f1-与-f3)（PR #12）、[F2](docs/dev-log/v1.0-dev.15.md#前端精修-f2-工作台页头减重)（PR #13）与[星潮月夜横幅](docs/dev-log/v1.0-dev.15.md#星潮横幅-51-全景延展)（PR #14）已合入 `dev`（`6a30010`）。
 - [首页收尾区](docs/plans/home-closing-section.md)最终采用方案 A，工具列表直接接页脚，专项分支已验。[验收记录](docs/dev-log/v1.0-dev.15.md#首页收尾区方案)
