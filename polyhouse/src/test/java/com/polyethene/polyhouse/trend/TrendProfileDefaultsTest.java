@@ -19,6 +19,8 @@ class TrendProfileDefaultsTest {
         assertFlag(environment, "enabled", true);
         assertFlag(environment, "jobs.enabled", true);
         assertFlag(environment, "ai.enabled", false);
+        assertFlag(environment, "ai.thinking-enabled", false);
+        assertThat(environment.getProperty("polyhouse.trend.ai.thinking-effort")).isEqualTo("low");
         assertFlag(environment, "schedule.enabled", false);
         assertFlag(environment, "cache.enabled", false);
     }
@@ -30,21 +32,25 @@ class TrendProfileDefaultsTest {
         assertFlag(environment, "enabled", false);
         assertFlag(environment, "jobs.enabled", false);
         assertFlag(environment, "ai.enabled", false);
+        assertFlag(environment, "ai.thinking-enabled", false);
         assertFlag(environment, "schedule.enabled", false);
     }
 
     @Test
     void explicitSettingsOverrideTheProfileDefaults() {
         var local = configuration(null, Map.of("POLYHOUSE_TREND_ENABLED", "false",
-                "POLYHOUSE_TREND_JOBS_ENABLED", "false"));
+                "POLYHOUSE_TREND_JOBS_ENABLED", "false",
+                "POLYHOUSE_TREND_AI_THINKING_ENABLED", "true"));
         assertFlag(local, "enabled", false);
         assertFlag(local, "jobs.enabled", false);
+        assertFlag(local, "ai.thinking-enabled", true);
 
         var production = configuration("prod", Map.of("POLYHOUSE_TREND_ENABLED", "true",
                 "POLYHOUSE_TREND_JOBS_ENABLED", "true"));
         assertFlag(production, "enabled", true);
         assertFlag(production, "jobs.enabled", true);
         assertFlag(production, "ai.enabled", false);
+        assertFlag(production, "ai.thinking-enabled", false);
         assertFlag(production, "schedule.enabled", false);
     }
 

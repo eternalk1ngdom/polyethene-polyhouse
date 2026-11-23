@@ -13,6 +13,7 @@ import java.util.List;
  * @param documentedLimitations 项目材料明确说明的限制
  * @param inferredRisks 单独标识的模型推断风险，不冒充社区口碑
  * @param trendSignal 单独标识的 AI 技术风向观察，无依据或旧版本归档可空
+ * @param descriptionZh GitHub 原始简介的简明中文译文，原简介为空、本身为中文或旧版本归档可空
  * @param analyzedAt 本次生成时间，复用时不刷新
  * @param readmeVersion 分析所依据的 GitHub SHA
  * @param model 实际模型标识，方便解释资料来源
@@ -20,7 +21,7 @@ import java.util.List;
  */
 public record TrendInsightVO(String category, String definition, String painPoint, String comparison,
                               List<String> highlights, List<String> documentedLimitations, List<String> inferredRisks,
-                              String trendSignal,
+                              String trendSignal, String descriptionZh,
                               Instant analyzedAt, String readmeVersion, String model, String ruleVersion) {
     /** 冻结列表，防止发布后在内存中被另一次分析改写。 */
     public TrendInsightVO {
@@ -29,11 +30,20 @@ public record TrendInsightVO(String category, String definition, String painPoin
         inferredRisks = List.copyOf(inferredRisks);
     }
 
-    /** 兼容不包含技术风向字段的历史构造调用。 */
+    /** 兼容不包含原始简介译文字段的历史构造调用（如 radar-3）。 */
+    public TrendInsightVO(String category, String definition, String painPoint, String comparison,
+                          List<String> highlights, List<String> documentedLimitations, List<String> inferredRisks,
+                          String trendSignal,
+                          Instant analyzedAt, String readmeVersion, String model, String ruleVersion) {
+        this(category, definition, painPoint, comparison, highlights, documentedLimitations, inferredRisks,
+                trendSignal, null, analyzedAt, readmeVersion, model, ruleVersion);
+    }
+
+    /** 兼容不包含技术风向与简介译文字段的历史构造调用（如 radar-1/radar-2）。 */
     public TrendInsightVO(String category, String definition, String painPoint, String comparison,
                           List<String> highlights, List<String> documentedLimitations, List<String> inferredRisks,
                           Instant analyzedAt, String readmeVersion, String model, String ruleVersion) {
         this(category, definition, painPoint, comparison, highlights, documentedLimitations, inferredRisks,
-                null, analyzedAt, readmeVersion, model, ruleVersion);
+                null, null, analyzedAt, readmeVersion, model, ruleVersion);
     }
 }

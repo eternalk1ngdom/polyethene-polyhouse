@@ -115,6 +115,8 @@ final class TrendAcceptanceSandbox implements AutoCloseable {
         properties.add("polyhouse.trend.ai.enabled", () -> aiEnabled);
         properties.add("polyhouse.trend.ai.api-key", () -> !aiEnabled ? "" : live ? System.getenv("POLYHOUSE_DEEPSEEK_API_KEY") : TrendAiFixture.KEY);
         properties.add("polyhouse.trend.ai.monthly-budget-micros", () -> live ? 100_000L : 10_000_000L);
+        properties.add("polyhouse.trend.ai.thinking-enabled", () -> live && "true".equals(System.getenv("POLYHOUSE_TREND_AI_THINKING_ENABLED")));
+        properties.add("polyhouse.trend.ai.thinking-effort", () -> "low");
         properties.add("polyhouse.trend.schedule.enabled", () -> false);
         properties.add("polyhouse.trend.cache.enabled", () -> true);
     }

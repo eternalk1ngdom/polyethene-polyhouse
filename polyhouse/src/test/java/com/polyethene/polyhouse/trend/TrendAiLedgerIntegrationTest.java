@@ -74,6 +74,24 @@ class TrendAiLedgerIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tool_trend_ai_request", Long.class)).isEqualTo(1);
     }
 
+    @Test void outputBoundTracksThinkingConfigurationStrictly() {
+        var standard = ledger(TrendAiFixture.NOW, TrendAiFixture.settings());
+        assertThatThrownBy(() -> standard.reserve(UUID.randomUUID().toString(), 1, TrendAiFixture.SHA, 1000, 1501, null))
+                .isInstanceOf(com.polyethene.polyhouse.common.exception.BusinessException.class);
+
+        var thinking = ledger(TrendAiFixture.NOW, TrendAiFixture.settingsWithThinking());
+        assertThatThrownBy(() -> thinking.reserve(UUID.randomUUID().toString(), 1, TrendAiFixture.SHA, 1000, 3001, null))
+                .isInstanceOf(com.polyethene.polyhouse.common.exception.BusinessException.class);
+        String id = UUID.randomUUID().toString();
+        assertThat(thinking.reserve(id, 1, TrendAiFixture.SHA, 1000, 3000, null).status()).isEqualTo("GRANTED");
+        // 1000 * 2 + 3000 * 8 = 26_000 微元
+        assertThat(number("held_micros")).isEqualTo(26_000);
+        thinking.settle(id, 800, 2200, null);
+        // 800 * 2 + 2200 * 8 = 19_200 微元
+        assertThat(number("used_micros")).isEqualTo(19_200);
+        assertThat(number("held_micros")).isZero();
+    }
+
     @Test void concurrentReservationsNeverOverdrawSharedMonthBudget() throws Exception {
         var settings = new TrendAiProperties(true, TrendAiFixture.KEY, null, null, null, 3000L);
         var ledger = ledger(TrendAiFixture.NOW, settings);

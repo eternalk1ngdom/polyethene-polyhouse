@@ -16,7 +16,7 @@ async function transpileTs(relativePath, replacements = {}) {
   return dataUrl(code)
 }
 
-function makeReportPayload(insightPatch = {}, omitTrendSignal = false) {
+function makeReportPayload(insightPatch = {}, omitOptional = false, projectPatch = {}) {
   const insight = {
     category: 'DEVTOOLS',
     definition: '开发者可以用这个仓库把工具打包成 Cursor 插件。',
@@ -26,13 +26,17 @@ function makeReportPayload(insightPatch = {}, omitTrendSignal = false) {
     documentedLimitations: [],
     inferredRisks: ['具体插件效果需自行核对'],
     trendSignal: 'AI 编程工具正走向团队可复用的插件生态。',
+    descriptionZh: '开发者可将工具打包为 Cursor 插件的示例与目录仓库。',
     analyzedAt: '2026-11-21T10:00:00Z',
     readmeVersion: 'a'.repeat(40),
-    model: 'deepseek-chat',
-    ruleVersion: 'radar-3',
+    model: 'deepseek-flash',
+    ruleVersion: 'radar-4',
     ...insightPatch,
   }
-  if (omitTrendSignal) delete insight.trendSignal
+  if (omitOptional) {
+    delete insight.trendSignal
+    delete insight.descriptionZh
+  }
   return {
     reportId: '11111111-2222-3333-4444-555555555555',
     periodType: 'DAILY',
@@ -61,6 +65,7 @@ function makeReportPayload(insightPatch = {}, omitTrendSignal = false) {
         insightStatus: 'ANALYZED',
         insightReason: null,
         insight,
+        ...projectPatch,
       },
     ],
   }
@@ -79,8 +84,8 @@ test('trendParagraphs 正确拆分单段、多段和 Windows 换行，不丢弃�
   assert.deepEqual(trendParagraphs('   '), ['   '])
 })
 
-test('trend API 解码支持 radar-3 技术风向字段并兼容省略该字段的历史归档', async () => {
-  let nextPayload = makeReportPayload()
+test('trend API 解码支持 radar-4 原始简介译文与技术风向字段并兼容省略该字段的历史归档', async () => {
+  const nextPayload = makeReportPayload()
   const mockIndexUrl = dataUrl(`
     export class ApiError extends Error {
       constructor(message, status) { super(message); this.status = status }
@@ -97,18 +102,25 @@ test('trend API 解码支持 radar-3 技术风向字段并兼容省略该字段�
   })
   const { getTrendReport } = await import(trendApiUrl)
 
-  // 新规则 radar-3 包含 trendSignal
+  // 新规则 radar-4 包含 trendSignal 与 descriptionZh
   globalThis.__polyhouseTrendTestPayload = nextPayload
-  const v3 = await getTrendReport('2026-11-21')
-  assert.equal(v3.items[0].insight.trendSignal, 'AI 编程工具正走向团队可复用的插件生态。')
+  const v4 = await getTrendReport('2026-11-21')
+  assert.equal(v4.items[0].insight.trendSignal, 'AI 编程工具正走向团队可复用的插件生态。')
+  assert.equal(
+    v4.items[0].insight.descriptionZh,
+    '开发者可将工具打包为 Cursor 插件的示例与目录仓库。',
+  )
 
-  // 旧规则 radar-1 / radar-2 缺少 trendSignal 字段时归一化为 null
+  // 旧规则 radar-1 / radar-2 / radar-3 缺少可选字段时归一化为 null
   globalThis.__polyhouseTrendTestPayload = makeReportPayload({ ruleVersion: 'radar-1' }, true)
   const v1 = await getTrendReport('2026-11-21')
   assert.equal(v1.items[0].insight.trendSignal, null)
+  assert.equal(v1.items[0].insight.descriptionZh, null)
 
-  // 非字符串类型的 trendSignal 必须被拒绝
+  // 非字符串类型的 trendSignal 或 descriptionZh 必须被拒绝
   globalThis.__polyhouseTrendTestPayload = makeReportPayload({ trendSignal: 123 })
+  await assert.rejects(() => getTrendReport('2026-11-21'), /数据不完整/)
+  globalThis.__polyhouseTrendTestPayload = makeReportPayload({ descriptionZh: 456 })
   await assert.rejects(() => getTrendReport('2026-11-21'), /数据不完整/)
   delete globalThis.__polyhouseTrendTestPayload
 })
@@ -185,28 +197,50 @@ test('TrendProjectDetail 渲染分段正文、新标题与可选的技术风向�
       ? node.text
       : (node.children || []).map((child) => textOf(child)).join('')
 
-  // 1. 新规则 radar-3：双段正文 + 新标题 + 技术风向观察
-  const reportV3 = makeReportPayload()
-  const treeV3 = mountDetail(reportV3)
-  const headingsV3 = findAll(treeV3, (n) => n.tag === 'h2').map((n) => textOf(n).trim())
-  assert.ok(headingsV3.includes('它能帮你做什么'))
-  assert.ok(!headingsV3.includes('解决什么问题'))
-  assert.ok(headingsV3.includes('技术风向观察'))
+  // 1. 新规则 radar-4：双段正文 + 新标题 + 暖纸细线技术风向观察 + 双语原始简介 + 紧凑同行报头
+  const reportV4 = makeReportPayload()
+  const treeV4 = mountDetail(reportV4)
+  const headingH1 = findAll(treeV4, (n) => n.tag === 'h1')[0]
+  assert.ok(headingH1)
+  assert.equal(textOf(headingH1).trim(), 'cursor/plugins')
+  assert.equal(findAll(headingH1, (n) => n.tag === 'small').length, 1)
+  assert.equal(findAll(headingH1, (n) => n.tag === 'wbr').length, 1)
 
-  const usageSection = findAll(treeV3, (n) => n.tag === 'section' && n.attrs.class === 'usage-body')[0]
+  const headingsV4 = findAll(treeV4, (n) => n.tag === 'h2').map((n) => textOf(n).trim())
+  assert.ok(headingsV4.includes('它能帮你做什么'))
+  assert.ok(!headingsV4.includes('解决什么问题'))
+  assert.ok(headingsV4.includes('技术风向观察'))
+
+  const usageSection = findAll(treeV4, (n) => n.tag === 'section' && n.attrs.class === 'usage-body')[0]
   const usageParagraphs = findAll(usageSection, (n) => n.tag === 'p').map((n) => textOf(n).trim())
   assert.deepEqual(usageParagraphs, ['第一段交代手头情况与卡点。', '第二段交代处理过程与拿到什么。'])
 
-  const signalSection = findAll(treeV3, (n) => n.tag === 'section' && n.attrs.class === 'trend-signal')[0]
+  const signalSection = findAll(treeV4, (n) => n.tag === 'section' && n.attrs.class === 'trend-signal')[0]
   assert.ok(signalSection)
   assert.ok(textOf(signalSection).includes('AI 趋势解读'))
   assert.ok(textOf(signalSection).includes('AI 编程工具正走向团队可复用的插件生态。'))
 
-  // 2. 历史规则（trendSignal 为 null）：不渲染技术风向观察，单段正文正常渲染
+  const originalSection = findAll(treeV4, (n) => n.tag === 'section' && n.attrs.class === 'original')[0]
+  assert.ok(originalSection)
+  const rawDesc = findAll(originalSection, (n) => n.tag === 'p' && n.attrs.class === 'original-raw')[0]
+  const zhDesc = findAll(originalSection, (n) => n.tag === 'p' && n.attrs.class === 'original-zh')[0]
+  assert.equal(textOf(rawDesc).trim(), 'Developers can package tools for Cursor as plugins.')
+  assert.ok(textOf(zhDesc).includes('参考译文'))
+  assert.ok(textOf(zhDesc).includes('开发者可将工具打包为 Cursor 插件的示例与目录仓库。'))
+
+  // 校验 1A 紧凑报头与 3A 暖纸细线排版关键样式约束，避免冷蓝卡片盒回潮。
+  const styleText = descriptor.styles.map((s) => s.content).join('\n')
+  assert.ok(styleText.includes('clamp(24px, 3vw, 34px)'))
+  assert.ok(styleText.includes('display: inline;'))
+  assert.ok(!styleText.includes('#f2f7fa'))
+  assert.ok(!styleText.includes('#dceaf3'))
+
+  // 2. 历史规则（trendSignal 与 descriptionZh 均为 null）：不渲染风向与译文，单段正文正常渲染
   const reportV1 = makeReportPayload({
     ruleVersion: 'radar-1',
     painPoint: '单段历史正文。',
     trendSignal: null,
+    descriptionZh: null,
   })
   const treeV1 = mountDetail(reportV1)
   const headingsV1 = findAll(treeV1, (n) => n.tag === 'h2').map((n) => textOf(n).trim())
@@ -217,4 +251,20 @@ test('TrendProjectDetail 渲染分段正文、新标题与可选的技术风向�
     findAll(usageV1, (n) => n.tag === 'p').map((n) => textOf(n).trim()),
     ['单段历史正文。'],
   )
+  assert.equal(findAll(treeV1, (n) => n.tag === 'p' && n.attrs.class === 'original-zh').length, 0)
+
+  // 3. 原简介为空或原简介与译文相同时，不重复展示译文
+  const reportSame = makeReportPayload(
+    { descriptionZh: '中文原始简介' },
+    false,
+    { description: '中文原始简介' },
+  )
+  const treeSame = mountDetail(reportSame)
+  assert.equal(findAll(treeSame, (n) => n.tag === 'p' && n.attrs.class === 'original-zh').length, 0)
+
+  const reportNoDesc = makeReportPayload({}, false, { description: null })
+  const treeNoDesc = mountDetail(reportNoDesc)
+  assert.equal(findAll(treeNoDesc, (n) => n.tag === 'p' && n.attrs.class === 'original-zh').length, 0)
+  const origNoDesc = findAll(treeNoDesc, (n) => n.tag === 'section' && n.attrs.class === 'original')[0]
+  assert.ok(textOf(origNoDesc).includes('仓库未提供简介。'))
 })

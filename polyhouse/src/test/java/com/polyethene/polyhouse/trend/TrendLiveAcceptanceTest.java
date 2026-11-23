@@ -101,8 +101,9 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
         }
         String token = login(owner, fixturePassword);
         String month = YearMonth.now(ZoneId.of("Asia/Shanghai")).toString();
-        // 同月重复运行复用同一意图；失败也不自动换号重新收费，必要的新样本须另行明确安排。
-        String intent = editorial ? "polyhouse-editorial-radar-3-cursor-2026-11" : "polyhouse-g4-real-sample-v1:" + month;
+        // 同月重复运行复用同一意图；轻度思考对照单独区分意图，失败也不自动换号重新收费。
+        String variant = settings.thinkingActive() ? "radar-4-low" : "radar-4";
+        String intent = editorial ? "polyhouse-editorial-" + variant + "-cursor-2026-11" : "polyhouse-g4-real-sample-v1:" + month;
         if (editorial) assertThat(month).as("本次授权仅限十一月验收额度").isEqualTo("2026-11");
         String id = UUID.nameUUIDFromBytes(intent.getBytes(StandardCharsets.UTF_8)).toString();
         var submission = call("POST", "/api/manage/trend/jobs", token, Map.of("requestId", id));
@@ -121,11 +122,12 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("capturedAt", java.time.Instant.now().toString());
         result.put("scope", editorial ? "EDITORIAL_SINGLE" : "LOCAL_REAL_SAMPLE"); result.put("jobId", id); result.put("state", state);
+        result.put("thinkingEnabled", settings.thinkingActive());
         result.put("replayed", replayed);
         result.put("paidCallsThisRun", paidCalls.get()); result.put("task", data(progress));
         result.put("report", report); result.put("fees", data(fees));
         result.put("requests", jdbc.queryForList("SELECT id,month_key,state,reserved_micros,charged_micros,prompt_tokens,completion_tokens,outcome FROM tool_trend_ai_request ORDER BY created_at"));
-        Path output = Path.of("../.local-backups/trend-live", editorial ? "editorial-radar-3.json" : "latest.json");
+        Path output = Path.of("../.local-backups/trend-live", editorial ? "editorial-" + variant + ".json" : "latest.json");
         Files.createDirectories(output.getParent());
         json.writerWithDefaultPrettyPrinter().writeValue(output.toFile(), result);
         // 只输出经VO脱敏的报告与账本，不写Key、JWT、Prompt、README全文或上游响应。

@@ -69,6 +69,9 @@ polyhouse:
       input-yuan-per-million: 2
       output-yuan-per-million: 8
       monthly-budget-micros: 10000000
+      # 轻度思考默认关闭；仅允许 low 档，开启后输出上限 3000 token、超时 60s。
+      thinking-enabled: ${POLYHOUSE_TREND_AI_THINKING_ENABLED:false}
+      thinking-effort: ${POLYHOUSE_TREND_AI_THINKING_EFFORT:low}
   jwt:
     # 标准 Base64 编码的 32 字节安全随机密钥；空值不影响未接入鉴权的模块，实际签发/验证前必须配置。
     secret: ${POLYHOUSE_JWT_SECRET:}

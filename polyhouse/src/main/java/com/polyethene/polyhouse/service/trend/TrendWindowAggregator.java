@@ -351,7 +351,7 @@ public final class TrendWindowAggregator {
                 classifiedStatus = item.insightStatus();
                 classifiedAnalyzedAt = item.insight().analyzedAt();
                 classifiedFromStale = "STALE".equals(item.insightStatus());
-                radar3Ready = TrendInsightCodec.RULE.equals(item.insight().ruleVersion())
+                radar3Ready = TrendInsightCodec.TREND_SIGNAL_RULES.contains(item.insight().ruleVersion())
                         && item.insight().trendSignal() != null && !item.insight().trendSignal().isBlank();
             }
         }

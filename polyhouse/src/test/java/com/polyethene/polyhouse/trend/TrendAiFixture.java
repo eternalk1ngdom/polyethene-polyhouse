@@ -15,6 +15,9 @@ final class TrendAiFixture {
     static final Instant NOW = Instant.parse("2026-11-16T00:00:00Z");
     private TrendAiFixture() { }
     static TrendAiProperties settings() { return new TrendAiProperties(true, KEY, null, null, null, null); }
+    static TrendAiProperties settingsWithThinking() {
+        return new TrendAiProperties(true, KEY, null, null, null, null, true, "low");
+    }
     static TrendCollection.Project project(long id, String sha) {
         var item = new TrendProjectVO(1, Long.toString(id), "sample/engine", "https://github.com/sample/engine", "Sample tool", "Java",
                 1234L, 123L, 56L, "MIT", false, "CODE_PROJECT", "BUILD_AND_SOURCE", "AVAILABLE", "AVAILABLE", "NOT_ANALYZED");
@@ -26,7 +29,7 @@ final class TrendAiFixture {
         var json = TrendFixture.json();
         var content = json.createObjectNode().put("category", "DEVTOOLS").put("definition", "题".repeat(100))
                 .put("painPoint", "文".repeat(600)).put("comparison", "比".repeat(300))
-                .put("trendSignal", "向".repeat(260));
+                .put("trendSignal", "向".repeat(260)).put("descriptionZh", "译".repeat(240));
         for (String field : List.of("highlights", "documentedLimitations", "inferredRisks")) {
             var entries = content.putArray(field);
             for (int i = 0; i < 3; i++) entries.add("据".repeat(field.equals("highlights") ? 160 : 200));
@@ -44,7 +47,7 @@ final class TrendAiFixture {
     static String content() {
         return "{\"category\":\"DEVTOOLS\",\"definition\":\"本地开发辅助工具\",\"painPoint\":\"整理重复的开发操作\",\"comparison\":null,"
                 + "\"highlights\":[\"根据项目资料提取步骤\"],\"documentedLimitations\":[],\"inferredRisks\":[\"实际适用范围仍需试用\"],"
-                + "\"trendSignal\":\"开发流程正从手工脚本向可复用工具演进，具体采纳程度仍待观察。\"}";
+                + "\"trendSignal\":\"开发流程正从手工脚本向可复用工具演进，具体采纳程度仍待观察。\",\"descriptionZh\":\"用于简化开发流程的本地工具。\"}";
     }
     static TrendInsightVO insight(Instant when) { return new TrendInsightCodec(TrendFixture.json()).insight(content(), SHA, "deepseek-flash", when); }
     static DeepSeekGateway.Reply reply(String content, int input, int output) {

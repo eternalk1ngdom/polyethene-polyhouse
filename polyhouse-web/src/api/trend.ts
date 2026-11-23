@@ -11,6 +11,8 @@ export interface TrendInsight {
   inferredRisks: string[]
   /** 单独标注的 AI 技术风向观察；旧版本归档或材料不足时为 null。 */
   trendSignal: string | null
+  /** GitHub 原始简介的简明中文译文；原简介为空、本身为中文或旧版本归档时为 null。 */
+  descriptionZh: string | null
   analyzedAt: string
   readmeVersion: string
   model: string
@@ -307,6 +309,7 @@ function insight(value: unknown): TrendInsight {
     documentedLimitations: list(row.documentedLimitations, 3, text),
     inferredRisks: list(row.inferredRisks, 3, text),
     trendSignal: optional(row.trendSignal, text),
+    descriptionZh: optional(row.descriptionZh, text),
     analyzedAt: instant(row.analyzedAt),
     readmeVersion: text(row.readmeVersion),
     model: text(row.model),

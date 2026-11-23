@@ -56,7 +56,7 @@ public record TrendWindowStatsVO(String periodType, LocalDate anchorDate, LocalD
      * @param staleClassifiedRepoCount 分类依据来自 STALE 旧解读的独立仓库数
      * @param oldestStaleAnalyzedAt 旧解读归类中最老的原稿生成时间（UTC），无旧稿归类时为 null
      * @param unverifiedIdentityCount 窗口内缺失稳定 repositoryId、退化按仓库名去重的独立仓库数
-     * @param radar3ReadyCount 窗口内含 radar-3 且具备非空 trendSignal 的独立仓库数，供后续风口简报门槛参考
+     * @param radar3ReadyCount 窗口内含 radar-3 及以上规则且具备非空 trendSignal 的独立仓库数，供后续风口简报门槛参考
      */
     public record WindowSummary(int uniqueRepoCount, int totalAppearances, int classifiedRepoCount,
                                 int unclassifiedRepoCount, int docListRepoCount, int missingInsightRepoCount,
