@@ -446,7 +446,7 @@ watch(
   min-height: var(--scene-height);
   overflow: hidden;
   border-radius: 14px;
-  background: #d7e7e4;
+  background: #cadbe8;
 }
 .cover img {
   position: absolute;

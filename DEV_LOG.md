@@ -2,7 +2,7 @@
 
 更新时间：2026-11-23（Asia/Shanghai）。**v1.0 开发中。**
 
-- [星潮横幅 5:1 全景延展](docs/dev-log/v1.0-dev.15.md#星潮横幅-51-全景延展)已完成：分支 `style/startide-cover-banner` 将 `startide-tide-atlas.webp` 延展为 `2800×560` 并移除 CSS 镜像拉伸拼接，构建、356 项单测与多视口浏览器实测通过，待确认合入 `dev`；前端精修 [F1/F3](docs/dev-log/v1.0-dev.15.md#前端精修-f1-与-f3)（PR #12）与 [F2](docs/dev-log/v1.0-dev.15.md#前端精修-f2-工作台页头减重)（PR #13）已合入 `dev`（`d816d5d`），F4/F5 待后续推进。
+- [星潮横幅 5:1 全景延展](docs/dev-log/v1.0-dev.15.md#星潮横幅-51-全景延展)已完成：分支 `style/startide-cover-banner` 将 `startide-tide-atlas.webp` 重调并延展为清浅月夜 `2800×560` 全景（移除 CSS 镜像拉伸并同步底色 `#cadbe8`），构建与 356 项单测通过，待确认合入 `dev`；前端精修 [F1/F3](docs/dev-log/v1.0-dev.15.md#前端精修-f1-与-f3)（PR #12）与 [F2](docs/dev-log/v1.0-dev.15.md#前端精修-f2-工作台页头减重)（PR #13）已合入 `dev`（`d816d5d`），F4/F5 待后续推进。
 - [首页收尾区](docs/plans/home-closing-section.md)最终采用方案 A，工具列表直接接页脚，专项分支已验。[验收记录](docs/dev-log/v1.0-dev.15.md#首页收尾区方案)
 - 首页：[妙替纸蝶与妙压折页书](docs/dev-log/v1.0-dev.15.md#首页妙替与妙压卡面重绘)已完成，入口分别为“替换文本”和“压缩图片”，经 PR #9 合入 `dev`。[卡面集成记录](docs/dev-log/v1.0-dev.15.md#首页卡面与星潮集成)。
 - 星潮：基础工程、文章结构、7 日风向统计分别经 PR #6、#7、#8 合入 `dev`；[详情页改版与 `radar-4` 升级](docs/dev-log/v1.0-dev.15.md#星潮详情页改版与-radar-4-升级)（1A 紧凑报头、3A 暖纸细线、正面 Few-Shot、`descriptionZh` 双语简介、默认关闭的 `low` 轻度思考及键名收敛）已完成离线/隔离验收与本机实跑（16/16 `radar-4`），正经 PR 集成至 `dev`。真实后端浏览器联调、平台账单对账及[2B 可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)留待后续推进；11 月 20 日下午断源的首个故障仍缺现场证据。
