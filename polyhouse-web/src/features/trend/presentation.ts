@@ -69,6 +69,94 @@ export function categoryLabel(category: string | null): string {
   return Object.hasOwn(categoryLabels, category) ? categoryLabels[category]! : '其他方向'
 }
 
+/** 后端固定八大类的展示顺序；日榜筛选按此顺序列出，避免选项随每期数据跳动。 */
+export const trendCategoryKeys = [
+  'AI_AGENT',
+  'AI_INFRA',
+  'FRONTEND',
+  'BACKEND',
+  'DEVTOOLS',
+  'DESKTOP',
+  'GRAPHICS',
+  'OTHER',
+] as const
+/** 无解读的项目没有分类，用独立筛选值表示，避免与“其他方向”混在一起。 */
+export const UNCATEGORIZED = 'NONE'
+/** 网址 `cat` 参数允许的全部取值。 */
+export type TrendCategoryFilter = (typeof trendCategoryKeys)[number] | typeof UNCATEGORIZED
+
+/** 网址参数只接受白名单值，手改或过期链接按“全部分类”处理。 */
+export function isTrendCategoryFilter(value: unknown): value is TrendCategoryFilter {
+  return (
+    value === UNCATEGORIZED ||
+    (typeof value === 'string' && (trendCategoryKeys as readonly string[]).includes(value))
+  )
+}
+
+/** 把条目的解读分类归入筛选值：缺失为未分类，后端新增的未知代号与标签一致归入其他方向。 */
+export function projectCategory(category: string | null | undefined): TrendCategoryFilter {
+  if (!category) return UNCATEGORIZED
+  return isTrendCategoryFilter(category) ? category : 'OTHER'
+}
+
+/** 统计一期内各分类条数；所有分类都有键，便于把 0 条的选项保留并禁用。 */
+export function categoryCounts(
+  categories: readonly (string | null | undefined)[],
+): Map<TrendCategoryFilter, number> {
+  const counts = new Map<TrendCategoryFilter, number>()
+  for (const key of trendCategoryKeys) counts.set(key, 0)
+  counts.set(UNCATEGORIZED, 0)
+  for (const category of categories) {
+    const key = projectCategory(category)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+/** 连续阅读时当前篇的前后位置；`filtered` 表示是否沿用了列表筛选顺序。 */
+export interface TrendNeighbors<T> {
+  /** 排在当前篇之前的一篇，首篇为 null。 */
+  previous: T | null
+  /** 排在当前篇之后的一篇，末篇为 null。 */
+  next: T | null
+  /** 当前篇在序列中的序号，从 1 开始。 */
+  position: number
+  /** 序列总篇数。 */
+  total: number
+  /** 当前篇不在筛选结果中时退回整期顺序，此时为 false。 */
+  filtered: boolean
+}
+
+/**
+ * 按读者看到的列表顺序找前后篇。仓库名按不区分大小写比较，与详情页查找规则一致；
+ * 手改网址导致当前篇不在筛选结果中时，退回整期顺序，仍能继续阅读。
+ */
+export function siblingProjects<T extends { fullName: string }>(
+  filteredItems: readonly T[],
+  allItems: readonly T[],
+  fullName: string,
+): TrendNeighbors<T> | null {
+  const target = fullName.toLowerCase()
+  const find = (list: readonly T[]) =>
+    list.findIndex((item) => item.fullName.toLowerCase() === target)
+  let list = filteredItems
+  let index = find(list)
+  // 筛选后条数与整期相同等同于未筛选，说明文字不必提示筛选条件。
+  const filtered = index >= 0 && filteredItems.length < allItems.length
+  if (index < 0) {
+    list = allItems
+    index = find(list)
+  }
+  if (index < 0) return null
+  return {
+    previous: list[index - 1] ?? null,
+    next: list[index + 1] ?? null,
+    position: index + 1,
+    total: list.length,
+    filtered,
+  }
+}
+
 /** 将 0～1 比例格式化为整数百分比；分母为空时显式返回横线而非 0%。 */
 export function trendPercent(value: number | null): string {
   if (value === null) return '—'

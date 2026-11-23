@@ -99,9 +99,9 @@ const covers = {
   top: calc(var(--art-top) + min(3%, 10px));
   height: min(68%, calc(100% - var(--art-top) - 74px));
 }
-@media (min-width: 1000px) {
+@media (min-width: 1000px) and (max-width: 1179px) {
   .text .illustration {
-    /* 宽双列给纸蝶更多高度；窄双列沿用原位，避免飞行弧线穿过左上角题签。 */
+    /* 宽双列给纸蝶更多高度；窄双列和宽屏三列卡宽相近，沿用原位，避免飞行弧线穿过左上角题签。 */
     top: 4%;
     height: min(75%, calc(96% - 74px));
   }

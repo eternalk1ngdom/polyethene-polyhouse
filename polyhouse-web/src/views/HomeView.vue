@@ -63,6 +63,11 @@ function resetFilters(): void {
   query.value = ''
   category.value = 'all'
 }
+/** 建议词跨分类可用；同时回到全部分类，避免先选分类再点建议词时出现空结果。 */
+function suggest(keyword: string): void {
+  query.value = keyword
+  category.value = 'all'
+}
 /** 搜索即时筛选；按 Enter 也把键盘用户带到结果区。 */
 async function showResults(): Promise<void> {
   await router.push({ path: '/', hash: '#tools' })
@@ -90,9 +95,10 @@ async function showResults(): Promise<void> {
         ></RouterLink>
       </form>
       <div class="popular-searches">
-        <span>试试搜索</span><button type="button" @click="query = '文本'">文本替换</button
-        ><button type="button" @click="query = '文件夹'">文件夹处理</button
-        ><button type="button" @click="query = '图片'">图片处理</button>
+        <span>试试搜索</span><button type="button" @click="suggest('日报')">开源日报</button
+        ><button type="button" @click="suggest('文本')">文本替换</button
+        ><button type="button" @click="suggest('文件夹')">文件夹处理</button
+        ><button type="button" @click="suggest('图片')">图片处理</button>
       </div>
       <RouterLink class="discover-link" :to="{ path: '/', hash: '#tools' }"
         >发现小工具<ElIcon><ArrowDown /></ElIcon
@@ -168,28 +174,29 @@ async function showResults(): Promise<void> {
 }
 .hero {
   text-align: center;
-  padding: 68px 16px 52px;
+  /* 收紧首屏留白，让桌面三列插画卡面在常见 1440×900 视口内完整露出。 */
+  padding: 36px 16px 20px;
 }
 .hero-label {
   display: inline-block;
   background: var(--ph-cream);
   border-radius: 99px;
-  padding: 10px 18px;
+  padding: 8px 16px;
   font-size: 13px;
-  margin: 0 0 26px;
+  margin: 0 0 16px;
 }
 h1 {
-  font-size: clamp(40px, 4.8vw, 68px);
+  font-size: clamp(34px, 3.6vw, 52px);
   font-weight: 650;
-  line-height: 1.3;
+  line-height: 1.2;
   letter-spacing: -2px;
   margin: 0;
 }
 .hero-description {
   color: var(--ph-muted);
   font-size: 16px;
-  line-height: 1.9;
-  margin: 24px 0 26px;
+  line-height: 1.75;
+  margin: 14px 0 18px;
 }
 .mobile-break {
   display: none;
@@ -269,7 +276,7 @@ h1 {
   display: inline-flex;
   gap: 10px;
   align-items: center;
-  margin-top: 24px;
+  margin-top: 8px;
   padding: 8px;
   font-size: 13px;
   color: var(--ph-muted);
@@ -283,7 +290,6 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  padding-top: 12px;
 }
 h2 {
   margin: 0;
@@ -325,7 +331,7 @@ h2 {
 .results-count {
   font-size: 12px;
   color: var(--ph-muted);
-  margin: 24px 0 16px;
+  margin: 12px 0;
   overflow-wrap: anywhere;
 }
 .tool-grid {
@@ -333,6 +339,13 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 34px;
+}
+/* 宽屏三张卡同排，插画随首屏一起出现；更窄时退回双列，避免卡面过窄压住题签。 */
+@media (min-width: 1180px) {
+  .tool-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 28px;
+  }
 }
 .tool-card {
   min-width: 0;
@@ -454,7 +467,7 @@ h3 {
     width: calc(100% - 40px);
   }
   .hero {
-    padding: 44px 0 34px;
+    padding: 28px 0 18px;
   }
   .hero-description {
     font-size: 14px;

@@ -7,9 +7,21 @@ import tideAtlas from '../assets/startide-tide-atlas.webp'
 import { isTrendDate } from '../api/trend'
 import { starTide } from '../config/starTide'
 import { useUserStore } from '../stores/useUserStore'
-import { trendTime } from '../features/trend/presentation'
+import {
+  categoryCounts,
+  categoryLabel,
+  isTrendCategoryFilter,
+  projectCategory,
+  siblingProjects,
+  trendCategoryKeys,
+  trendTime,
+  UNCATEGORIZED,
+  type TrendCategoryFilter,
+} from '../features/trend/presentation'
 import { useTrendEdition } from '../features/trend/useTrendEdition'
 import TrendProjectEntry from '../features/trend/TrendProjectEntry.vue'
+import TrendSiblingNav from '../features/trend/TrendSiblingNav.vue'
+import TrendSkeleton from '../features/trend/TrendSkeleton.vue'
 import TrendWindowOverview from '../features/trend/TrendWindowOverview.vue'
 
 const route = useRoute()
@@ -42,6 +54,9 @@ const dateOptions = computed(() =>
   [...new Set([selectedDate.value, ...dates.value].filter(Boolean))].sort().reverse(),
 )
 const language = computed(() => (typeof route.query.lang === 'string' ? route.query.lang : ''))
+const category = computed<TrendCategoryFilter | ''>(() =>
+  isTrendCategoryFilter(route.query.cat) ? route.query.cat : '',
+)
 const languages = computed(() => {
   const counts = new Map<string, number>()
   for (const item of report.value?.items ?? []) {
@@ -50,10 +65,33 @@ const languages = computed(() => {
   }
   return [...counts].sort(([a], [b]) => a.localeCompare(b))
 })
+const categoryOptions = computed(() => {
+  const counts = categoryCounts((report.value?.items ?? []).map((item) => item.insight?.category))
+  const list: { key: TrendCategoryFilter; label: string; count: number }[] = trendCategoryKeys.map(
+    (key) => ({
+      key,
+      label: categoryLabel(key),
+      count: counts.get(key) ?? 0,
+    }),
+  )
+  const uncategorizedCount = counts.get(UNCATEGORIZED) ?? 0
+  // 只有存在无解读项目或网址显式指定未分类时才列出该项，避免常规完整期号多出无用选项。
+  if (uncategorizedCount > 0 || category.value === UNCATEGORIZED) {
+    list.push({
+      key: UNCATEGORIZED,
+      label: categoryLabel(null),
+      count: uncategorizedCount,
+    })
+  }
+  return list
+})
+const hasFilter = computed(() => Boolean(language.value || category.value))
 const entries = computed(
   () =>
     report.value?.items.filter(
-      (item) => !language.value || item.primaryLanguage === language.value,
+      (item) =>
+        (!language.value || item.primaryLanguage === language.value) &&
+        (!category.value || projectCategory(item.insight?.category) === category.value),
     ) ?? [],
 )
 const repoName = computed(() => `${route.params.owner}/${route.params.repo}`)
@@ -63,12 +101,13 @@ const project = computed(() =>
 const listHeading = ref<HTMLElement>()
 const detailPanel = ref<HTMLElement>()
 
-function directoryLocation(date: string, lang: string, at?: string, view?: 'window') {
+function directoryLocation(date: string, lang: string, cat = '', at?: string, view?: 'window') {
   return {
     name: starTide.name,
     query: {
       date: date || undefined,
       lang: view === 'window' ? undefined : lang || undefined,
+      cat: view === 'window' ? undefined : cat || undefined,
       view: view === 'window' ? 'window' : undefined,
       at,
     },
@@ -77,22 +116,40 @@ function directoryLocation(date: string, lang: string, at?: string, view?: 'wind
 const returnView = computed<'window' | undefined>(() =>
   route.query.view === 'window' ? 'window' : undefined,
 )
+const inWindowContext = computed(() => isWindowView.value || returnView.value === 'window')
 const returnTo = computed(() =>
   directoryLocation(
     selectedDate.value,
     language.value,
+    category.value,
     project.value?.fullName ?? repoName.value,
     returnView.value,
   ),
 )
+const neighbors = computed(() => {
+  if (!report.value || !project.value) return null
+  // 从近 7 日风向进入时沿整期排名连读；从日榜进入时沿当前筛选结果连读，不在结果内则自动退回整期。
+  const list = inWindowContext.value ? report.value.items : entries.value
+  return siblingProjects(list, report.value.items, project.value.fullName)
+})
+const neighborScope = computed(() => {
+  if (!neighbors.value?.filtered) return '按本期排名'
+  const parts: string[] = []
+  if (language.value) parts.push(language.value)
+  if (category.value) {
+    parts.push(categoryLabel(category.value === UNCATEGORIZED ? null : category.value))
+  }
+  return `按 ${parts.join(' · ')} 筛选`
+})
 function detailLocation(name: string) {
   const [owner, repo] = name.split('/')
   return {
     name: 'star-tide-project',
     params: { date: report.value?.periodKey, owner, repo },
     query: {
-      lang: isWindowView.value ? undefined : language.value || undefined,
-      view: isWindowView.value ? 'window' : undefined,
+      lang: inWindowContext.value ? undefined : language.value || undefined,
+      cat: inWindowContext.value ? undefined : category.value || undefined,
+      view: inWindowContext.value ? 'window' : undefined,
     },
   }
 }
@@ -107,11 +164,18 @@ async function openProject(event: MouseEvent, name: string) {
   const origin = directoryLocation(
     report.value.periodKey,
     language.value,
+    category.value,
     name,
     isWindowView.value ? 'window' : undefined,
   )
   await router.replace({ ...origin, state: { tideScroll: window.scrollY }, force: true })
   await router.push({ ...destination, state: { tideOrigin: router.currentRoute.value.fullPath } })
+}
+/** 详情页连续阅读采用 replace，不堆叠多条历史；点“返回当期榜单”会定位到最后读的那一篇。 */
+async function openSibling(event: MouseEvent, name: string) {
+  if (!ordinaryClick(event) || !report.value) return
+  event.preventDefault()
+  await router.replace(detailLocation(name))
 }
 function goBack(event: MouseEvent) {
   if (!ordinaryClick(event)) return
@@ -128,13 +192,20 @@ function goBack(event: MouseEvent) {
 function selectView(view: 'daily' | 'window') {
   if ((view === 'window') === isWindowView.value) return
   void router.replace(
-    directoryLocation(selectedDate.value, language.value, undefined, view === 'window' ? 'window' : undefined),
+    directoryLocation(
+      selectedDate.value,
+      language.value,
+      category.value,
+      undefined,
+      view === 'window' ? 'window' : undefined,
+    ),
   )
 }
 function selectDate(event: Event) {
   void router.push(
     directoryLocation(
       (event.target as HTMLSelectElement).value,
+      '',
       '',
       undefined,
       isWindowView.value ? 'window' : undefined,
@@ -143,7 +214,20 @@ function selectDate(event: Event) {
 }
 function selectLanguage(event: Event) {
   void router.replace(
-    directoryLocation(selectedDate.value, (event.target as HTMLSelectElement).value),
+    directoryLocation(
+      selectedDate.value,
+      (event.target as HTMLSelectElement).value,
+      category.value,
+    ),
+  )
+}
+function selectCategory(event: Event) {
+  void router.replace(
+    directoryLocation(
+      selectedDate.value,
+      language.value,
+      (event.target as HTMLSelectElement).value,
+    ),
   )
 }
 
@@ -223,6 +307,20 @@ watch(
               </option>
             </select>
           </label>
+          <label class="control" v-if="!isWindowView && (report?.items.length || category)"
+            >技术分类
+            <select id="trend-category" :value="category" @change="selectCategory">
+              <option value="">全部分类</option>
+              <option
+                v-for="item in categoryOptions"
+                :key="item.key"
+                :value="item.key"
+                :disabled="item.count === 0 && item.key !== category"
+              >
+                {{ item.label }} · {{ item.count }}
+              </option>
+            </select>
+          </label>
           <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility owner-link"
             >星潮发布台</RouterLink
           >
@@ -235,7 +333,7 @@ watch(
         ><ElIcon aria-hidden="true"><Back /></ElIcon>
         {{ returnView === 'window' ? '返回近 7 日风向' : '返回当期榜单' }}</a
       >
-      <div v-if="loadingReport" class="state" role="status">正在读取日报…</div>
+      <TrendSkeleton v-if="loadingReport" :variant="directory ? 'list' : 'detail'" />
       <div v-else-if="reportError" class="state" role="alert">
         <p>{{ reportError }}</p>
         <ElButton @click="loadReport">重新读取</ElButton>
@@ -272,7 +370,7 @@ watch(
           </p>
           <div class="columns">
             <span role="status">{{
-              language
+              hasFilter
                 ? `筛选后 ${entries.length} / ${report.items.length} 条 · 保留来源排名`
                 : '排名 ／ 项目'
             }}</span
@@ -287,12 +385,37 @@ watch(
           />
           <p v-if="!entries.length" class="state">
             本期没有符合条件的项目。
-            <RouterLink :to="directoryLocation(selectedDate, '')">查看全部</RouterLink>
+            <RouterLink :to="directoryLocation(selectedDate, '', '')">查看全部</RouterLink>
           </p>
         </template>
       </template>
       <section v-else-if="report" ref="detailPanel" aria-label="当期项目详情">
-        <RouterView v-if="project" :project="project" :report="report" />
+        <template v-if="project">
+          <RouterView :project="project" :report="report" />
+          <TrendSiblingNav
+            v-if="neighbors"
+            :previous="
+              neighbors.previous
+                ? {
+                    project: neighbors.previous,
+                    href: router.resolve(detailLocation(neighbors.previous.fullName)).href,
+                  }
+                : null
+            "
+            :next="
+              neighbors.next
+                ? {
+                    project: neighbors.next,
+                    href: router.resolve(detailLocation(neighbors.next.fullName)).href,
+                  }
+                : null
+            "
+            :position="neighbors.position"
+            :total="neighbors.total"
+            :scope="neighborScope"
+            @open="openSibling"
+          />
+        </template>
         <div v-else class="state">
           <h1 tabindex="-1">该项目未收录在这期当前版本</h1>
           <p>可返回当期榜单查看已发布的项目。</p>

@@ -3,7 +3,7 @@ import { ElIcon } from 'element-plus'
 import { StarFilled } from '@element-plus/icons-vue'
 import type { TrendProject } from '../../api/trend'
 import { languageColor } from './languageColors'
-import { trendNumber } from './presentation'
+import { categoryLabel, trendNumber } from './presentation'
 
 interface Props {
   /** 排名和星标取自同一期，筛选后仍可与来源逐项核对。 */
@@ -43,11 +43,16 @@ const emit = defineEmits<Emits>()
         }}</span>
         {{ project.insight?.definition ?? project.description }}
       </p>
-      <span
-        class="language"
-        :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
-        >{{ project.primaryLanguage ?? '语言未知' }}</span
-      >
+      <div class="meta-tags">
+        <span
+          class="language"
+          :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
+          >{{ project.primaryLanguage ?? '语言未知' }}</span
+        >
+        <span v-if="project.insight" class="category">{{
+          categoryLabel(project.insight.category)
+        }}</span>
+      </div>
     </div>
     <span class="stars" role="img" :aria-label="`本期新增星标：${trendNumber(project.starsAdded)}`"
       ><ElIcon aria-hidden="true"><StarFilled /></ElIcon
@@ -106,13 +111,27 @@ h2 a:focus-visible {
   font-weight: 700;
   margin-right: 4px;
 }
+.meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
 .language {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: #41576a;
-  margin-top: 6px;
+}
+.category {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #e4f0ee;
+  color: #1d4e5a;
 }
 .language::before {
   content: '';
@@ -156,7 +175,7 @@ h2 a:focus-visible {
     grid-column: 2 / -1;
     margin: 0;
   }
-  .language {
+  .meta-tags {
     grid-column: 2;
     align-self: center;
     margin: 0;
