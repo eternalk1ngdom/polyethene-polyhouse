@@ -40,12 +40,13 @@ public class DeepSeekHttp implements DeepSeekGateway, AutoCloseable {
         if (!active.tryAcquire()) throw new NotSent();
         CompletableFuture<HttpResponse<byte[]>> future = null;
         try {
+            int timeoutSeconds = settings.requestTimeoutSeconds();
             var message = HttpRequest.newBuilder(URI.create("https://api.deepseek.com/chat/completions"))
-                    .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(timeoutSeconds)).header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + settings.apiKey())
                     .POST(HttpRequest.BodyPublishers.ofByteArray(request)).build();
             future = http.sendAsync(message, info -> new LimitedResponseBody(256 * 1024));
-            var response = future.get(30, TimeUnit.SECONDS);
+            var response = future.get(timeoutSeconds, TimeUnit.SECONDS);
             if (response.statusCode() == 200 && !response.headers().firstValue("Content-Type").orElse("").startsWith("application/json")) throw unavailable();
             // 正常响应不应含认证头中的 Key；异常回显即停止，不让它进入解读或日志。
             if (new String(response.body(), StandardCharsets.UTF_8).contains(settings.apiKey())) throw unavailable();

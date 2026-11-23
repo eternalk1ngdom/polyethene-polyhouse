@@ -270,6 +270,26 @@ class TrendAiServiceTest {
         verify(ledger, never()).settle(anyString(), anyInt(), anyInt(), any());
     }
 
+    @Test void lightThinkingReservesUpToThreeThousandOutputTokensAndRejectsAboveLimit() {
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 1200, 2600));
+        var ok = service(TrendAiFixture.settingsWithThinking()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection())
+                .projects().getFirst().snapshot();
+        assertThat(ok.insightStatus()).isEqualTo("ANALYZED");
+        assertThat(ok.insight().descriptionZh()).isNotBlank();
+        verify(ledger).reserve(anyString(), eq(1L), eq(TrendAiFixture.SHA), anyInt(), eq(3000), isNull());
+        verify(ledger).settle(anyString(), eq(1200), eq(2600), notNull());
+
+        reset(ledger, gateway);
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 1200, 3001));
+        var exceeded = service(TrendAiFixture.settingsWithThinking()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection())
+                .projects().getFirst().snapshot();
+        assertThat(exceeded.insightStatus()).isEqualTo("PENDING");
+        verify(ledger).unknown(anyString(), eq(true));
+        verify(ledger, never()).settle(anyString(), anyInt(), anyInt(), any());
+    }
+
     @Test void upstreamFailureStopsTheRemainingBatchRatherThanRepeatingAnInvalidKey() {
         grant();
         when(gateway.complete(any())).thenReturn(new DeepSeekGateway.Reply(401, new byte[0]));

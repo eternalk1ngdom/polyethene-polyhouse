@@ -48,7 +48,7 @@ public class TrendAiLedger {
     public Decision reserve(String id, long repo, String sha, int inputBound, int outputBound, String expectedPayload) {
         if (!settings.ready() || repo <= 0 || id == null || !id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}") || sha == null
                 || !sha.matches("(?:[a-f0-9]{40}|[a-f0-9]{64})") || inputBound <= 0 || inputBound > 40_000
-                || outputBound <= 0 || outputBound > 1500) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+                || outputBound <= 0 || outputBound > settings.maxOutputTokens()) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
         long amount = cost(inputBound, outputBound, settings.inputYuanPerMillion(), settings.outputYuanPerMillion());
         var now = clock.instant();
         String month = YearMonth.from(now.atZone(ZoneId.of("Asia/Shanghai"))).toString();

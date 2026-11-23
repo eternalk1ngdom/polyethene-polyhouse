@@ -13,6 +13,7 @@ param(
     [switch]$EnableAi,
     [switch]$CurrencyCny,
     [switch]$EditorialSample,
+    [switch]$ThinkingLow,
     [switch]$SkipWslRedis
 )
 $ErrorActionPreference = 'Stop'
@@ -24,6 +25,7 @@ if ($Action -eq 'Inspect') {
         KeyConfigured = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('POLYHOUSE_DEEPSEEK_API_KEY', 'Process'))
         ModuleEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'Process') -eq 'true'
         AiEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'Process') -eq 'true'
+        ThinkingEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_AI_THINKING_ENABLED', 'Process') -eq 'true'
         JobsEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_JOBS_ENABLED', 'Process') -eq 'true'
         ScheduleEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_SCHEDULE_ENABLED', 'Process') -eq 'true'
         CacheEnabled = [Environment]::GetEnvironmentVariable('POLYHOUSE_TREND_CACHE_ENABLED', 'Process') -eq 'true'
@@ -31,7 +33,7 @@ if ($Action -eq 'Inspect') {
     return
 }
 $names = @('POLYHOUSE_DEEPSEEK_API_KEY', 'POLYHOUSE_TREND_ENABLED', 'POLYHOUSE_TREND_AI_ENABLED',
-    'POLYHOUSE_TREND_LIVE_CNY', 'POLYHOUSE_TREND_JOBS_ENABLED', 'POLYHOUSE_TREND_EDITORIAL_SAMPLE')
+    'POLYHOUSE_TREND_AI_THINKING_ENABLED', 'POLYHOUSE_TREND_LIVE_CNY', 'POLYHOUSE_TREND_JOBS_ENABLED', 'POLYHOUSE_TREND_EDITORIAL_SAMPLE')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $secureKey = $null
@@ -49,10 +51,18 @@ try {
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_ENABLED', 'true', 'Process')
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_AI_ENABLED', 'true', 'Process')
     }
+    if ($ThinkingLow) {
+        [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_AI_THINKING_ENABLED', 'true', 'Process')
+    } elseif ($Action -eq 'VerifyLive') {
+        [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_AI_THINKING_ENABLED', 'false', 'Process')
+    }
     if ($Action -eq 'VerifyLive') {
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_LIVE_CNY', 'true', 'Process')
         [Environment]::SetEnvironmentVariable('POLYHOUSE_TREND_EDITORIAL_SAMPLE', $EditorialSample.IsPresent.ToString().ToLowerInvariant(), 'Process')
-        if ($EditorialSample) { Write-Host '新版写作验收：固定 cursor/plugins 一篇，共用原验收账本，不重试。' }
+        if ($EditorialSample) {
+            $modeLabel = if ($ThinkingLow) { '轻度思考（low）' } else { '关闭思考' }
+            Write-Host ("新版写作验收（" + $modeLabel + "）：固定 cursor/plugins 一篇，共用原验收账本，不重试。")
+        }
         Write-Host 'G4真实验收：仅本机专属库，一角月预算持久记账，定时关闭；同月重复运行不换号重发。Key不写文件。'
         & (Join-Path $PSScriptRoot 'Invoke-LocalAuth.ps1') -Action Verify -TrendLiveOnly
     } else {

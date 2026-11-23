@@ -107,7 +107,7 @@ public class TrendAiService {
                 || !project.readmeVersion().matches("(?:[a-f0-9]{40}|[a-f0-9]{64})")
                 || project.readmeText() == null || project.readmeText().isBlank()) return fallback(project, previous, "MATERIAL_UNAVAILABLE");
         try {
-            var prepared = codec.prepare(project, settings.model());
+            var prepared = codec.prepare(project, settings.model(), settings.thinkingActive(), settings.thinkingEffort());
             String id = UUID.nameUUIDFromBytes((executionId + ":" + repo).getBytes(StandardCharsets.UTF_8)).toString();
             guard.run();
             var decision = ledger.reserve(id, repo, project.readmeVersion(), prepared.inputBound(), prepared.outputBound(), previousPayload);

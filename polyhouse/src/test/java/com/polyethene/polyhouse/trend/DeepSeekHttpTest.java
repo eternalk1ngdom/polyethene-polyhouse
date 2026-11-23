@@ -35,11 +35,28 @@ class DeepSeekHttpTest {
         try (var http = new DeepSeekHttp(new TrendAiProperties(true, null, null, null, null, null), client)) {
             assertThatThrownBy(() -> http.complete(new byte[1])).isInstanceOf(DeepSeekGateway.NotSent.class);
         }
+        try (var http = new DeepSeekHttp(new TrendAiProperties(true, TrendAiFixture.KEY, null, null, null, null, true, "high"), client)) {
+            assertThatThrownBy(() -> http.complete(new byte[1])).isInstanceOf(DeepSeekGateway.NotSent.class);
+        }
         try (var http = new DeepSeekHttp(TrendAiFixture.settings(), client)) {
             assertThatThrownBy(() -> http.complete(new byte[32 * 1024 + 1])).isInstanceOf(DeepSeekGateway.NotSent.class);
             assertThatThrownBy(() -> http.complete(TrendAiFixture.KEY.getBytes(StandardCharsets.UTF_8))).isInstanceOf(DeepSeekGateway.NotSent.class);
         }
         verify(client, never()).sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any());
+    }
+
+    @Test void lightThinkingUsesSixtySecondTimeoutWithoutLeakingCredentials() {
+        var client = mock(HttpClient.class);
+        when(client.sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any())).thenAnswer(invocation -> {
+            HttpRequest request = invocation.getArgument(0);
+            assertThat(request.timeout()).contains(java.time.Duration.ofSeconds(60));
+            return CompletableFuture.completedFuture(response(200, "{}".getBytes(StandardCharsets.UTF_8)));
+        });
+        var thinking = TrendAiFixture.settingsWithThinking();
+        try (var http = new DeepSeekHttp(thinking, client)) {
+            assertThat(http.complete("{}".getBytes(StandardCharsets.UTF_8)).status()).isEqualTo(200);
+        }
+        assertThat(thinking.toString()).contains("thinkingEnabled=true").doesNotContain(TrendAiFixture.KEY);
     }
 
     @Test void responseCannotEchoTheKeyAndExceptionCannotExposeHeaders() {

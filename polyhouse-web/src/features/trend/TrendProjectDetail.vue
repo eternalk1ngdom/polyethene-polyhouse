@@ -24,6 +24,13 @@ const insight = computed(() => props.project.insight)
 const usageParagraphs = computed(() =>
   insight.value ? trendParagraphs(insight.value.painPoint) : [],
 )
+/** 仅当存在原始简介且译文与原文不同时展示双语参考译文，避免中文原简介重复显示。 */
+const descriptionZh = computed(() => {
+  const raw = props.project.description?.trim()
+  const translated = insight.value?.descriptionZh?.trim()
+  if (!raw || !translated || translated === raw) return null
+  return translated
+})
 const readmeLabels: Record<string, string> = {
   AVAILABLE: '本期已取得',
   MISSING: '仓库未提供',
@@ -46,7 +53,7 @@ const facts = computed(() => [
     <header class="story-head">
       <p class="dateline"><em>StarTide</em> {{ report.periodKey }}</p>
       <h1 tabindex="-1">
-        <small>{{ project.fullName.split('/')[0] }} /</small>{{ project.fullName.split('/')[1] }}
+        <small>{{ project.fullName.split('/')[0] }}/</small><wbr />{{ project.fullName.split('/')[1] }}
       </h1>
       <a class="repo" :href="project.repoUrl" target="_blank" rel="noopener noreferrer"
         >在 GitHub 查看 <ElIcon aria-hidden="true"><TopRight /></ElIcon
@@ -126,7 +133,13 @@ const facts = computed(() => [
         </template>
         <section class="original">
           <h2>GitHub 原始简介</h2>
-          <p>{{ project.description ?? '仓库未提供简介。' }}</p>
+          <template v-if="project.description">
+            <p class="original-raw">{{ project.description }}</p>
+            <p v-if="descriptionZh" class="original-zh">
+              <span class="original-zh-tag">参考译文</span>{{ descriptionZh }}
+            </p>
+          </template>
+          <p v-else>仓库未提供简介。</p>
         </section>
         <p v-if="!insight" class="note">
           {{
@@ -173,7 +186,7 @@ const facts = computed(() => [
   position: relative;
   border-top: 2px solid #223e55;
   border-bottom: 1px solid #afc3ce;
-  padding: clamp(18px, 4vw, 42px);
+  padding: clamp(14px, 2.6vw, 24px) clamp(16px, 3vw, 28px);
   background: #e3f0f4;
 }
 .dateline {
@@ -181,27 +194,27 @@ const facts = computed(() => [
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px 12px;
-  font-size: 13px;
+  gap: 4px 10px;
+  font-size: 12.5px;
   color: #284d68;
 }
 .dateline em {
   color: #19314c;
   font:
-    italic 20px Georgia,
+    italic 17px Georgia,
     serif;
 }
 .edition-stamp {
   position: absolute;
   top: 50%;
-  right: 6%;
-  transform: translateY(-50%) rotate(6deg);
-  width: clamp(94px, 15vw, 145px);
-  padding: 6px;
+  right: 4.5%;
+  transform: translateY(-50%) rotate(5deg);
+  width: clamp(78px, 11vw, 108px);
+  padding: 5px;
   background: #fff9e4;
-  border: 3px dotted #afbfbd;
+  border: 2px dotted #afbfbd;
   text-align: center;
-  box-shadow: 3px 4px 0 #bed1d5;
+  box-shadow: 2px 3px 0 #bed1d5;
 }
 .edition-stamp img {
   display: block;
@@ -210,16 +223,17 @@ const facts = computed(() => [
 }
 .edition-stamp span {
   display: block;
-  margin-top: 5px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.25;
 }
 .story .story-head {
-  padding-inline-end: clamp(150px, 27%, 290px);
+  padding-inline-end: clamp(124px, 21%, 195px);
 }
 @media (max-width: 520px) {
   .story .story-head {
-    padding-inline-end: 18px;
+    padding-inline-end: 16px;
   }
   .edition-stamp {
     position: static;
@@ -238,15 +252,15 @@ const facts = computed(() => [
 .story-head h1 {
   width: fit-content;
   max-width: 100%;
-  font-size: clamp(30px, 5vw, 58px);
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  margin: 20px 0 10px;
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 10px 0 4px;
 }
 h1 small {
-  display: block;
-  font-size: 0.43em;
-  margin-bottom: 6px;
+  display: inline;
+  font-size: 0.72em;
+  margin-inline-end: 2px;
   font-weight: 500;
   color: #415e74;
   letter-spacing: 0;
@@ -265,7 +279,7 @@ h1 small {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(215px, 28%);
   gap: clamp(20px, 6vw, 80px);
-  margin-top: 28px;
+  margin-top: 22px;
 }
 .copy {
   min-width: 0;
@@ -288,28 +302,33 @@ details {
   margin-bottom: 24px;
 }
 .trend-signal {
-  padding: 16px 20px;
-  border: 1px solid #d2e1ea;
-  border-inline-start: 4px solid #286684;
-  border-radius: 0 10px 10px 0;
-  background: #f2f7fa;
+  padding: 16px 0;
+  border-top: 1px solid #cad7d9;
+  border-bottom: 1px solid #cad7d9;
+  background: transparent;
+}
+.trend-signal + details {
+  border-top: 0;
+  margin-top: -16px;
 }
 .signal-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
+  align-items: baseline;
+  gap: 6px 10px;
   margin-bottom: 8px;
 }
 .signal-head h2 {
   margin: 0;
 }
 .signal-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #dceaf3;
-  color: #1f475e;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #c8d5db;
+  border-radius: 999px;
+  background: transparent;
+  color: #475c6b;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
@@ -352,6 +371,22 @@ details,
 }
 .original {
   padding-top: 16px;
+}
+.original-raw {
+  color: #364a59;
+}
+.original-zh {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid #cbd6d8;
+  color: #192743;
+}
+.original-zh-tag {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475c6b;
 }
 aside {
   align-self: start;
