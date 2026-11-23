@@ -211,7 +211,7 @@ try {
             }
             & mvn @trendRedisArguments test
         } elseif ($TrendOnly) {
-            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest,TrendFeeIntegrationTest,TrendScheduleIntegrationTest' '-Dpolyhouse.trend.integration=true' test
+            & mvn -q '-Dtest=TrendArchiveIntegrationTest,TrendAiLedgerIntegrationTest,TrendJobIntegrationTest,TrendFeeIntegrationTest,TrendScheduleIntegrationTest,TrendBriefingLedgerIntegrationTest' '-Dpolyhouse.trend.integration=true' test
         } elseif ($ProfileModerationOnly) {
             if ($WorkspaceBrowser) {
                 & mvn -q '-Dtest=ProfileModerationIntegrationTest#interactiveWorkspaceRegression' '-Dpolyhouse.profile.integration=true' '-Dpolyhouse.workspace.browser=true' test
