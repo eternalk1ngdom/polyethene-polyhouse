@@ -95,7 +95,8 @@ const covers = {
 .image .illustration {
   /* 在题签和底部入口之间留出完整的折页轮廓。 */
   --art-top: max(9%, 54px);
-  top: var(--art-top);
+  /* 书本略微下移，插画高度仍按原取景计算，避免移动时被缩小。 */
+  top: calc(var(--art-top) + min(3%, 10px));
   height: min(68%, calc(100% - var(--art-top) - 74px));
 }
 @media (min-width: 1000px) {
