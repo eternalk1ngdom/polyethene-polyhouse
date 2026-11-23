@@ -28,6 +28,7 @@ const toolIcons = { Switch, Crop, TrendCharts }
 const galleryTools = [
   {
     ...starTide,
+    actionLabel: '阅读星潮',
     code: starTide.name,
     category: 'trend',
     icon: 'TrendCharts',
@@ -35,7 +36,10 @@ const galleryTools = [
     status: 'available',
     plannedFeatures: [],
   } as const,
-  ...toolRegistry,
+  ...toolRegistry.map((tool) => ({
+    ...tool,
+    actionLabel: tool.status === 'available' ? tool.actionLabel : '查看计划',
+  })),
 ]
 // 首页只筛选本地入口，不上传关键词或请求日报。
 const needle = computed(() => query.value.trim().toLocaleLowerCase())
@@ -118,15 +122,11 @@ async function showResults(): Promise<void> {
           <RouterLink
             :to="tool.route"
             class="artwork-link"
-            :aria-label="`${tool.category === 'trend' ? '阅读' : tool.status === 'available' ? '打开' : '了解'}${tool.title}`"
+            :aria-label="
+              tool.category === 'trend' ? tool.actionLabel : `${tool.actionLabel}（${tool.title}）`
+            "
             ><ToolArtwork :kind="tool.category" /><span class="artwork-cta"
-              >{{
-                tool.category === 'trend'
-                  ? '阅读星潮'
-                  : tool.status === 'available'
-                    ? '开始使用'
-                    : '查看计划'
-              }}<ElIcon><ArrowRight /></ElIcon></span
+              >{{ tool.actionLabel }}<ElIcon><ArrowRight /></ElIcon></span
           ></RouterLink>
           <div class="card-meta">
             <span class="tool-icon" :class="tool.accent"

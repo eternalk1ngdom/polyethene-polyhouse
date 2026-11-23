@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-22（Asia/Shanghai）。**v1.0 开发中。**
+更新时间：2026-11-23（Asia/Shanghai）。**v1.0 开发中。**
 
-- 当前：分支 `feat/startide-window-stats`（源自 `dev` `f75046a`，已合入 PR #7 `radar-3`）已完成星潮第二步 2A「[7 日榜内风向统计](docs/dev-log/v1.0-dev.15.md#7-日榜内风向统计2a)」前后端离线与隔离库/HTTP 闭环（零模型费用、零 DDL）；待用户确认后评估推送并经 PR 合入 `dev`。真实浏览器补验（缺 Playwright 模块）、平台账单对账及 2B「[可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)」（待攒够 5～7 期 `radar-3` 日报）留待后续推进。11 月 20 日下午断源的首个故障仍缺现场证据。
+- 首页：[妙替纸蝶与妙压折页书](docs/dev-log/v1.0-dev.15.md#首页妙替与妙压卡面重绘)已完成，入口分别为“替换文本”和“压缩图片”。[卡面集成记录](docs/dev-log/v1.0-dev.15.md#首页卡面与星潮集成)。
+- 星潮：文章结构改版和[7 日榜内风向统计](docs/dev-log/v1.0-dev.15.md#7-日榜内风向统计2a)分别经 PR #7、#8 合入 dev。2A 已通过隔离库与 HTTP 验收。真实后端的浏览器联调、账单对账及[2B 可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)待办；2B 等待 5～7 期 radar-3 日报。11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
-- 集成：星潮通过[合入前复验](docs/dev-log/v1.0-dev.15.md#合入-dev-前复验)，用户授权任务分支经 PR 进入 GitHub `dev`。后续文章专项以集成后的 `dev` 为基线。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
 - 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
