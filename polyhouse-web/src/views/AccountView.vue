@@ -134,9 +134,7 @@ onMounted(() => {
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
         <div class="profile-cover">
-          <span>MY SPACE / 我的个人空间</span
-          ><span class="cover-word" aria-hidden="true">Hello, you.</span
-          ><span class="cover-stamp" aria-hidden="true">MAKE ROOM<br />FOR YOURSELF</span>
+          <span>我的个人空间</span>
         </div>
         <div class="profile-overview">
           <button
@@ -415,36 +413,11 @@ onMounted(() => {
 }
 .profile-cover {
   height: 180px;
-  background: var(--ph-lilac);
-  position: relative;
-  overflow: hidden;
+  background: #f8dfc0 url('../assets/profile-window-panorama.webp') 92% center / cover no-repeat;
   padding: 25px 34px;
   color: var(--ph-ink);
-  font-size: 10px;
-  letter-spacing: 2px;
-}
-.cover-word {
-  position: absolute;
-  right: 13%;
-  bottom: -20px;
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-weight: 500;
-  font-size: clamp(75px, 10vw, 140px);
-  letter-spacing: -6px;
-  color: #443259;
-  transform: rotate(-6deg);
-}
-.cover-stamp {
-  position: absolute;
-  right: 30px;
-  top: 27px;
-  padding: 13px;
-  border: 1px solid #89729e;
-  font-size: 8px;
-  line-height: 1.6;
-  transform: rotate(8deg);
-  border-radius: 50%;
+  font-size: 13px;
+  letter-spacing: 0.08em;
 }
 .profile-overview {
   display: flex;
@@ -770,17 +743,6 @@ h1 {
     height: 145px;
     padding: 20px;
   }
-  .cover-stamp {
-    right: 14px;
-    font-size: 7px;
-  }
-  .cover-word {
-    right: 12%;
-    font-size: clamp(48px, 14vw, 68px);
-    line-height: 1.05;
-    white-space: nowrap;
-    bottom: -8px;
-  }
   .profile-overview {
     /* 固定头像列和资料列，刷新按钮独占下一行，避免中间宽度把昵称挤成竖排。 */
     display: grid;
@@ -831,6 +793,13 @@ h1 {
     display: flex;
     justify-content: center;
     margin: 22px 0 0;
+  }
+}
+@media (max-width: 560px) {
+  /* 窄屏用近景保住花瓶与窗台，平板仍能看到横向延展的远山。 */
+  .profile-cover {
+    background-image: url('../assets/profile-window-closeup.webp');
+    background-position: 67% center;
   }
 }
 </style>
