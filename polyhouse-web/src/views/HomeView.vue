@@ -158,13 +158,6 @@ async function showResults(): Promise<void> {
         <ElButton @click="resetFilters">查看全部工具</ElButton>
       </div>
     </section>
-    <section id="about" class="about-section" aria-labelledby="about-title">
-      <h2 id="about-title">原文件会留在你手里。</h2>
-      <p>
-        用妙替改文本、用妙压压图片，文件都在你的浏览器里处理。<br />
-        下载的是处理好的副本，原文件保持原样。
-      </p>
-    </section>
   </div>
 </template>
 
@@ -456,40 +449,6 @@ h3 {
   color: var(--ph-muted);
   font-size: 14px;
 }
-.about-section {
-  --fold-size: 20px;
-  position: relative;
-  display: grid;
-  grid-template-columns: fit-content(45%) minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(32px, 6vw, 88px);
-  background: var(--ph-cream);
-  border-radius: 16px 0 16px 16px;
-  clip-path: polygon(0 0, calc(100% - var(--fold-size)) 0, 100% var(--fold-size), 100% 100%, 0 100%);
-  margin-top: 64px;
-  padding: 44px 40px;
-}
-.about-section::after {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto auto;
-  width: var(--fold-size);
-  height: var(--fold-size);
-  background: color-mix(in srgb, var(--ph-peach) 70%, var(--ph-line));
-  border-bottom-left-radius: 3px;
-}
-.about-section h2 {
-  margin: 0;
-  font-size: clamp(1.5rem, 2vw, 1.75rem);
-  line-height: 1.4;
-  letter-spacing: -0.03em;
-}
-.about-section p {
-  margin: 0;
-  color: var(--ph-muted);
-  font-size: 1rem;
-  line-height: 1.75;
-}
 @media (max-width: 760px) {
   .home-page {
     width: calc(100% - 40px);
@@ -518,19 +477,6 @@ h3 {
   .categories button {
     flex: 1;
     padding: 10px;
-  }
-  .about-section {
-    --fold-size: 16px;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-top: 40px;
-    padding: 24px 20px;
-  }
-  .about-section h2 {
-    font-size: 1.375rem;
-  }
-  .about-section br {
-    display: none;
   }
   .tool-search {
     padding-left: 14px;

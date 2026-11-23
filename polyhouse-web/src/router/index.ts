@@ -88,12 +88,13 @@ const router = createRouter({
     // 审核分区也是同页只读切换，保留当前位置；跨工作区仍正常回顶。
     if (to.name === 'profile-review' && _from.name === 'profile-review') return false
     if (to.name === starTide.name && _from.name === starTide.name) return false
-    if (to.hash === '#tools' || to.hash === '#about') {
+    if (to.path === '/' && (to.hash === '#tools' || to.hash === '#about')) {
       // 原生平滑滚动随距离自然缓入缓出；系统要求减少动态时立即定位，不强制播放动画。
       const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 'auto'
         : 'smooth'
-      return { el: to.hash, top: 24, behavior }
+      // 首页撤下独立说明区后，旧书签仍可直达工具列表之后的页脚。
+      return { el: to.hash === '#about' ? '.site-footer' : to.hash, top: 24, behavior }
     }
     return { top: 0 }
   },
