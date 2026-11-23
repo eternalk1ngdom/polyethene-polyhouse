@@ -341,6 +341,14 @@ onMounted(() => {
 .empty {
   color: var(--ph-muted);
 }
+.empty {
+  padding: 28px 20px;
+  margin: 12px 0;
+  border-radius: 14px;
+  background: var(--ph-soft);
+  text-align: center;
+  font-size: 14px;
+}
 .panel-heading {
   display: flex;
   align-items: center;
@@ -410,6 +418,7 @@ onMounted(() => {
 }
 .identity small {
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .badges {
   display: flex;
@@ -418,6 +427,7 @@ onMounted(() => {
 }
 .badges small {
   flex-basis: 100%;
+  font-variant-numeric: tabular-nums;
 }
 .row-actions {
   display: flex;
@@ -438,6 +448,7 @@ onMounted(() => {
 }
 .pagination span {
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .target-summary {
   padding: 16px;

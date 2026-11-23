@@ -48,7 +48,7 @@ defineProps<Props>()
 .workspace {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 40px 24px 80px;
+  padding: 24px 24px 72px;
   color: var(--ph-ink);
 }
 .back-link {
@@ -60,15 +60,19 @@ defineProps<Props>()
   color: var(--ph-muted);
 }
 .workspace-heading {
-  margin: 24px 0 28px;
+  /* 页眉与 F2 工作台尺度拉齐，减少顶部留白同时保留工作区层次。 */
+  margin: 16px 0 22px;
 }
 .workspace-heading p {
+  margin: 0;
   font-size: 11px;
   letter-spacing: 0.16em;
+  color: var(--ph-muted);
 }
 .workspace-heading h1 {
-  margin: 10px 0;
-  font-size: clamp(28px, 4vw, 40px);
+  margin: 8px 0 6px;
+  font-size: clamp(26px, 3vw, 32px);
+  line-height: 1.25;
 }
 .workspace-heading span {
   font-size: 14px;

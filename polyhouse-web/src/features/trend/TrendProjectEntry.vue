@@ -130,8 +130,8 @@ h2 a:focus-visible {
   font-weight: 650;
   padding: 2px 7px;
   border-radius: 6px;
-  background: #e4f0ee;
-  color: #1d4e5a;
+  background: var(--st-pill-bg);
+  color: var(--st-pill-ink);
 }
 .language::before {
   content: '';
@@ -145,8 +145,8 @@ h2 a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #473215;
-  background: #ffe7a2;
+  color: var(--st-star-ink);
+  background: var(--st-star-bg);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   font-size: 14px;

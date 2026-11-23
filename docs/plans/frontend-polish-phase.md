@@ -1,6 +1,6 @@
 # 前端视觉与体验精修候选清单
 
-状态：**进行中（F1、F3 已由 PR #12 合入 `dev` `a38364a`；F2 已在 `feat/frontend-polish-f2` 完成本地验收，待合入 `dev`；F4、F5 待确认后推进）**。基线：`dev` `363d5fe`。
+状态：**已完成（F1/F3 由 PR #12、F2 由 PR #13 合入 `dev`；F4/F5 已在 `feat/frontend-polish-f4-f5` 完成本地验收，待合入 `dev`）**。基线：`dev` `363d5fe`。
 
 本清单汇集星潮 `radar-4` 与首页三卡插画合入 `dev` 后、在后端接口保持稳定的窗口期内可推进的**纯前端**体验与视觉改造方向。所有改动遵守 [AGENTS.md](../../AGENTS.md)（尤其是铁律 6/7/8）及[前端视觉基线 1.0](../design/frontend-v2.md)、[前端体验参考](../design/frontend-experience.md)——保留已认可的首页搜索光晕、简洁文件投放框、妙替独立「选择文件夹」按钮以及 `core/`、`workers/` 纯 TS 隔离，不触碰后端契约与数据库结构。
 

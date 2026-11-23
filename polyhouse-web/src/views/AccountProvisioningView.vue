@@ -162,7 +162,7 @@ onMounted(() => {
 .creation-panel {
   border: 1px solid var(--ph-line);
   border-radius: 20px;
-  padding: 32px;
+  padding: 28px;
   max-width: 760px;
   background: var(--ph-surface);
 }
@@ -213,6 +213,7 @@ onMounted(() => {
   margin: 0;
   overflow-wrap: anywhere;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .credential-field + .credential-field {
   margin-top: 14px;
@@ -231,7 +232,7 @@ onMounted(() => {
 }
 @media (max-width: 600px) {
   .creation-panel {
-    padding: 24px 18px;
+    padding: 20px 16px;
   }
   .actions {
     flex-direction: column;

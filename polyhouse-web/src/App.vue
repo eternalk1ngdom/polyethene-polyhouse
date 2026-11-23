@@ -42,6 +42,20 @@ import BrandLogo from './components/BrandLogo.vue'
   --ph-lilac: #e7e1f7;
   --ph-peach: #f5dfce;
   --ph-pink-soft: #fff0f6;
+  /* 星潮阅读模块与主站共享白底，同时用海蓝语义色维持独立报刊气质。 */
+  --st-surface: #ffffff;
+  --st-ink: #192743;
+  --st-ink-deep: #142f46;
+  --st-muted: #475c6b;
+  --st-line: #d5dedf;
+  --st-line-strong: #c8d5db;
+  --st-accent: #154e78;
+  --st-link: #28566f;
+  --st-pill-bg: #e4f0ee;
+  --st-pill-ink: #1d4e5a;
+  --st-star-bg: #ffe7a2;
+  --st-star-ink: #473215;
+  --st-sky: #cadbe8;
   --el-color-primary: #0d0c22;
   --el-color-primary-light-3: #555466;
   --el-color-primary-light-5: #8b8a98;

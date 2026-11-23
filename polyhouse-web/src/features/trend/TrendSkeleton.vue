@@ -72,15 +72,15 @@ const rows = 6
   display: block;
   height: 14px;
   border-radius: 6px;
-  /* 暖纸色条与星潮页面底色同一色系，扫光只在色条内移动。 */
-  background: linear-gradient(90deg, #ece8dc 0%, #f4f1e8 40%, #ece8dc 80%) 0 0 / 300% 100%;
+  /* 浅雾灰蓝骨架条，与纯白页底和月夜横幅保持同一清冷色系。 */
+  background: linear-gradient(90deg, #e8eff3 0%, #f3f7f9 40%, #e8eff3 80%) 0 0 / 300% 100%;
   animation: sweep 1.4s linear infinite;
 }
 .head {
   display: grid;
   gap: 10px;
   padding-bottom: 14px;
-  border-bottom: 2px solid #d9d4c6;
+  border-bottom: 2px solid var(--st-line-strong);
 }
 .head .title {
   width: 210px;
@@ -97,7 +97,7 @@ const rows = 6
   align-items: start;
   gap: 16px;
   padding: 17px 0;
-  border-bottom: 1px solid #e3e0d6;
+  border-bottom: 1px solid var(--st-line);
 }
 .rank {
   width: 28px;
@@ -129,8 +129,8 @@ const rows = 6
   display: grid;
   gap: 12px;
   padding: 22px 24px;
-  border-top: 2px solid #d9d4c6;
-  background: #f3f0e6;
+  border-top: 2px solid var(--st-line-strong);
+  background: #eff4f8;
 }
 .story-head .meta {
   width: 140px;
@@ -157,9 +157,9 @@ const rows = 6
   align-content: start;
   gap: 12px;
   padding: 20px;
-  border: 1px solid #e3e0d6;
+  border: 1px solid var(--st-line);
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--st-surface);
 }
 .gain {
   height: 54px;
