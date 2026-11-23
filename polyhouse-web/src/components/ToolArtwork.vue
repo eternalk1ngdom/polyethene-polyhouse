@@ -26,7 +26,7 @@ const covers = {
   },
   image: {
     image: accordionBook,
-    height: 600,
+    height: 500,
     label: 'MAKE ROOM FOR THE PERFECT FIT',
     name: 'TargetKB',
     caption: '每一张，都刚刚好。',
