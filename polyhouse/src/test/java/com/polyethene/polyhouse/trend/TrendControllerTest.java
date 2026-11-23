@@ -5,6 +5,7 @@ import com.polyethene.polyhouse.controller.TrendController;
 import com.polyethene.polyhouse.model.vo.TrendPeriodsVO;
 import com.polyethene.polyhouse.service.AuthService;
 import com.polyethene.polyhouse.service.TrendReportService;
+import com.polyethene.polyhouse.service.trend.TrendWindowAggregator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
@@ -28,18 +29,25 @@ class TrendControllerTest {
     @MockBean private TrendReportService reports;
 
     @Test void anonymousReadsPublishedDataWithoutRestoringIdentity() throws Exception {
-        when(reports.report(any())).thenReturn(TrendFixture.report());
+        var sampleReport = TrendFixture.report();
+        when(reports.report(any())).thenReturn(sampleReport);
         when(reports.periods(any())).thenReturn(new TrendPeriodsVO("DAILY", List.of(), null));
+        when(reports.window(any())).thenReturn(TrendWindowAggregator.aggregate(sampleReport.periodKey(), List.of(sampleReport)));
         mvc.perform(get("/api/trend/report")).andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.items[0].insightStatus").value("NOT_ANALYZED"))
                 .andExpect(jsonPath("$.data.items[0].readmeText").doesNotExist());
         mvc.perform(get("/api/trend/periods")).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+        mvc.perform(get("/api/trend/window")).andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.windowDays").value(7))
+                .andExpect(jsonPath("$.data.coveredDays").value(1));
         verifyNoInteractions(auth);
     }
 
     @Test void rejectsUnsupportedCycleMalformedDateAndUnboundedPageBeforeService() throws Exception {
         for (String path : List.of("/api/trend/report?periodType=WEEKLY", "/api/trend/report?periodKey=bad",
+                "/api/trend/window?periodType=WEEKLY", "/api/trend/window?periodKey=bad",
                 "/api/trend/periods?limit=31", "/api/trend/periods?limit=0", "/api/trend/periods?before=bad")) {
             mvc.perform(get(path)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
         }

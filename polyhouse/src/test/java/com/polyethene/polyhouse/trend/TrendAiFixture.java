@@ -25,7 +25,8 @@ final class TrendAiFixture {
         // 填满各正文栏目的校验上限，验证整期发布及公开读回，不只测单篇解码。
         var json = TrendFixture.json();
         var content = json.createObjectNode().put("category", "DEVTOOLS").put("definition", "题".repeat(100))
-                .put("painPoint", "文".repeat(250)).put("comparison", "比".repeat(300));
+                .put("painPoint", "文".repeat(600)).put("comparison", "比".repeat(300))
+                .put("trendSignal", "向".repeat(260));
         for (String field : List.of("highlights", "documentedLimitations", "inferredRisks")) {
             var entries = content.putArray(field);
             for (int i = 0; i < 3; i++) entries.add("据".repeat(field.equals("highlights") ? 160 : 200));
@@ -42,7 +43,8 @@ final class TrendAiFixture {
     }
     static String content() {
         return "{\"category\":\"DEVTOOLS\",\"definition\":\"本地开发辅助工具\",\"painPoint\":\"整理重复的开发操作\",\"comparison\":null,"
-                + "\"highlights\":[\"根据项目资料提取步骤\"],\"documentedLimitations\":[],\"inferredRisks\":[\"实际适用范围仍需试用\"]}";
+                + "\"highlights\":[\"根据项目资料提取步骤\"],\"documentedLimitations\":[],\"inferredRisks\":[\"实际适用范围仍需试用\"],"
+                + "\"trendSignal\":\"开发流程正从手工脚本向可复用工具演进，具体采纳程度仍待观察。\"}";
     }
     static TrendInsightVO insight(Instant when) { return new TrendInsightCodec(TrendFixture.json()).insight(content(), SHA, "deepseek-flash", when); }
     static DeepSeekGateway.Reply reply(String content, int input, int output) {

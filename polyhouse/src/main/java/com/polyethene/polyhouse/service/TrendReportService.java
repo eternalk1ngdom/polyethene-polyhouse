@@ -8,9 +8,12 @@ import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.mapper.TrendMapper;
 import com.polyethene.polyhouse.model.dto.TrendPeriodsQueryDTO;
 import com.polyethene.polyhouse.model.dto.TrendReportQueryDTO;
+import com.polyethene.polyhouse.model.dto.TrendWindowQueryDTO;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.model.vo.TrendPeriodsVO;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
+import com.polyethene.polyhouse.model.vo.TrendWindowStatsVO;
+import com.polyethene.polyhouse.service.trend.TrendWindowAggregator;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -97,6 +100,24 @@ public class TrendReportService {
             boolean more = dates.size() > request.limit();
             var page = dates.subList(0, Math.min(dates.size(), request.limit()));
             return new TrendPeriodsVO("DAILY", page, more ? page.getLast() : null);
+        } catch (DataAccessException failure) { throw unavailable(); }
+    }
+
+    /** 基于已发布日榜做 7 日窗口确定性统计；锚点无日报返回 404，绝不触发采集或模型调用。 */
+    public TrendWindowStatsVO window(TrendWindowQueryDTO request) {
+        requireEnabled();
+        if (!"DAILY".equals(request.periodType())) throw invalid();
+        LocalDate requested = date(request.periodKey());
+        try {
+            var header = requested == null ? mapper.latestHeader() : mapper.publishedHeader(requested);
+            if (header == null) throw new BusinessException(ErrorCode.NOT_FOUND);
+            LocalDate anchor = header.periodDate();
+            LocalDate start = anchor.minusDays(TrendWindowAggregator.WINDOW_DAYS - 1);
+            var records = mapper.publishedRange(start, anchor);
+            if (records == null || records.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND);
+            var decoded = records.stream().map(this::decode).toList();
+            if (decoded.stream().noneMatch(item -> anchor.equals(item.periodKey()))) throw unavailable();
+            return TrendWindowAggregator.aggregate(anchor, decoded);
         } catch (DataAccessException failure) { throw unavailable(); }
     }
 

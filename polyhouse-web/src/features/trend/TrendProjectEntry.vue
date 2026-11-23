@@ -2,6 +2,7 @@
 import { ElIcon } from 'element-plus'
 import { StarFilled } from '@element-plus/icons-vue'
 import type { TrendProject } from '../../api/trend'
+import { languageColor } from './languageColors'
 import { trendNumber } from './presentation'
 
 interface Props {
@@ -42,7 +43,11 @@ const emit = defineEmits<Emits>()
         }}</span>
         {{ project.insight?.definition ?? project.description }}
       </p>
-      <span class="language">{{ project.primaryLanguage ?? '语言未知' }}</span>
+      <span
+        class="language"
+        :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
+        >{{ project.primaryLanguage ?? '语言未知' }}</span
+      >
     </div>
     <span class="stars" role="img" :aria-label="`本期新增星标：${trendNumber(project.starsAdded)}`"
       ><ElIcon aria-hidden="true"><StarFilled /></ElIcon
@@ -111,9 +116,10 @@ h2 a:focus-visible {
 }
 .language::before {
   content: '';
-  width: 7px;
-  height: 7px;
-  background: #39a791;
+  width: 8px;
+  height: 8px;
+  background: var(--lang-color, #6e7f8d);
+  box-shadow: inset 0 0 0 1px rgba(20, 47, 70, 0.16);
   border-radius: 50%;
 }
 .stars {

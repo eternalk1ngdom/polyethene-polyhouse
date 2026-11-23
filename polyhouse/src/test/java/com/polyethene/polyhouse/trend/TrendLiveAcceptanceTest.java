@@ -102,7 +102,7 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
         String token = login(owner, fixturePassword);
         String month = YearMonth.now(ZoneId.of("Asia/Shanghai")).toString();
         // 同月重复运行复用同一意图；失败也不自动换号重新收费，必要的新样本须另行明确安排。
-        String intent = editorial ? "polyhouse-editorial-radar-2-cursor-2026-11" : "polyhouse-g4-real-sample-v1:" + month;
+        String intent = editorial ? "polyhouse-editorial-radar-3-cursor-2026-11" : "polyhouse-g4-real-sample-v1:" + month;
         if (editorial) assertThat(month).as("本次授权仅限十一月验收额度").isEqualTo("2026-11");
         String id = UUID.nameUUIDFromBytes(intent.getBytes(StandardCharsets.UTF_8)).toString();
         var submission = call("POST", "/api/manage/trend/jobs", token, Map.of("requestId", id));
@@ -125,7 +125,7 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
         result.put("paidCallsThisRun", paidCalls.get()); result.put("task", data(progress));
         result.put("report", report); result.put("fees", data(fees));
         result.put("requests", jdbc.queryForList("SELECT id,month_key,state,reserved_micros,charged_micros,prompt_tokens,completion_tokens,outcome FROM tool_trend_ai_request ORDER BY created_at"));
-        Path output = Path.of("../.local-backups/trend-live", editorial ? "editorial-radar-2.json" : "latest.json");
+        Path output = Path.of("../.local-backups/trend-live", editorial ? "editorial-radar-3.json" : "latest.json");
         Files.createDirectories(output.getParent());
         json.writerWithDefaultPrettyPrinter().writeValue(output.toFile(), result);
         // 只输出经VO脱敏的报告与账本，不写Key、JWT、Prompt、README全文或上游响应。
@@ -144,7 +144,7 @@ class TrendLiveAcceptanceTest extends TrendHttpAcceptanceSupport {
             var item = report.items().getFirst();
             assertThat(item.fullName()).isEqualTo("cursor/plugins");
             assertThat(item.insightStatus()).isEqualTo("ANALYZED");
-            assertThat(item.insight().ruleVersion()).isEqualTo("radar-2");
+            assertThat(item.insight().ruleVersion()).isEqualTo(com.polyethene.polyhouse.service.trend.TrendInsightCodec.RULE);
         }
         assertThat(data(fees).path("heldMicros").asLong()).isZero();
         assertThat(data(fees).path("accountedMicros").asLong()).isBetween(1L, 100_000L);

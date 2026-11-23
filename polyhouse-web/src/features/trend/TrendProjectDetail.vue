@@ -4,7 +4,14 @@ import { ElIcon } from 'element-plus'
 import { TopRight, StarFilled } from '@element-plus/icons-vue'
 import voyage from '../../assets/startide-voyage.webp'
 import type { TrendProject, TrendReport } from '../../api/trend'
-import { insightLabel, insightReasonLabel, trendNumber, trendTime } from './presentation'
+import { languageColor } from './languageColors'
+import {
+  insightLabel,
+  insightReasonLabel,
+  trendNumber,
+  trendParagraphs,
+  trendTime,
+} from './presentation'
 
 interface Props {
   /** 日报内的仓库快照，同名仓库在不同期次可有不同解读。 */
@@ -14,6 +21,9 @@ interface Props {
 }
 const props = defineProps<Props>()
 const insight = computed(() => props.project.insight)
+const usageParagraphs = computed(() =>
+  insight.value ? trendParagraphs(insight.value.painPoint) : [],
+)
 const readmeLabels: Record<string, string> = {
   AVAILABLE: '本期已取得',
   MISSING: '仓库未提供',
@@ -67,15 +77,22 @@ const facts = computed(() => [
             </small>
             <p>{{ insight.definition }}</p>
           </header>
-          <section>
-            <h2>解决什么问题</h2>
-            <p>{{ insight.painPoint }}</p>
+          <section class="usage-body">
+            <h2>它能帮你做什么</h2>
+            <p v-for="(paragraph, i) in usageParagraphs" :key="i">{{ paragraph }}</p>
           </section>
           <section v-if="insight.highlights.length">
             <h2>技术亮点</h2>
             <ul>
               <li v-for="(line, i) in insight.highlights" :key="i">{{ line }}</li>
             </ul>
+          </section>
+          <section v-if="insight.trendSignal" class="trend-signal">
+            <div class="signal-head">
+              <h2>技术风向观察</h2>
+              <span class="signal-badge">AI 趋势解读</span>
+            </div>
+            <p>{{ insight.trendSignal }}</p>
           </section>
           <section v-if="insight.comparison">
             <h2>同类差异</h2>
@@ -133,7 +150,14 @@ const facts = computed(() => [
         <dl>
           <template v-for="[label, value] in facts" :key="label"
             ><dt>{{ label }}</dt>
-            <dd>{{ value }}</dd></template
+            <dd>
+              <span
+                v-if="label === '主语言'"
+                class="lang-dot"
+                aria-hidden="true"
+                :style="{ backgroundColor: languageColor(project.primaryLanguage) }"
+              />{{ value }}
+            </dd></template
           >
         </dl>
         <p class="note">采集于 {{ trendTime(report.capturedAt) }}（北京时间）</p>
@@ -251,6 +275,9 @@ li {
   line-height: 1.8;
   margin: 5px 0;
 }
+.usage-body p + p {
+  margin-top: 12px;
+}
 .copy h2,
 aside h2 {
   font-size: 20px;
@@ -259,6 +286,33 @@ aside h2 {
 .copy section,
 details {
   margin-bottom: 24px;
+}
+.trend-signal {
+  padding: 16px 20px;
+  border: 1px solid #d2e1ea;
+  border-inline-start: 4px solid #286684;
+  border-radius: 0 10px 10px 0;
+  background: #f2f7fa;
+}
+.signal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 8px;
+}
+.signal-head h2 {
+  margin: 0;
+}
+.signal-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #dceaf3;
+  color: #1f475e;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .lede {
   padding: 14px 20px;
@@ -340,6 +394,15 @@ dd {
 }
 aside dd {
   text-align: right;
+}
+.lang-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  box-shadow: inset 0 0 0 1px rgba(20, 47, 70, 0.16);
 }
 .note {
   margin: 16px 0 0;
