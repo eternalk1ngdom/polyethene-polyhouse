@@ -427,8 +427,8 @@ watch(
 
 <style scoped>
 .reader {
-  background: #fbfaf6;
-  color: #192743;
+  background: var(--st-surface);
+  color: var(--st-ink);
   min-height: 65vh;
   padding: 24px 0 64px;
 }
@@ -446,7 +446,7 @@ watch(
   min-height: var(--scene-height);
   overflow: hidden;
   border-radius: 14px;
-  background: #cadbe8;
+  background: var(--st-sky);
 }
 .cover img {
   position: absolute;
@@ -487,7 +487,7 @@ watch(
   gap: 8px 18px;
   flex-wrap: wrap;
   padding: 14px 0;
-  border-bottom: 1px solid #c8d5db;
+  border-bottom: 1px solid var(--st-line-strong);
 }
 .view-switch {
   display: inline-flex;
@@ -554,7 +554,7 @@ select:focus-visible {
   width: fit-content;
   gap: 5px;
   min-height: 44px;
-  color: #28566f;
+  color: var(--st-link);
   font-size: 13px;
   font-weight: 650;
 }
@@ -583,7 +583,7 @@ select:focus-visible {
 .notice,
 .columns {
   font-size: 12px;
-  color: #475c6b;
+  color: var(--st-muted);
 }
 .meta {
   grid-column: 1 / -1;

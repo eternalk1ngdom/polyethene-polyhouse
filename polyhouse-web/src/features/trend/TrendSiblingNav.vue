@@ -87,7 +87,7 @@ function nameParts(fullName: string): [string, string] {
 }
 .scope {
   margin: 0 0 12px;
-  color: #475c6b;
+  color: var(--st-muted);
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -103,10 +103,10 @@ function nameParts(fullName: string): [string, string] {
   gap: 4px;
   min-height: 64px;
   padding: 14px 16px;
-  border: 1px solid #d5dedf;
+  border: 1px solid var(--st-line);
   border-radius: 10px;
-  background: #ffffff;
-  color: #192743;
+  background: var(--st-surface);
+  color: var(--st-ink);
   overflow-wrap: anywhere;
   transition:
     background 0.2s,
@@ -120,18 +120,18 @@ function nameParts(fullName: string): [string, string] {
 }
 /* 按下与键盘焦点都在原边框上加深，不另叠外圈，和视图切换按钮一致。 */
 .link:active {
-  border-color: #154e78;
+  border-color: var(--st-accent);
 }
 .link:focus-visible {
   outline: none;
-  border-color: #154e78;
-  box-shadow: inset 0 0 0 1px #154e78;
+  border-color: var(--st-accent);
+  box-shadow: inset 0 0 0 1px var(--st-accent);
 }
 .hint {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #475c6b;
+  color: var(--st-muted);
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;

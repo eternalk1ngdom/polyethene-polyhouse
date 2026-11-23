@@ -397,6 +397,16 @@ section > p {
 .copy span,
 .copy small {
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.empty {
+  padding: 28px 20px;
+  margin: 16px 0;
+  border-radius: 14px;
+  background: var(--ph-soft);
+  color: var(--ph-muted);
+  text-align: center;
+  font-size: 14px;
 }
 .actions {
   display: flex;
@@ -408,6 +418,7 @@ section > p {
 }
 .pager {
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .proposed {
   overflow-wrap: anywhere;
@@ -422,6 +433,11 @@ section > p {
 @media (max-width: 600px) {
   section {
     padding: 20px 16px;
+  }
+  .filter,
+  .filters .el-select {
+    width: 100%;
+    max-width: none;
   }
   .review-list li {
     align-items: flex-start;

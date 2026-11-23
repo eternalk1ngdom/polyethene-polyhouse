@@ -93,8 +93,8 @@ const {
 
 <style scoped>
 .owner-page {
-  color: #192f46;
-  background: #fbfaf6;
+  color: var(--st-ink);
+  background: var(--st-surface);
   padding: 12px 0 52px;
 }
 .sheet {
@@ -106,7 +106,7 @@ const {
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  color: #28566f;
+  color: var(--st-link);
   font-weight: 650;
 }
 .back:hover {
