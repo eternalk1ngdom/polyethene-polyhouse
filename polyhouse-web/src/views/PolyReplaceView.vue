@@ -270,7 +270,6 @@ function download(): void {
   <div class="replace-page">
     <RouterLink class="back" to="/">← 返回首页</RouterLink>
     <header>
-      <p class="eyebrow">POLYREPLACE / 文本替换</p>
       <h1>妙替<span class="workspace-label">本地文本工作台</span></h1>
       <p>让重复的文字修改，简单一点。</p>
     </header>
@@ -515,37 +514,41 @@ function download(): void {
 <style scoped>
 .replace-page {
   width: min(1320px, calc(100% - 96px));
-  margin: 28px auto 0;
+  margin: 18px auto 0;
 }
 .back {
   color: var(--ph-muted);
   font-size: 14px;
 }
 header {
-  margin: 24px 0 30px;
-  padding: 30px 34px;
+  /* 温和收紧横幅尺度，保留呼吸感同时让投放框与规则区更快进入首屏。 */
+  margin: 14px 0 22px;
+  padding: 18px 24px;
   background: var(--ph-cream);
-  border-radius: 20px;
-}
-.eyebrow {
-  color: var(--ph-muted);
-  font-size: 12px;
-  letter-spacing: 1.5px;
+  border-radius: 16px;
 }
 h1 {
-  font-size: 42px;
-  margin: 10px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 28px;
+  line-height: 1.25;
+  margin: 0 0 6px;
 }
 .workspace-label {
-  display: inline-block;
-  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--ph-muted);
-  margin-left: 18px;
-  padding: 7px 12px;
-  border: 1px solid var(--ph-line);
+  font-weight: 600;
+  /* 胶囊轻呼应首页妙替纸蝶的淡紫色，深墨字保证对比度。 */
+  color: var(--ph-ink);
+  background: var(--ph-lilac);
+  padding: 5px 12px;
   border-radius: 99px;
+}
+header p {
+  margin: 0;
 }
 h2 {
   font-size: 20px;
@@ -760,16 +763,17 @@ label:not(.file-drop):not(.file-checkbox) {
 @media (max-width: 700px) {
   .replace-page {
     width: calc(100% - 40px);
-    margin-top: 32px;
+    margin-top: 20px;
   }
   .panel {
     padding: 20px;
   }
   header {
-    padding: 24px 20px;
+    margin: 12px 0 18px;
+    padding: 16px 18px;
   }
   h1 {
-    font-size: 34px;
+    font-size: 24px;
   }
 }
 </style>
