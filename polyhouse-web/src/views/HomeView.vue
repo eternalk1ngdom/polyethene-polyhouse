@@ -158,14 +158,6 @@ async function showResults(): Promise<void> {
         <ElButton @click="resetFilters">查看全部工具</ElButton>
       </div>
     </section>
-    <section id="about" class="about-section" aria-labelledby="about-title">
-      <p class="about-kicker">SMALL TOOLS. MORE POSSIBILITIES.</p>
-      <h2 id="about-title">把时间，留给你喜欢的事。</h2>
-      <p>聚妙屋是一份持续生长的日常工具集。<br />从一个小需求出发，认真做好每一次处理。</p>
-      <RouterLink to="/account" class="about-action"
-        >去我的个人空间<ElIcon><ArrowRight /></ElIcon></RouterLink
-      ><span class="about-signature" aria-hidden="true">a little more possibility.</span>
-    </section>
   </div>
 </template>
 
@@ -248,9 +240,7 @@ h1 {
   transition: background 0.2s;
 }
 .search-action:hover,
-.search-action:focus-visible,
-.about-action:hover,
-.about-action:focus-visible {
+.search-action:focus-visible {
   background: var(--ph-accent-strong);
 }
 .popular-searches {
@@ -459,46 +449,6 @@ h3 {
   color: var(--ph-muted);
   font-size: 14px;
 }
-.about-section {
-  text-align: center;
-  background: var(--ph-cream);
-  margin-top: 90px;
-  padding: 58px 24px 42px;
-  border-radius: 22px;
-}
-.about-kicker {
-  font-size: 10px;
-  letter-spacing: 2px;
-  margin: 0 0 22px;
-}
-.about-section h2 {
-  font-size: clamp(27px, 3vw, 40px);
-  letter-spacing: -1px;
-}
-.about-section > p:not(.about-kicker) {
-  color: var(--ph-muted);
-  line-height: 1.9;
-  font-size: 15px;
-  margin: 20px 0 22px;
-}
-.about-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 22px;
-  background: var(--ph-ink);
-  color: white;
-  border-radius: 99px;
-  font-size: 14px;
-  transition: background 0.2s;
-}
-.about-signature {
-  display: block;
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-size: 22px;
-  margin-top: 34px;
-}
 @media (max-width: 760px) {
   .home-page {
     width: calc(100% - 40px);
@@ -527,9 +477,6 @@ h3 {
   .categories button {
     flex: 1;
     padding: 10px;
-  }
-  .about-section {
-    margin-top: 56px;
   }
   .tool-search {
     padding-left: 14px;
