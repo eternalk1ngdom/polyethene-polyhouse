@@ -116,11 +116,11 @@ const {
 .masthead {
   overflow: hidden;
   border-radius: 16px;
-  background: #d7e7e4 url('../assets/startide-tide-atlas.webp') no-repeat right bottom / auto 100%;
+  background: #cadbe8 url('../assets/startide-tide-atlas.webp') no-repeat right bottom / auto 100%;
 }
 .mast-copy {
   padding: clamp(20px, 3.5vw, 38px);
-  background: linear-gradient(90deg, #d7e7e4 30%, rgba(215, 231, 228, 0.97) 41%, transparent 70%);
+  background: linear-gradient(90deg, #cadbe8 30%, rgba(202, 219, 232, 0.97) 41%, transparent 70%);
 }
 .wordmark {
   font:

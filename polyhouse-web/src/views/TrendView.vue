@@ -258,7 +258,7 @@ watch(
     <div class="sheet">
       <template v-if="directory">
         <header class="cover">
-          <img :src="tideAtlas" alt="" width="1680" height="560" />
+          <img :src="tideAtlas" alt="" width="2800" height="560" />
           <h1>星潮 <em lang="en">StarTide</em></h1>
         </header>
         <div class="toolbar">
@@ -446,26 +446,16 @@ watch(
   min-height: var(--scene-height);
   overflow: hidden;
   border-radius: 14px;
-  background: #d7e7e4;
-}
-.cover::before {
-  /* 镜接原画左侧的天空和潮线，补齐宽幅题名区；右侧原图保持完整比例。 */
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: max(0px, calc(100% - 3 * var(--scene-height)));
-  background: url('../assets/startide-tide-atlas.webp') left bottom / 400% 100% no-repeat;
-  transform: scaleX(-1);
-  z-index: -1;
+  background: #cadbe8;
 }
 .cover img {
   position: absolute;
-  inset: auto 0 0 auto;
+  inset: 0;
   z-index: -1;
-  width: auto;
-  max-width: 100%;
+  width: 100%;
   height: 100%;
-  object-fit: contain;
+  /* 5:1 全景原画锚定右下角：宽屏无缝铺满，窄屏自然收起左侧余白而完整保留右侧星月山海。 */
+  object-fit: cover;
   object-position: right bottom;
 }
 .cover h1 {
