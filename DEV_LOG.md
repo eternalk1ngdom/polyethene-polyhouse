@@ -2,7 +2,7 @@
 
 更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。**
 
-- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.15.md#星潮-2b-7-日风口简报)推进中：分支 `feat/startide-window-briefing`（基线 `dev` `b88ab20`）已完成 **B1**（纯逻辑核心与 015 脚本）与 **B2**（独立账本、费用闭环与 015 真实隔离库 60/60 验收）；待进入 B3（服务层与接口契约）。
+- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.15.md#星潮-2b-7-日风口简报)推进中：分支 `feat/startide-window-briefing`（基线 `dev` `b88ab20`）已完成 **B1～B3**（后端纯逻辑、独立账本、合并费用与 HTTP 接口全闭环，隔离库 60/60 + HTTP 验收 8/8）；待进入 B4（前端展示与屋主触发）。
 - [前端精修 F4 与 F5](docs/dev-log/v1.0-dev.15.md#前端精修-f4-与-f5)已合入 `dev`（`b88ab20`，PR #15）；[F1/F3](docs/dev-log/v1.0-dev.15.md#前端精修-f1-与-f3)（PR #12）、[F2](docs/dev-log/v1.0-dev.15.md#前端精修-f2-工作台页头减重)（PR #13）与[星潮月夜横幅](docs/dev-log/v1.0-dev.15.md#星潮横幅-51-全景延展)（PR #14）均已合入 `dev`。
 - [首页收尾区](docs/plans/home-closing-section.md)最终采用方案 A，工具列表直接接页脚，专项分支已验。[验收记录](docs/dev-log/v1.0-dev.15.md#首页收尾区方案)
 - 首页：[妙替纸蝶与妙压折页书](docs/dev-log/v1.0-dev.15.md#首页妙替与妙压卡面重绘)已完成，入口分别为“替换文本”和“压缩图片”，经 PR #9 合入 `dev`。[卡面集成记录](docs/dev-log/v1.0-dev.15.md#首页卡面与星潮集成)。
