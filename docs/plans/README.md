@@ -4,7 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [首页工具列表之后，留什么？](home-closing-section.md) | 三种收尾方案待选型，推荐用简短文件处理说明替换重复的空间入口，界面待实施 | [dev.15](../dev-log/v1.0-dev.15.md#首页收尾区方案) |
+| [首页工具列表之后，留什么？](home-closing-section.md) | 用户选定方案 B，文件处理说明与纸角布局已在专项分支实施并验证 | [dev.15](../dev-log/v1.0-dev.15.md#首页收尾区方案) |
 | [GitHub 开源技术雷达](github-tech-radar.md) | G4 真实小样本对账通过，G6 真实联调及本机开发库迁移完成，云端待验 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [星潮前端设计](trend-frontend-design.md) | G6 本地真实浏览器联调通过，保留首版接口与交互基线 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [星潮阅读与发布台改版](startide-reader-redesign.md) | 第 1～3 步已验，第 4 步读者路径、屋主发布与后端联合验证的范围见阶段记录 | [dev.15](../dev-log/v1.0-dev.15.md) |

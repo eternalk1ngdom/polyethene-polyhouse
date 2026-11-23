@@ -159,12 +159,11 @@ async function showResults(): Promise<void> {
       </div>
     </section>
     <section id="about" class="about-section" aria-labelledby="about-title">
-      <p class="about-kicker">SMALL TOOLS. MORE POSSIBILITIES.</p>
-      <h2 id="about-title">把时间，留给你喜欢的事。</h2>
-      <p>聚妙屋是一份持续生长的日常工具集。<br />从一个小需求出发，认真做好每一次处理。</p>
-      <RouterLink to="/account" class="about-action"
-        >去我的个人空间<ElIcon><ArrowRight /></ElIcon></RouterLink
-      ><span class="about-signature" aria-hidden="true">a little more possibility.</span>
+      <h2 id="about-title">原文件会留在你手里。</h2>
+      <p>
+        用妙替改文本、用妙压压图片，文件都在你的浏览器里处理。<br />
+        下载的是处理好的副本，原文件保持原样。
+      </p>
     </section>
   </div>
 </template>
@@ -248,9 +247,7 @@ h1 {
   transition: background 0.2s;
 }
 .search-action:hover,
-.search-action:focus-visible,
-.about-action:hover,
-.about-action:focus-visible {
+.search-action:focus-visible {
   background: var(--ph-accent-strong);
 }
 .popular-searches {
@@ -460,44 +457,38 @@ h3 {
   font-size: 14px;
 }
 .about-section {
-  text-align: center;
+  --fold-size: 20px;
+  position: relative;
+  display: grid;
+  grid-template-columns: fit-content(45%) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 88px);
   background: var(--ph-cream);
-  margin-top: 90px;
-  padding: 58px 24px 42px;
-  border-radius: 22px;
+  border-radius: 16px 0 16px 16px;
+  clip-path: polygon(0 0, calc(100% - var(--fold-size)) 0, 100% var(--fold-size), 100% 100%, 0 100%);
+  margin-top: 64px;
+  padding: 44px 40px;
 }
-.about-kicker {
-  font-size: 10px;
-  letter-spacing: 2px;
-  margin: 0 0 22px;
+.about-section::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: var(--fold-size);
+  height: var(--fold-size);
+  background: color-mix(in srgb, var(--ph-peach) 70%, var(--ph-line));
+  border-bottom-left-radius: 3px;
 }
 .about-section h2 {
-  font-size: clamp(27px, 3vw, 40px);
-  letter-spacing: -1px;
+  margin: 0;
+  font-size: clamp(1.5rem, 2vw, 1.75rem);
+  line-height: 1.4;
+  letter-spacing: -0.03em;
 }
-.about-section > p:not(.about-kicker) {
+.about-section p {
+  margin: 0;
   color: var(--ph-muted);
-  line-height: 1.9;
-  font-size: 15px;
-  margin: 20px 0 22px;
-}
-.about-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 22px;
-  background: var(--ph-ink);
-  color: white;
-  border-radius: 99px;
-  font-size: 14px;
-  transition: background 0.2s;
-}
-.about-signature {
-  display: block;
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-size: 22px;
-  margin-top: 34px;
+  font-size: 1rem;
+  line-height: 1.75;
 }
 @media (max-width: 760px) {
   .home-page {
@@ -529,7 +520,17 @@ h3 {
     padding: 10px;
   }
   .about-section {
-    margin-top: 56px;
+    --fold-size: 16px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 40px;
+    padding: 24px 20px;
+  }
+  .about-section h2 {
+    font-size: 1.375rem;
+  }
+  .about-section br {
+    display: none;
   }
   .tool-search {
     padding-left: 14px;

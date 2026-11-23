@@ -2,7 +2,7 @@
 
 更新时间：2026-11-23（Asia/Shanghai）。**v1.0 开发中。**
 
-- [首页收尾区方案](docs/plans/home-closing-section.md)已完成现状测量与同类首页调研，三案待选型。
+- [首页收尾区](docs/plans/home-closing-section.md)已在专项分支实施方案 B，工具列表后显示文件处理说明，桌面与手机布局已验。[验收记录](docs/dev-log/v1.0-dev.15.md#首页收尾区方案)
 - 首页：[妙替纸蝶与妙压折页书](docs/dev-log/v1.0-dev.15.md#首页妙替与妙压卡面重绘)已完成，入口分别为“替换文本”和“压缩图片”，经 PR #9 合入 `dev`。[卡面集成记录](docs/dev-log/v1.0-dev.15.md#首页卡面与星潮集成)。
 - 星潮：基础工程、文章结构、7 日风向统计分别经 PR #6、#7、#8 合入 `dev`；[详情页改版与 `radar-4` 升级](docs/dev-log/v1.0-dev.15.md#星潮详情页改版与-radar-4-升级)（1A 紧凑报头、3A 暖纸细线、正面 Few-Shot、`descriptionZh` 双语简介、默认关闭的 `low` 轻度思考及键名收敛）已完成离线/隔离验收与本机实跑（16/16 `radar-4`），正经 PR 集成至 `dev`。真实后端浏览器联调、平台账单对账及[2B 可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)留待后续推进；11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
