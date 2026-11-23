@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElIcon, ElPopover } from 'element-plus'
 import { ArrowDown, User } from '@element-plus/icons-vue'
 import BrandLogo from './BrandLogo.vue'
@@ -20,6 +20,10 @@ const accountVisible = ref(false)
 const userStore = useUserStore()
 const accountUi = useAccountUiStore()
 const route = useRoute()
+// RouterLink 只在完全匹配时标记当前页；星潮详情是子路由，需要单独告诉读屏仍位于星潮。
+const inStarTide = computed(
+  () => route.path === starTide.route || route.path.startsWith(`${starTide.route}/`),
+)
 
 async function logout(): Promise<void> {
   if (await accountUi.logout()) accountVisible.value = false
@@ -47,7 +51,11 @@ watch(
       </RouterLink>
       <nav class="primary-nav" aria-label="主导航">
         <RouterLink to="/" exact-active-class="is-active">首页</RouterLink>
-        <RouterLink :to="starTide.route" active-class="is-active">
+        <RouterLink
+          :to="starTide.route"
+          active-class="is-active"
+          :aria-current="inStarTide ? 'page' : undefined"
+        >
           {{ starTide.title }}<span class="nav-description">{{ starTide.tag }}</span>
         </RouterLink>
         <RouterLink
@@ -151,7 +159,8 @@ watch(
 }
 .header-inner {
   width: min(1440px, calc(100% - 80px));
-  min-height: 96px;
+  /* 顶栏让出首屏高度给首页卡面，品牌与链接仍保持 44px 触控高度。 */
+  min-height: 80px;
   margin: auto;
   display: flex;
   align-items: center;
@@ -179,11 +188,17 @@ watch(
   font-weight: 550;
   white-space: nowrap;
   border-radius: 99px;
+  border: 1px solid transparent;
   transition: background 0.2s;
 }
+/* 悬停只给浅灰底；当前页再加原框与字重，和首页分类选中一致，二者不再混淆。 */
 .primary-nav a:hover,
 .primary-nav a.is-active {
   background: var(--ph-soft);
+}
+.primary-nav a.is-active {
+  border-color: var(--ph-line);
+  font-weight: 650;
 }
 .nav-description {
   margin-left: 7px;
@@ -270,11 +285,11 @@ watch(
 @media (max-width: 640px) {
   .header-inner {
     width: calc(100% - 40px);
-    min-height: 82px;
+    min-height: 72px;
     gap: 12px;
     flex-wrap: wrap;
-    padding-top: 16px;
-    padding-bottom: 10px;
+    padding-top: 10px;
+    padding-bottom: 6px;
   }
   .primary-nav {
     order: 3;

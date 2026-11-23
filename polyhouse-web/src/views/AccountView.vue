@@ -11,12 +11,14 @@ import {
   Switch,
   Refresh,
   SwitchButton,
+  TrendCharts,
   User,
 } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import AvatarUploadDialog from '../components/AvatarUploadDialog.vue'
 import ProfileSubmissionsPanel from '../components/ProfileSubmissionsPanel.vue'
 import UserGrowthPanel from '../components/UserGrowthPanel.vue'
+import { starTide } from '../config/starTide'
 import { toolRegistry } from '../config/toolRegistry'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
 import { useUserStore } from '../stores/useUserStore'
@@ -54,7 +56,24 @@ watch(activeSection, (selected) => {
     })
   }
 })
-const toolIcons = { Switch, Crop }
+const toolIcons = { Switch, Crop, TrendCharts }
+/** 常用入口：星潮是独立阅读模块，放在首位并标“可阅读”，工具仍按注册表状态显示。 */
+const toolShortcuts = [
+  {
+    code: starTide.name,
+    route: starTide.route,
+    icon: 'TrendCharts',
+    title: starTide.title,
+    note: `${starTide.tag} · 可阅读`,
+  } as const,
+  ...toolRegistry.map((tool) => ({
+    code: tool.code,
+    route: tool.route,
+    icon: tool.icon,
+    title: tool.title,
+    note: `${tool.tag} · ${tool.status === 'planned' ? '开发中' : '可使用'}`,
+  })),
+]
 let refreshSequence = 0
 
 watch(
@@ -266,7 +285,7 @@ onMounted(() => {
             </div>
           </div>
           <RouterLink
-            v-for="tool in toolRegistry"
+            v-for="tool in toolShortcuts"
             :key="tool.code"
             :to="tool.route"
             class="tool-shortcut"
@@ -274,9 +293,7 @@ onMounted(() => {
               ><ElIcon><component :is="toolIcons[tool.icon]" /></ElIcon></span
             ><span class="shortcut-copy"
               ><strong>{{ tool.title }}</strong
-              ><small
-                >{{ tool.tag }} · {{ tool.status === 'planned' ? '开发中' : '可使用' }}</small
-              ></span
+              ><small>{{ tool.note }}</small></span
             ><ElIcon><ArrowRight /></ElIcon
           ></RouterLink>
           <p class="panel-note">云端词库模板与压缩预设尚未开放。</p>

@@ -63,6 +63,11 @@ function resetFilters(): void {
   query.value = ''
   category.value = 'all'
 }
+/** 建议词跨分类可用；同时回到全部分类，避免先选分类再点建议词时出现空结果。 */
+function suggest(keyword: string): void {
+  query.value = keyword
+  category.value = 'all'
+}
 /** 搜索即时筛选；按 Enter 也把键盘用户带到结果区。 */
 async function showResults(): Promise<void> {
   await router.push({ path: '/', hash: '#tools' })
@@ -90,9 +95,10 @@ async function showResults(): Promise<void> {
         ></RouterLink>
       </form>
       <div class="popular-searches">
-        <span>试试搜索</span><button type="button" @click="query = '文本'">文本替换</button
-        ><button type="button" @click="query = '文件夹'">文件夹处理</button
-        ><button type="button" @click="query = '图片'">图片处理</button>
+        <span>试试搜索</span><button type="button" @click="suggest('日报')">开源日报</button
+        ><button type="button" @click="suggest('文本')">文本替换</button
+        ><button type="button" @click="suggest('文件夹')">文件夹处理</button
+        ><button type="button" @click="suggest('图片')">图片处理</button>
       </div>
       <RouterLink class="discover-link" :to="{ path: '/', hash: '#tools' }"
         >发现小工具<ElIcon><ArrowDown /></ElIcon
