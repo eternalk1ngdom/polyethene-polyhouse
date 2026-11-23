@@ -1,6 +1,6 @@
 # 星潮 2B：7 日风口简报（跨日语义综合）计划书
 
-状态：**规划草案（待新会话确认细节后按 B1～B5 分闭环实施）**。基线：`dev` `b88ab20`（已含 2A 7 日统计、详情页 `radar-4`、前端精修 F1～F5）。
+状态：**已确认设计点，按 B1～B5 逐闭环实施中（B1 已完成）**。基线：`dev` `b88ab20`（已含 2A 7 日统计、详情页 `radar-4`、前端精修 F1～F5）。
 
 本计划承接 [startide-insight-quality.md](startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环) 中的 2B 候选项，结合开发者周刊（Console.dev / TLDR / HelloGitHub）的倒金字塔阅读实践与多文档 LLM 实名引用防幻觉架构，明确**为什么做、防哪些坑、怎么做最轻且最稳**。工程约束仍以根目录 [AGENTS.md](../../AGENTS.md) 为准。
 
@@ -51,6 +51,7 @@ TrendBriefingCodec (briefing-1 严格键集/纯文本/长度/双仓白名单实�
 | --- | --- | --- |
 | `tool_trend_briefing` | `anchor_date DATE PRIMARY KEY`、`window_start`、`window_end`、`covered_days`、`sample_status`、`source_fingerprint CHAR(64)`、`model`、`rule_version`、`active_request CHAR(36) NULL`、`payload JSON NULL`、`generated_at DATETIME(6) NULL` | 按北京锚点日存储最新有效简报与并发执行槽；`CHECK` 约束 `payload IS NULL OR JSON_TYPE(payload) = 'OBJECT'`、`covered_days BETWEEN 3 AND 7` |
 | `tool_trend_briefing_request` | `id CHAR(36) PRIMARY KEY`、`month_key CHAR(7)`、`anchor_date DATE`、`source_fingerprint CHAR(64)`、`model`、`rule_version`、`state`、`reserved_micros`、`charged_micros`、`input_bound`、`output_bound`、`input_rate`、`output_rate`、`prompt_tokens`、`completion_tokens`、`outcome`、`created_at` | 完整计费事实表；外键指向 `tool_trend_ai_month(month_key)` 与 `tool_trend_briefing(anchor_date)`；与 `011` 保持一致的四态机 `CHECK` 约束 |
+| `tool_trend_briefing_resolution` | `id CHAR(36) PRIMARY KEY`、`request_id CHAR(36) UNIQUE`、`actor_id`、`month_key CHAR(7)`、`accounted_micros`、`reason`、`completed_at` | 简报待核对请求的保守预算关闭审计表；外键指向 `tool_trend_briefing_request(id)` 与 `tool_trend_ai_month(month_key)`，在不修改 `013` 的前提下支持发布台统一保守结算 |
 
 **锁序与并发安全**：
 - 统一锁序：`tool_trend_briefing`（按 `anchor_date`）→ `tool_trend_ai_month`（按 `month_key`）→ `tool_trend_briefing_request`（按 `id`）。
@@ -107,9 +108,9 @@ TrendBriefingCodec (briefing-1 严格键集/纯文本/长度/双仓白名单实�
 
 ---
 
-## 四、进入实施前待用户确认的 4 个设计点
+## 四、已确认的 4 个设计点（2026-11-24）
 
-1. **样本硬门槛**：允许 `coveredDays >= 3 && radar3ReadyCount >= 5`（`3～4` 天标「有限样本」，`≥5` 天标「充分样本」，推荐，开发库很快能实测），还是严格要求 `>= 5` 天才允许生成？
-2. **屋主触发模式**：同步有界执行（约 3～12 秒返回，代码极简、账本兜底，推荐），还是复用异步 `202` 轮询？
-3. **强制刷新策略**：同一锚点日且输入指纹未变时，是否只允许零费用复用（防误点烧钱，推荐），还是保留一个显式 `forceRefresh` 复选框供屋主重抽？
-4. **费用账本面板**：是否在现有「星潮发布台」的待核对费用面板里直接合并展示待核对的简报请求（统一用现有保守结算入口，推荐）？
+1. **样本硬门槛**：采用推荐项 `coveredDays >= 3 && radar3ReadyCount >= 5`（`3～4` 天标「有限样本」，`≥5` 天标「充分样本」）。
+2. **屋主触发模式**：采用推荐项——同步有界执行（复用 30s 超时与独立并发槽防重，账本兜底，前端按钮 loading 等待）。
+3. **强制刷新策略**：采用推荐项——同一锚点日且输入指纹、模型与规则未变时仅零费用复用（直接返回 `REUSED`，不提供强制重抽开关）。
+4. **费用账本面板**：采用推荐项——合并展示在现有「星潮发布台」待核对费用面板，统一走现有 5 分钟保守结算入口（保持既有接口向后兼容）。
