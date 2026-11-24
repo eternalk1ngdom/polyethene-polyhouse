@@ -412,10 +412,13 @@ onMounted(() => {
   background: white;
 }
 .profile-cover {
+  --cover-art: url('../assets/profile-koi-panorama.webp');
   height: 180px;
-  background: #f8dfc0 url('../assets/profile-window-panorama.webp') 92% center / cover no-repeat;
+  background:
+    radial-gradient(ellipse 150px 54px at 68px 33px, #121528b8 36%, transparent),
+    var(--cover-art) 25% 60% / cover no-repeat #17192e;
   padding: 25px 34px;
-  color: var(--ph-ink);
+  color: #fff;
   font-size: 13px;
   letter-spacing: 0.08em;
 }
@@ -796,10 +799,10 @@ h1 {
   }
 }
 @media (max-width: 560px) {
-  /* 窄屏用近景保住花瓶与窗台，平板仍能看到横向延展的远山。 */
+  /* 窄屏补足车厢上下空间，避免横向裁掉人物或窗外的光鱼。 */
   .profile-cover {
-    background-image: url('../assets/profile-window-closeup.webp');
-    background-position: 67% center;
+    --cover-art: url('../assets/profile-koi-closeup.webp');
+    background-position: center, 25% center;
   }
 }
 </style>
