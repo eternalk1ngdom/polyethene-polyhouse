@@ -1,8 +1,9 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.18.md](docs/dev-log/v1.0-dev.18.md)。
+更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.19.md](docs/dev-log/v1.0-dev.19.md)。
 
-- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.18.md#星潮-2b-7-日风口简报)已完成：分支 `feat/startide-window-briefing`（基线 `dev` `b88ab20`）按 B1～B5 全闭环交付、完成本机开发库 `7/7` 天真实 DeepSeek 试跑（¥0.0135 一次过检）与提示词微调，已经 PR #16 合入 `dev`（`da62b75`）；云端库 `015` 迁移、平台账单对账与合入 `main`/部署待另行授权。
+- [登录态 5 页浏览器走查与收边](docs/dev-log/v1.0-dev.19.md#登录态-5-页浏览器走查与收边)已完成：基于 `dev`（`1969e28`）在分支 `fix/authenticated-ui-qa` 完成 5 个需登录页 5 断点（`1366～320px`）与 4 状态走查及 Q1～Q5 局部修复与复检，待确认后推送并合入 `dev`。
+- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.18.md#星潮-2b-7-日风口简报)已经 PR #16 合入 `dev`（`da62b75`）；云端库 `015` 迁移、平台账单对账与合入 `main`/部署待另行授权。
 - 前端精修 F1～F5 与星潮 5:1 月夜横幅均已合入 `dev`（PR #12～#15），详见 [dev.17](docs/dev-log/v1.0-dev.17.md)；星潮内容演进（`radar-3` / 2A / `radar-4`）与首页卡面重绘/收尾区方案 A 均已合入 `dev`（PR #7～#11），详见 [dev.16](docs/dev-log/v1.0-dev.16.md)；星潮基础工程（PR #6）详见 [dev.15](docs/dev-log/v1.0-dev.15.md)。11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
@@ -28,6 +29,7 @@
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.18](docs/dev-log/v1.0-dev.18.md) | 星潮 2B 7 日风口简报 B1～B5、本机真实试跑与提示词微调（PR #16 合 `dev`） |
 | [dev.17](docs/dev-log/v1.0-dev.17.md) | 前端精修 F1～F5 与星潮 5:1 月夜全景横幅（PR #12～#15 合 `dev`） |
 | [dev.16](docs/dev-log/v1.0-dev.16.md) | 星潮内容演进（`radar-3` / 2A / `radar-4`）与首页妙替/妙压重绘、收尾区方案 A（PR #7～#11） |
 | [dev.15](docs/dev-log/v1.0-dev.15.md) | 星潮基础工程 G1～G6、外部预热、G4b 小样本对账与首版阅读/发布台（PR #6） |
