@@ -47,19 +47,29 @@ const headline = computed(() => {
 })
 const published = computed(() => props.job?.state === 'SUCCEEDED' || props.job?.state === 'PARTIAL')
 const stopped = computed(() => props.job?.state === 'FAILED' || props.job?.state === 'INTERRUPTED')
+const statusClass = computed(() => {
+  const state = props.job?.state
+  if (state === 'SUCCEEDED') return 'ready'
+  if (state === 'PARTIAL') return 'warn'
+  if (state === 'FAILED' || state === 'INTERRUPTED') return 'danger'
+  if (state === 'QUEUED' || state === 'RUNNING') return 'active'
+  return 'idle'
+})
 </script>
 
 <template>
   <section class="task" aria-labelledby="task-title">
-    <header>
-      <h2 id="task-title">本次任务</h2>
+    <header class="panel-head">
+      <div class="title-row">
+        <h2 id="task-title">本次任务</h2>
+        <span class="status-pill" :class="statusClass" aria-live="polite">{{ headline }}</span>
+      </div>
       <ElButton v-if="tracking" :disabled="busy || waiting" @click="$emit('refresh')"
         >重查任务</ElButton
       >
     </header>
     <div class="body">
       <div class="result" aria-live="polite">
-        <h3 :data-state="job?.state">{{ headline }}</h3>
         <template v-if="published && job?.summary">
           <p>
             收录 {{ job.summary.total }} 项 · 新生成 {{ job.summary.generated }} 篇 · 有效复用
@@ -129,51 +139,80 @@ const stopped = computed(() => props.job?.state === 'FAILED' || props.job?.state
 
 <style scoped>
 .task {
-  margin: 20px 0 28px;
+  margin: 20px 0;
   border: 1px solid #c9d8d9;
   border-radius: 14px;
   background: #fff;
-  padding: clamp(16px, 2.4vw, 28px);
+  padding: clamp(18px, 2.4vw, 26px);
 }
-header,
-.body {
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.title-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+.body {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+  margin-top: 14px;
 }
 h2 {
   margin: 0;
   font-size: 22px;
+  line-height: 1.3;
 }
-.body {
-  margin-top: 16px;
-  align-items: flex-start;
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.status-pill.idle {
+  background: #edf2f4;
+  color: #475c69;
+}
+.status-pill.active {
+  background: #dbeaf5;
+  color: #16486b;
+}
+.status-pill.ready {
+  background: #d9ece3;
+  color: #1c5840;
+}
+.status-pill.warn {
+  background: #faebcf;
+  color: #815619;
+}
+.status-pill.danger {
+  background: #f9e2de;
+  color: #943e31;
 }
 .result {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-h3 {
-  margin: 0;
-  color: #455e6a;
-  font-size: 16px;
-}
-h3[data-state] {
-  color: #14665c;
-}
-h3:is([data-state='FAILED'], [data-state='INTERRUPTED']) {
-  color: #953e30;
-}
-h3[data-state='PARTIAL'] {
-  color: #805511;
-}
 .result p,
 .error {
   margin: 6px 0 0;
   font-size: 14px;
   line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+.result > p:first-child {
+  margin-top: 0;
 }
 .result p {
   color: #435765;
