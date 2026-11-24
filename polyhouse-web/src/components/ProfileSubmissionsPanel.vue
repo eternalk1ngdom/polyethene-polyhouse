@@ -80,6 +80,9 @@ const pendingAvatar = computed(() =>
   line-height: 1.8;
   color: var(--ph-muted);
 }
+.quota {
+  font-variant-numeric: tabular-nums;
+}
 .actions {
   display: flex;
   gap: 10px;
@@ -103,6 +106,7 @@ const pendingAvatar = computed(() =>
 }
 .history small {
   color: var(--ph-muted);
+  font-variant-numeric: tabular-nums;
 }
 .submissions-panel :deep(.el-alert) {
   margin: 12px 0;

@@ -103,6 +103,7 @@ p {
   color: #475c69;
   line-height: 1.55;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 .amounts {
   display: grid;
@@ -169,6 +170,7 @@ li {
   padding: 9px 0;
   border-top: 1px solid #d6e0df;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 li span:last-child {

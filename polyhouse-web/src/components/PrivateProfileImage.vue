@@ -92,6 +92,9 @@ onBeforeUnmount(release)
   max-width: 100%;
   height: auto;
   border-radius: 16px;
+  /* 浅色/白底头像在白色弹窗内需要柔和边界，方便审核辨认裁切边缘。 */
+  border: 1px solid var(--ph-line);
+  background: var(--ph-soft);
 }
 .private-preview p {
   font-size: 14px;

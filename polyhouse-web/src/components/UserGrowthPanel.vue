@@ -140,6 +140,7 @@ h2 .el-icon {
   border-radius: 7px;
   font-size: 14px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .level-badge > span {
@@ -157,12 +158,14 @@ h2 .el-icon {
 }
 .progress-copy strong {
   color: var(--ph-brand);
+  font-variant-numeric: tabular-nums;
 }
 .next-level {
   font-size: 12px;
   color: var(--ph-muted);
   margin: 14px 0;
   line-height: 1.8;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 .threshold-note {
@@ -171,6 +174,7 @@ h2 .el-icon {
   gap: 12px 28px;
   color: var(--ph-muted);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 .daily-reward {
@@ -198,6 +202,7 @@ h2 .el-icon {
   font-size: 15px;
   color: var(--ph-ink);
   margin: 13px 0 10px;
+  font-variant-numeric: tabular-nums;
 }
 .daily-reward p > span {
   margin-left: 24px;
@@ -205,6 +210,7 @@ h2 .el-icon {
 .daily-reward small {
   font-size: 10px;
   color: var(--ph-muted);
+  font-variant-numeric: tabular-nums;
 }
 .growth-note {
   color: var(--ph-muted);

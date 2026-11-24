@@ -463,6 +463,7 @@ onMounted(() => {
 }
 .target-summary dd {
   margin: 0;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 .dialog-actions {
