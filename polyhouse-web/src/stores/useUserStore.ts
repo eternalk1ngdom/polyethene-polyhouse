@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiError } from '../api/index'
+import { deleteLocalCover } from '../utils/localProfileCover'
 import {
   AuthCommandError,
   deregister as deregisterAccount,
@@ -258,6 +259,7 @@ export const useUserStore = defineStore('user', () => {
   async function endCurrentSession(cancelAccount: boolean): Promise<void> {
     const submittedToken = token.value
     const submittedRevision = revision
+    const submittedUserId = user.value?.id
     if (!submittedToken) {
       clearSession()
       if (cancelAccount) throw new AuthCommandError('请先登录再注销账号', true)
@@ -278,6 +280,10 @@ export const useUserStore = defineStore('user', () => {
     }
     // 请求等待期间若已登录另一账号或取得新 Token，旧响应不能清掉新会话。
     if (token.value === submittedToken && revision === submittedRevision) clearSession()
+    if (cancelAccount && submittedUserId) {
+      // 账号已由服务端注销。浏览器拒绝访问存储时，仍维持注销成功结果。
+      void deleteLocalCover(submittedUserId).catch(() => undefined)
+    }
   }
 
   /** 等待后端撤销成功后退出；网络故障会保留本地状态并提示重试。 */

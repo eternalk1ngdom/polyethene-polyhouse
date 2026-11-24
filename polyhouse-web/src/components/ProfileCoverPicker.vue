@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Picture } from '@element-plus/icons-vue'
 import { ElButton, ElDialog, ElIcon } from 'element-plus'
 import {
@@ -12,9 +12,24 @@ import {
 } from '../api/profileCovers'
 import { useUserStore } from '../stores/useUserStore'
 import { useUserGrowthStore } from '../stores/useUserGrowthStore'
+import LocalCoverEditor from './LocalCoverEditor.vue'
+import {
+  deleteLocalCover,
+  enableLocalCover,
+  localCoverChannel,
+  readLocalCover,
+  saveLocalCover,
+  type LocalProfileCover,
+} from '../utils/localProfileCover'
+
+interface Props {
+  accountId: string
+}
 interface Emits {
   applied: [key: CoverKey]
+  local: [images: { desktop: string; mobile: string } | null]
 }
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 const user = useUserStore()
 const growth = useUserGrowthStore()
@@ -26,6 +41,14 @@ const confirm = ref(false)
 const busy = ref(false)
 const ready = ref(false)
 const error = ref('')
+const localCover = shallowRef<LocalProfileCover | null>(null)
+const localError = ref('')
+const localBusy = ref(false)
+const editing = ref(false)
+const editorBusy = ref(false)
+const confirmDelete = ref(false)
+const editButton = ref<HTMLDivElement>()
+const localEnabled = computed(() => localCover.value?.enabled === true)
 const difference = computed(
   () => BigInt(catalog.value?.coins ?? '0') - BigInt(item.value?.price ?? 0),
 )
@@ -35,15 +58,118 @@ const thumbs = import.meta.glob<string>('../assets/profile-*-closeup.webp', {
 })
 let sequence = 0
 let active = true
+let localSequence = 0
+let channel: BroadcastChannel | undefined
+let imageUrls: { desktop: string; mobile: string } | null = null
+const accountId = props.accountId
+const accountToken = user.token
+
+function isCurrentAccount() {
+  return (
+    active &&
+    user.isLoggedIn &&
+    !user.requiresPasswordChange &&
+    user.user?.id === accountId &&
+    user.token === accountToken
+  )
+}
+
+function clearImageUrls() {
+  if (!imageUrls) return
+  URL.revokeObjectURL(imageUrls.desktop)
+  URL.revokeObjectURL(imageUrls.mobile)
+  imageUrls = null
+}
+
+async function loadLocal() {
+  const request = ++localSequence
+  try {
+    const saved = await readLocalCover(accountId)
+    if (!isCurrentAccount() || request !== localSequence) return
+    clearImageUrls()
+    localCover.value = saved
+    if (saved?.enabled)
+      imageUrls = {
+        desktop: URL.createObjectURL(saved.desktop),
+        mobile: URL.createObjectURL(saved.mobile),
+      }
+    emit('local', imageUrls)
+    localError.value = ''
+  } catch (reason) {
+    if (!isCurrentAccount() || request !== localSequence) return
+    clearImageUrls()
+    localCover.value = null
+    emit('local', null)
+    localError.value =
+      reason instanceof Error && reason.message.startsWith('请关闭')
+        ? reason.message
+        : '暂时无法读取浏览器里的卡面。'
+  }
+}
+
 function refreshOnFocus() {
   if (!confirm.value) void load()
+  void loadLocal()
 }
-onMounted(() => window.addEventListener('focus', refreshOnFocus))
+onMounted(() => {
+  window.addEventListener('focus', refreshOnFocus)
+  if (typeof BroadcastChannel !== 'undefined') {
+    channel = new BroadcastChannel(localCoverChannel)
+    channel.onmessage = () => {
+      void loadLocal()
+    }
+  }
+  void loadLocal()
+})
 onBeforeUnmount(() => {
   active = false
   sequence++
+  channel?.close()
+  clearImageUrls()
   window.removeEventListener('focus', refreshOnFocus)
 })
+
+watch(visible, (open) => {
+  if (!open) {
+    editing.value = false
+    confirmDelete.value = false
+  }
+})
+
+function endEditing() {
+  editing.value = false
+  editorBusy.value = false
+  void nextTick(() => editButton.value?.querySelector('button')?.focus())
+}
+
+async function saveCustom(cover: LocalProfileCover) {
+  if (!isCurrentAccount()) return
+  try {
+    await saveLocalCover(accountId, cover)
+  } catch {
+    throw new Error('无法保存本地图，请检查浏览器存储空间后重试。')
+  }
+  if (!isCurrentAccount()) return
+  await loadLocal()
+  endEditing()
+}
+
+async function changeLocal(action: 'toggle' | 'delete') {
+  if (localBusy.value || !isCurrentAccount()) return
+  localBusy.value = true
+  try {
+    if (action === 'delete') await deleteLocalCover(accountId)
+    else await enableLocalCover(accountId, !localEnabled.value)
+    await loadLocal()
+    confirmDelete.value = false
+    if (action === 'delete')
+      await nextTick(() => editButton.value?.querySelector('button')?.focus())
+  } catch {
+    localError.value = '无法更新本地图，请检查浏览器存储权限后重试。'
+  } finally {
+    localBusy.value = false
+  }
+}
 function accept(data: CoverCatalog) {
   if (data.userId !== user.user?.id) throw new Error('卡面与当前账号不匹配')
   catalog.value = data
@@ -75,13 +201,14 @@ function open() {
   visible.value = true
   picked.value = catalog.value?.equipped ?? 'window'
   void load(true)
+  void loadLocal()
 }
 function pick(key: CoverKey) {
   picked.value = key
   confirm.value = false
 }
 function label(entry: CoverItem) {
-  if (entry.key === catalog.value?.equipped) return '使用中'
+  if (entry.key === catalog.value?.equipped) return localEnabled.value ? '账号官方卡面' : '使用中'
   if (entry.reason === 'coins') return entry.price + ' 枚硬币解锁'
   if (entry.reason === 'levelRequired') return 'Lv.3 解锁'
   return '可使用'
@@ -119,7 +246,8 @@ async function submit() {
           user.applyCoverBalance(token, catalog.value.userId, catalog.value.coins)
           await growth.refreshAfterPurchase()
         }
-        if (active && user.token === token && ready.value) error.value = '请核对最新卡面和余额后再操作'
+        if (active && user.token === token && ready.value)
+          error.value = '请核对最新卡面和余额后再操作'
       }
     }
   }
@@ -127,68 +255,144 @@ async function submit() {
 </script>
 
 <template>
-  <ElButton class="cover-trigger" @click="open"><ElIcon><Picture /></ElIcon>更换卡面</ElButton>
+  <ElButton class="cover-trigger" @click="open"
+    ><ElIcon><Picture /></ElIcon>更换卡面</ElButton
+  >
   <ElDialog
     v-model="visible"
     title="更换卡面"
+    class="profile-cover-dialog"
     width="min(560px, 92vw)"
     append-to-body
-    :close-on-click-modal="!busy"
-    :close-on-press-escape="!busy"
-    :show-close="!busy"
+    :close-on-click-modal="!busy && !editorBusy"
+    :close-on-press-escape="!busy && !editorBusy"
+    :show-close="!busy && !editorBusy"
   >
-    <slot name="preview" :cover="picked" />
-    <div class="choices">
-      <button
-        v-for="entry in catalog?.covers"
-        :key="entry.key"
-        type="button"
-        :aria-pressed="picked === entry.key"
-        :disabled="busy"
-        @click="pick(entry.key)"
-      >
-        <img :src="thumbs['../assets/profile-' + entry.key + '-closeup.webp']" alt="" />
-        <strong>{{ coverNames[entry.key] }}</strong
-        ><span>{{ label(entry) }}</span>
-      </button>
-    </div>
-    <p v-if="error" role="status">
-      {{ error }} <ElButton size="small" :disabled="busy" @click="load()">重试</ElButton>
-    </p>
-    <template v-if="catalog && item">
-      <p v-if="item.reason === 'levelRequired'">距离 Lv.3 还差 {{ item.missingExperience }} 经验</p>
-      <p v-else-if="item.reason === 'coins'">
-        余额 {{ catalog.coins }} 枚<span v-if="difference < 0n">，还差 {{ -difference }} 枚</span
-        ><span v-else-if="confirm"
-          >，本次花费 {{ item.price }} 枚，支付后剩 {{ difference }} 枚</span
+    <LocalCoverEditor
+      v-if="visible && editing"
+      :save="saveCustom"
+      @cancel="endEditing"
+      @busy="editorBusy = $event"
+    >
+      <template #avatar><slot name="avatar" /></template>
+    </LocalCoverEditor>
+    <template v-else>
+      <slot name="preview" :cover="picked" />
+      <div class="choices">
+        <button
+          v-for="entry in catalog?.covers"
+          :key="entry.key"
+          type="button"
+          :aria-pressed="picked === entry.key"
+          :disabled="busy"
+          @click="pick(entry.key)"
         >
+          <img :src="thumbs['../assets/profile-' + entry.key + '-closeup.webp']" alt="" />
+          <strong>{{ coverNames[entry.key] }}</strong
+          ><span>{{ label(entry) }}</span>
+        </button>
+      </div>
+      <p v-if="error" role="status">
+        {{ error }} <ElButton size="small" :disabled="busy" @click="load()">重试</ElButton>
       </p>
-      <ElButton
-        type="primary"
-        :loading="busy"
-        :disabled="
-          !ready ||
-          picked === catalog.equipped ||
-          item.reason === 'levelRequired' ||
-          (item.reason === 'coins' && difference < 0n)
-        "
-        @click="submit"
-      >
-        {{
-          picked === catalog.equipped
-            ? '使用中'
-            : item.reason === 'coins'
-              ? confirm
-                ? '确认支付'
-                : '解锁这张'
-              : '使用这张'
-        }}
-      </ElButton>
+      <template v-if="catalog && item">
+        <p v-if="item.reason === 'levelRequired'">
+          距离 Lv.3 还差 {{ item.missingExperience }} 经验
+        </p>
+        <p v-else-if="item.reason === 'coins'">
+          余额 {{ catalog.coins }} 枚<span v-if="difference < 0n">，还差 {{ -difference }} 枚</span
+          ><span v-else-if="confirm"
+            >，本次花费 {{ item.price }} 枚，支付后剩 {{ difference }} 枚</span
+          >
+        </p>
+        <ElButton
+          type="primary"
+          :loading="busy"
+          :disabled="
+            !ready ||
+            picked === catalog.equipped ||
+            item.reason === 'levelRequired' ||
+            (item.reason === 'coins' && difference < 0n)
+          "
+          @click="submit"
+        >
+          {{
+            picked === catalog.equipped
+              ? localEnabled
+                ? '账号官方卡面'
+                : '使用中'
+              : item.reason === 'coins'
+                ? confirm
+                  ? '确认支付'
+                  : '解锁这张'
+                : localEnabled
+                  ? '设为账号官方卡面'
+                  : '使用这张'
+          }}
+        </ElButton>
+      </template>
+      <section class="local-cover-settings" aria-label="本地自定义">
+        <h3>本地自定义</h3>
+        <p>只保存在当前浏览器，清除网站数据后需重新选择。</p>
+        <p v-if="localCover">本机显示：{{ localEnabled ? '自定义卡面' : '账号官方卡面' }}</p>
+        <p v-if="localError" role="status">{{ localError }}</p>
+        <div class="local-actions">
+          <div ref="editButton">
+            <ElButton :disabled="busy || localBusy" @click="editing = true">{{
+              localCover ? '更换本地图' : '选择本地图'
+            }}</ElButton>
+          </div>
+          <template v-if="localCover">
+            <ElButton :disabled="localBusy" @click="changeLocal('toggle')">{{
+              localEnabled ? '本机显示官方卡面' : '重新使用本地图'
+            }}</ElButton>
+            <ElButton :disabled="localBusy" @click="confirmDelete = true">删除本地图</ElButton>
+          </template>
+        </div>
+        <div v-if="confirmDelete && localCover" class="local-confirm">
+          <p>删除后，此浏览器会显示账号官方卡面。</p>
+          <div class="local-actions">
+            <ElButton :disabled="localBusy" @click="confirmDelete = false">保留图片</ElButton>
+            <ElButton type="danger" :loading="localBusy" @click="changeLocal('delete')"
+              >确认删除</ElButton
+            >
+          </div>
+        </div>
+      </section>
     </template>
   </ElDialog>
 </template>
 
 <style scoped>
+:global(.profile-cover-dialog) {
+  --el-dialog-margin-top: 5vh;
+  max-height: 90dvh;
+  overflow: auto;
+}
+.local-cover-settings {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+.local-cover-settings h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.local-cover-settings p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.local-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.local-actions :deep(.el-button) {
+  margin: 0;
+}
+.local-confirm {
+  margin-top: 12px;
+}
 .cover-trigger .el-icon {
   margin-right: 7px;
 }

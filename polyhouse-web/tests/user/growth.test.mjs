@@ -24,6 +24,7 @@ const authUrl = await moduleUrl('../../src/api/auth.ts', { './index': apiUrl })
 const userUrl = await moduleUrl('../../src/stores/useUserStore.ts', {
   '../api/auth': authUrl,
   '../api/index': apiUrl,
+  '../utils/localProfileCover': await moduleUrl('../../src/utils/localProfileCover.ts'),
 })
 const growthApiUrl = await moduleUrl('../../src/api/growth.ts', { './index': apiUrl })
 const growthStoreUrl = await moduleUrl('../../src/stores/useUserGrowthStore.ts', {

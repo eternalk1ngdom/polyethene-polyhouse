@@ -25,6 +25,7 @@ const authUrl = await moduleUrl('../../src/api/auth.ts', { './index': apiUrl })
 const storeUrl = await moduleUrl('../../src/stores/useUserStore.ts', {
   '../api/auth': authUrl,
   '../api/index': apiUrl,
+  '../utils/localProfileCover': await moduleUrl('../../src/utils/localProfileCover.ts'),
 })
 const { useUserStore } = await import(storeUrl)
 const { useAccountUiStore } = await import(

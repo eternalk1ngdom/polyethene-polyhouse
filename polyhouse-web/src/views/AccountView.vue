@@ -35,6 +35,7 @@ const growth = useUserGrowthStore()
 const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
 const equippedCover = ref<CoverKey>('window')
+const localCoverImages = ref<{ desktop: string; mobile: string } | null>(null)
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
 const route = useRoute()
@@ -80,11 +81,17 @@ const toolShortcuts = [
 let refreshSequence = 0
 
 watch(
-  [() => userStore.token, () => userStore.user?.id, () => userStore.isLoggedIn],
+  [
+    () => userStore.token,
+    () => userStore.user?.id,
+    () => userStore.isLoggedIn,
+    () => userStore.requiresPasswordChange,
+  ],
   () => {
     refreshSequence++
     refreshing.value = false
     equippedCover.value = 'window'
+    localCoverImages.value = null
     avatarVisible.value = false
     avatarNotice.value = ''
   },
@@ -137,7 +144,12 @@ onMounted(() => {
     >
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
-        <div class="profile-cover" :data-cover="equippedCover" aria-hidden="true"></div>
+        <div class="profile-cover" :data-cover="equippedCover" aria-hidden="true">
+          <picture v-if="localCoverImages" class="local-cover-image">
+            <source media="(max-width: 560px)" :srcset="localCoverImages.mobile" />
+            <img :src="localCoverImages.desktop" alt="" @error="localCoverImages = null" />
+          </picture>
+        </div>
         <div class="profile-overview">
           <button
             class="avatar-edit"
@@ -164,9 +176,18 @@ onMounted(() => {
           <div class="profile-actions">
             <ProfileCoverPicker
               v-if="!userStore.requiresPasswordChange"
-              :key="userStore.token"
+              :key="userStore.token + ':' + userStore.user.id"
+              :account-id="userStore.user.id"
               @applied="equippedCover = $event"
+              @local="localCoverImages = $event"
             >
+              <template #avatar>
+                <UserAvatar
+                  :name="userDisplayName(userStore.user)"
+                  :src="userStore.user.avatar"
+                  :size="44"
+                />
+              </template>
               <template #preview="{ cover }">
                 <div class="profile-cover cover-preview" :data-cover="cover">
                   <div class="preview-avatar">
@@ -441,6 +462,19 @@ onMounted(() => {
   color: var(--ph-ink);
   font-size: 13px;
   letter-spacing: 0.08em;
+}
+.local-cover-image,
+.local-cover-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.local-cover-image {
+  position: absolute;
+  inset: 0;
+}
+.local-cover-image img {
+  object-fit: cover;
 }
 .cover-preview {
   border-radius: 12px;
