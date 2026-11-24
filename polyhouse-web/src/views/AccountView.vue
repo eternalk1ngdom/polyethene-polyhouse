@@ -412,16 +412,28 @@ onMounted(() => {
   background: white;
 }
 .profile-cover {
-  --cover-art: url('../assets/profile-koi-panorama.webp');
+  --cover-art: url('../assets/profile-window-panorama.webp');
   height: 180px;
-  background:
-    radial-gradient(ellipse 150px 54px at 68px 33px, #121528b8 36%, transparent),
-    var(--cover-art) 25% 60% / cover no-repeat #17192e;
   padding: 25px 34px;
-  color: #fff;
+  background: #f8dfc0 var(--cover-art) 92% center / cover no-repeat;
+  color: var(--ph-ink);
   font-size: 13px;
   letter-spacing: 0.08em;
 }
+.profile-cover[data-cover='koi'],
+.profile-cover[data-cover='astrolabe'] {
+  color: #fff;
+  background:
+    radial-gradient(ellipse 150px 54px at 68px 33px, #121528cc 36%, transparent),
+    var(--cover-art) 76% center / cover no-repeat #17192e;
+}
+.profile-cover[data-cover='koi'] {
+  --cover-art: url('../assets/profile-koi-panorama.webp');
+}
+.profile-cover[data-cover='astrolabe'] {
+  --cover-art: url('../assets/profile-astrolabe-panorama.webp');
+}
+
 .profile-overview {
   display: flex;
   gap: 24px;
@@ -799,10 +811,15 @@ h1 {
   }
 }
 @media (max-width: 560px) {
-  /* 窄屏补足车厢上下空间，避免横向裁掉人物或窗外的光鱼。 */
   .profile-cover {
+    --cover-art: url('../assets/profile-window-closeup.webp');
+    background-position: 67% center;
+  }
+  .profile-cover[data-cover='koi'] {
     --cover-art: url('../assets/profile-koi-closeup.webp');
-    background-position: center, 25% center;
+  }
+  .profile-cover[data-cover='astrolabe'] {
+    --cover-art: url('../assets/profile-astrolabe-closeup.webp');
   }
 }
 </style>
