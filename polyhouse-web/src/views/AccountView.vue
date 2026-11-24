@@ -137,27 +137,7 @@ onMounted(() => {
     >
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
-        <div class="profile-cover" :data-cover="equippedCover">
-          <span>我的个人空间</span>
-          <ProfileCoverPicker
-            v-if="!userStore.requiresPasswordChange"
-            :key="userStore.token"
-            @applied="equippedCover = $event"
-          >
-            <template #preview="{ cover }">
-              <div class="profile-cover cover-preview" :data-cover="cover">
-                <span>我的个人空间</span>
-                <div class="preview-avatar">
-                  <UserAvatar
-                    :name="userDisplayName(userStore.user)"
-                    :src="userStore.user.avatar"
-                    :size="44"
-                  />
-                </div>
-              </div>
-            </template>
-          </ProfileCoverPicker>
-        </div>
+        <div class="profile-cover" :data-cover="equippedCover" aria-hidden="true"></div>
         <div class="profile-overview">
           <button
             class="avatar-edit"
@@ -181,13 +161,32 @@ onMounted(() => {
             </h1>
             <p class="profile-account">@{{ userStore.user.username }}</p>
           </div>
-          <ElButton
-            class="refresh-button"
-            :loading="refreshing"
-            :disabled="!!accountUi.pending"
-            @click="refreshProfile()"
-            ><ElIcon><Refresh /></ElIcon>刷新资料</ElButton
-          >
+          <div class="profile-actions">
+            <ProfileCoverPicker
+              v-if="!userStore.requiresPasswordChange"
+              :key="userStore.token"
+              @applied="equippedCover = $event"
+            >
+              <template #preview="{ cover }">
+                <div class="profile-cover cover-preview" :data-cover="cover">
+                  <div class="preview-avatar">
+                    <UserAvatar
+                      :name="userDisplayName(userStore.user)"
+                      :src="userStore.user.avatar"
+                      :size="44"
+                    />
+                  </div>
+                </div>
+              </template>
+            </ProfileCoverPicker>
+            <ElButton
+              class="refresh-button"
+              :loading="refreshing"
+              :disabled="!!accountUi.pending"
+              @click="refreshProfile()"
+              ><ElIcon><Refresh /></ElIcon>刷新资料</ElButton
+            >
+          </div>
         </div>
         <dl class="profile-stats">
           <div>
@@ -456,10 +455,7 @@ onMounted(() => {
 }
 .profile-cover[data-cover='koi'],
 .profile-cover[data-cover='astrolabe'] {
-  color: #fff;
-  background:
-    radial-gradient(ellipse 150px 54px at 68px 33px, #121528cc 36%, transparent),
-    var(--cover-art) 76% center / cover no-repeat #17192e;
+  background: var(--cover-art) 76% center / cover no-repeat #17192e;
 }
 .profile-cover[data-cover='koi'] {
   --cover-art: url('../assets/profile-koi-panorama.webp');
@@ -542,10 +538,15 @@ h1 {
   color: var(--ph-muted);
   overflow-wrap: anywhere;
 }
-.refresh-button {
+.profile-actions {
+  display: flex;
+  gap: 8px;
   margin-left: auto;
   margin-top: 40px;
   flex-shrink: 0;
+}
+.profile-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 .refresh-button .el-icon,
 .management-row .el-icon {
@@ -794,7 +795,7 @@ h1 {
     padding: 20px;
   }
   .profile-overview {
-    /* 固定头像列和资料列，刷新按钮独占下一行，避免中间宽度把昵称挤成竖排。 */
+    /* 固定头像列和资料列，两个资料按钮排在下一行，避免中间宽度把昵称挤成竖排。 */
     display: grid;
     grid-template-columns: 92px minmax(0, 1fr);
     padding: 0 20px;
@@ -810,7 +811,7 @@ h1 {
     display: table;
     margin: 7px 0 0;
   }
-  .refresh-button {
+  .profile-actions {
     grid-column: 2;
     justify-self: start;
     margin: 0;
@@ -858,6 +859,9 @@ h1 {
   }
 }
 @media (max-width: 480px) {
+  .profile-actions {
+    grid-column: 1 / -1;
+  }
   .profile-nav {
     /* 窄屏保持单行横向滚动，避免标签折两行导致激活底线悬浮在行间。 */
     flex-wrap: nowrap;

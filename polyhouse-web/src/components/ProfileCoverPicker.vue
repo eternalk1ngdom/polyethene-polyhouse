@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
-import { ElButton, ElDialog } from 'element-plus'
+import { Picture } from '@element-plus/icons-vue'
+import { ElButton, ElDialog, ElIcon } from 'element-plus'
 import {
   coverNames,
   readCovers,
@@ -126,7 +127,7 @@ async function submit() {
 </script>
 
 <template>
-  <ElButton class="cover-trigger" round size="small" @click="open">更换卡面</ElButton>
+  <ElButton class="cover-trigger" @click="open"><ElIcon><Picture /></ElIcon>更换卡面</ElButton>
   <ElDialog
     v-model="visible"
     title="更换卡面"
@@ -188,10 +189,8 @@ async function submit() {
 </template>
 
 <style scoped>
-.cover-trigger {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+.cover-trigger .el-icon {
+  margin-right: 7px;
 }
 .choices {
   display: grid;
