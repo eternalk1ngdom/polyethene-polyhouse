@@ -92,11 +92,12 @@ import BrandLogo from './components/BrandLogo.vue'
 }
 :global(a:focus-visible),
 :global(button:focus-visible),
+:global(summary:focus-visible),
 :global([tabindex]:not(.el-input__inner, .el-select__input, .el-textarea__inner):focus-visible),
 :global(select:focus-visible),
 :global(textarea:not(.el-textarea__inner):focus-visible) {
   /* Element Plus 的内部输入由圆角外框/文本域自身 box-shadow 标示聚焦，避免再叠直角框。
-     仅排除已核对的三类内部元素；原生控件、按钮、链接和其他 tabindex 入口仍保留轮廓。 */
+     仅排除已核对的三类内部元素；原生控件、按钮、链接、折叠摘要和其他 tabindex 入口仍保留轮廓。 */
   outline: 3px solid var(--ph-accent-strong);
   outline-offset: 4px;
 }

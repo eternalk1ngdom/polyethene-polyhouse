@@ -1,10 +1,14 @@
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { ApiError } from '../../api/index'
 import {
+  generateTrendBriefing,
+  getTrendBriefing,
   getTrendFees,
   getTrendJob,
   isTrendId,
   submitTrendJob,
+  type TrendBriefing,
+  type TrendBriefingGenerateOutcome,
   type TrendFees,
   type TrendJob,
 } from '../../api/trend'
@@ -24,38 +28,54 @@ export function useTrendOwner() {
   )
   const job = ref<TrendJob | null>(null)
   const fees = ref<TrendFees | null>(null)
+  const briefing = ref<TrendBriefing | null>(null)
   const intent = ref<string | null>(null)
   const knownJobId = ref<string | null>(null)
   const jobBusy = ref(false)
   const feesBusy = ref(false)
+  const briefingBusy = ref(false)
+  const briefingGenerating = ref(false)
   const jobError = ref('')
   const feeError = ref('')
+  const briefingError = ref('')
   const submissionNote = ref('')
+  const briefingNote = ref('')
   const jobWaitUntil = ref(0)
   const feesWaitUntil = ref(0)
+  const briefingWaitUntil = ref(0)
   const waiting = ref(false)
+  const briefingWaiting = ref(false)
   const active = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'RUNNING')
   let session: OwnerSession | undefined
   let poll: ReturnType<typeof setTimeout> | undefined
   let unblock: ReturnType<typeof setTimeout> | undefined
+  let briefingUnblock: ReturnType<typeof setTimeout> | undefined
 
   function reset(): void {
     session?.requests.abort()
     session = undefined
     clearTimeout(poll)
     clearTimeout(unblock)
+    clearTimeout(briefingUnblock)
     job.value = null
     fees.value = null
+    briefing.value = null
     intent.value = null
     knownJobId.value = null
     jobBusy.value = false
     feesBusy.value = false
+    briefingBusy.value = false
+    briefingGenerating.value = false
     jobError.value = ''
     feeError.value = ''
+    briefingError.value = ''
     submissionNote.value = ''
+    briefingNote.value = ''
     jobWaitUntil.value = 0
     feesWaitUntil.value = 0
+    briefingWaitUntil.value = 0
     waiting.value = false
+    briefingWaiting.value = false
   }
 
   function remember(current: OwnerSession): void {
@@ -202,6 +222,79 @@ export function useTrendOwner() {
     }
   }
 
+  function onBriefingRateLimit(failure: ApiError): void {
+    const delay = (failure.retryAfterSeconds ?? 15) * 1000
+    briefingWaitUntil.value = Date.now() + delay
+    briefingWaiting.value = true
+    clearTimeout(briefingUnblock)
+    briefingUnblock = setTimeout(() => {
+      briefingWaiting.value = false
+    }, delay)
+    briefingError.value = '风口简报触发正在冷却，请稍后重试。'
+  }
+
+  function briefingOutcomeNote(outcome: TrendBriefingGenerateOutcome): string {
+    if (outcome === 'GENERATED') return '已生成并发布本期 7 日风口简报。'
+    if (outcome === 'REUSED') return '当期快照未变化，已零费用复用现有简报。'
+    if (outcome === 'PENDING') return '当期已有在途或待核对的简报请求，请在下方费用面板核对。'
+    if (outcome === 'BUDGET_LIMIT') return '本月 AI 预算已达上限或已暂停，未发起新生成。'
+    if (outcome === 'INVALID_OUTPUT')
+      return '模型输出未通过实名引用或格式校验，已按实际用量结算并保留旧稿。'
+    return '当前无法连接模型或请求未发出，未产生费用。'
+  }
+
+  async function refreshBriefing(): Promise<void> {
+    const current = session
+    if (!current || briefingBusy.value || briefingGenerating.value) return
+    briefingBusy.value = true
+    briefingError.value = ''
+    try {
+      const result = await getTrendBriefing(undefined, current.requests.signal)
+      if (session !== current) return
+      briefing.value = result
+    } catch (failure: unknown) {
+      if (session !== current) return
+      if (failure instanceof ApiError && failure.status === 404) {
+        briefing.value = null
+      } else {
+        briefingError.value = '暂时无法读取风口简报状态，请稍后重试。'
+      }
+    } finally {
+      if (session === current) briefingBusy.value = false
+    }
+  }
+
+  async function generateBriefing(): Promise<void> {
+    const current = session
+    if (!current || briefingGenerating.value || Date.now() < briefingWaitUntil.value) return
+    briefingGenerating.value = true
+    briefingError.value = ''
+    briefingNote.value = ''
+    try {
+      const result = await generateTrendBriefing(
+        current.token,
+        briefing.value?.anchorDate,
+        current.requests.signal,
+      )
+      if (session !== current) return
+      briefing.value = result.briefing
+      briefingNote.value = briefingOutcomeNote(result.outcome)
+      if (result.charged) void refreshFees()
+    } catch (failure: unknown) {
+      if (session !== current) return
+      if (failure instanceof ApiError && failure.status === 429) {
+        onBriefingRateLimit(failure)
+      } else if (failure instanceof ApiError && failure.message) {
+        briefingError.value = failure.message
+      } else {
+        briefingError.value = '风口简报生成未收到完整确认，请先刷新状态与费用账本。'
+      }
+      void refreshFees()
+    } finally {
+      if (session === current) briefingGenerating.value = false
+    }
+  }
+
   watch(
     [allowed, () => user.token, () => user.user?.id],
     ([canRead, token, ownerId]) => {
@@ -214,6 +307,7 @@ export function useTrendOwner() {
       }
       restore(session)
       void refreshFees()
+      void refreshBriefing()
       if (intent.value || knownJobId.value) void refreshJob()
     },
     { immediate: true },
@@ -224,17 +318,25 @@ export function useTrendOwner() {
     allowed,
     job,
     fees,
+    briefing,
     intent,
     knownJobId,
     jobBusy,
     feesBusy,
+    briefingBusy,
+    briefingGenerating,
     jobError,
     feeError,
+    briefingError,
     submissionNote,
+    briefingNote,
     active,
     waiting,
+    briefingWaiting,
     refreshJob,
     submit,
     refreshFees,
+    refreshBriefing,
+    generateBriefing,
   }
 }

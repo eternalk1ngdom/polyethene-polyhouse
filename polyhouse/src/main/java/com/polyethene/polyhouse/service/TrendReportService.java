@@ -105,9 +105,15 @@ public class TrendReportService {
 
     /** 基于已发布日榜做 7 日窗口确定性统计；锚点无日报返回 404，绝不触发采集或模型调用。 */
     public TrendWindowStatsVO window(TrendWindowQueryDTO request) {
+        if (request == null || !"DAILY".equals(request.periodType())) throw invalid();
+        var snapshot = windowSnapshot(request.periodKey());
+        return TrendWindowAggregator.aggregate(snapshot.anchorDate(), snapshot.reports());
+    }
+
+    /** 读取指定锚点日（默认最新已发布日）的近 7 日已发布日报快照，供 2A 统计与 2B 简报共用同一数据口径。 */
+    public WindowSnapshot windowSnapshot(String periodKey) {
         requireEnabled();
-        if (!"DAILY".equals(request.periodType())) throw invalid();
-        LocalDate requested = date(request.periodKey());
+        LocalDate requested = date(periodKey);
         try {
             var header = requested == null ? mapper.latestHeader() : mapper.publishedHeader(requested);
             if (header == null) throw new BusinessException(ErrorCode.NOT_FOUND);
@@ -117,8 +123,20 @@ public class TrendReportService {
             if (records == null || records.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND);
             var decoded = records.stream().map(this::decode).toList();
             if (decoded.stream().noneMatch(item -> anchor.equals(item.periodKey()))) throw unavailable();
-            return TrendWindowAggregator.aggregate(anchor, decoded);
+            return new WindowSnapshot(anchor, decoded);
         } catch (DataAccessException failure) { throw unavailable(); }
+    }
+
+    /**
+     * 冻结的 7 日已发布日报窗口快照。
+     * @param anchorDate 观察窗口锚点日期（北京时间）
+     * @param reports 窗口内已通过结构校验的已发布日报列表
+     */
+    public record WindowSnapshot(LocalDate anchorDate, java.util.List<TrendReportVO> reports) {
+        /** 冻结列表，防止跨服务共享时被意外修改。 */
+        public WindowSnapshot {
+            reports = java.util.List.copyOf(reports);
+        }
     }
 
     /** 读取归档时检查结构和版本身份，损坏数据不以成功报告公开。 */

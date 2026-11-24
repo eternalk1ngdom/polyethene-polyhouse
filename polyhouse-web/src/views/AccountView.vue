@@ -572,6 +572,7 @@ h1 {
   margin: 0;
   font-size: 28px;
   font-weight: 650;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 .profile-nav {
@@ -854,6 +855,29 @@ h1 {
   }
   .profile-cover[data-cover='astrolabe'] {
     --cover-art: url('../assets/profile-astrolabe-closeup.webp');
+  }
+}
+@media (max-width: 480px) {
+  .profile-nav {
+    /* 窄屏保持单行横向滚动，避免标签折两行导致激活底线悬浮在行间。 */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .profile-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .profile-nav a {
+    flex-shrink: 0;
+  }
+}
+@media (max-width: 420px) {
+  .profile-stats {
+    gap: 10px;
+  }
+  .profile-stats dd {
+    /* 极窄屏收敛三列大数字字号，避免 5～6 位含千分位数字在中间折断。 */
+    font-size: clamp(16px, 5vw, 20px);
   }
 }
 </style>

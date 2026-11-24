@@ -61,7 +61,7 @@ final class TrendAcceptanceSandbox implements AutoCloseable {
                 created = true;
                 connection.setCatalog(name);
                 for (String file : List.of("001_schema.sql", "010_trend_reports.sql", "011_trend_ai.sql", "012_trend_jobs.sql",
-                        "013_trend_ai_resolution.sql", "014_trend_schedule.sql")) {
+                        "013_trend_ai_resolution.sql", "014_trend_schedule.sql", "015_trend_briefings.sql")) {
                     ScriptUtils.executeSqlScript(connection, new EncodedResource(new FileSystemResource("sql/" + file), StandardCharsets.UTF_8));
                 }
                 if (live) {

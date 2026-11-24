@@ -59,7 +59,8 @@ class TrendFeeIntegrationTest {
     }
     @BeforeEach void clearOnlyOurTables() {
         jdbc.update("UPDATE tool_trend_job_slot SET active_id=NULL,generation=0,last_accepted_at=NULL");
-        for (String table : List.of("tool_trend_ai_resolution", "tool_trend_job", "tool_trend_daily", "tool_trend_report_version",
+        for (String table : List.of("tool_trend_briefing_resolution", "tool_trend_briefing_request", "tool_trend_briefing",
+                "tool_trend_ai_resolution", "tool_trend_job", "tool_trend_daily", "tool_trend_report_version",
                 "tool_trend_ai_request", "tool_trend_ai_repository", "tool_trend_ai_month")) {
             // 测试内部固定表白名单，没有任何用户输入，也只连接本类创建的随机数据库。
             jdbc.update("DELETE FROM " + table);
@@ -278,7 +279,8 @@ class TrendFeeIntegrationTest {
             try (var connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
                 command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4"); connection.setCatalog(name);
                 try {
-                    for (String file : List.of("010_trend_reports.sql", "011_trend_ai.sql", "012_trend_jobs.sql", "013_trend_ai_resolution.sql")) migrate(connection, file);
+                    for (String file : List.of("010_trend_reports.sql", "011_trend_ai.sql", "012_trend_jobs.sql",
+                            "013_trend_ai_resolution.sql", "015_trend_briefings.sql")) migrate(connection, file);
                 } catch (RuntimeException failure) { try { close(); } catch (Exception cleanup) { failure.addSuppressed(cleanup); } throw failure; }
             }
         }

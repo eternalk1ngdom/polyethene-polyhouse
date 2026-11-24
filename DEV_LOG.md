@@ -1,13 +1,11 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。**
+更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.20.md](docs/dev-log/v1.0-dev.20.md)。
 
-- 本分支当前阶段 [dev.20 · 个人空间卡面](docs/dev-log/v1.0-dev.20.md)。三款双端适配已完成，[解锁与佩戴](docs/plans/profile-card-backgrounds.md#解锁与佩戴方案)已完成本地隔离联调，常用库与云端迁移待执行。
-
-- [前端精修 F4 与 F5](docs/dev-log/v1.0-dev.15.md#前端精修-f4-与-f5)已完成：分支 `feat/frontend-polish-f4-f5` 零后端完成后台视觉统一、星潮语义变量收敛与去米黄改纯白 `#ffffff`，构建、356 项单测、技能校验与 7 页×6 断点走查通过，待确认合入 `dev`；[F1/F3](docs/dev-log/v1.0-dev.15.md#前端精修-f1-与-f3)（PR #12）、[F2](docs/dev-log/v1.0-dev.15.md#前端精修-f2-工作台页头减重)（PR #13）与[星潮月夜横幅](docs/dev-log/v1.0-dev.15.md#星潮横幅-51-全景延展)（PR #14）已合入 `dev`（`6a30010`）。
-- [首页收尾区](docs/plans/home-closing-section.md)最终采用方案 A，工具列表直接接页脚，专项分支已验。[验收记录](docs/dev-log/v1.0-dev.15.md#首页收尾区方案)
-- 首页：[妙替纸蝶与妙压折页书](docs/dev-log/v1.0-dev.15.md#首页妙替与妙压卡面重绘)已完成，入口分别为“替换文本”和“压缩图片”，经 PR #9 合入 `dev`。[卡面集成记录](docs/dev-log/v1.0-dev.15.md#首页卡面与星潮集成)。
-- 星潮：基础工程、文章结构、7 日风向统计分别经 PR #6、#7、#8 合入 `dev`；[详情页改版与 `radar-4` 升级](docs/dev-log/v1.0-dev.15.md#星潮详情页改版与-radar-4-升级)（1A 紧凑报头、3A 暖纸细线、正面 Few-Shot、`descriptionZh` 双语简介、默认关闭的 `low` 轻度思考及键名收敛）已完成离线/隔离验收与本机实跑（16/16 `radar-4`），正经 PR 集成至 `dev`。真实后端浏览器联调、平台账单对账及[2B 可选风口简报](docs/plans/startide-insight-quality.md#第二步跨日聚合看大风口单篇稳定后的下一闭环)留待后续推进；11 月 20 日下午断源的首个故障仍缺现场证据。
+- [个人空间卡面](docs/dev-log/v1.0-dev.20.md#购买与佩戴)已实现购买、等级解锁与跨端佩戴。
+- [登录态 5 页走查与星潮发布台视觉统一](docs/dev-log/v1.0-dev.19.md#星潮发布台三块卡片视觉统一)：5 页收边已经 PR #18 合入 `dev`（`99198ae`）；星潮发布台三块卡片按方案 A 统一完成（分支 `feat/trend-owner-style-unify`），待确认后推送并合入 `dev`。
+- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.18.md#星潮-2b-7-日风口简报)已经 PR #16 合入 `dev`（`da62b75`）；云端库 `015` 迁移、平台账单对账与合入 `main`/部署待另行授权。
+- 前端精修 F1～F5 与星潮 5:1 月夜横幅均已合入 `dev`（PR #12～#15），详见 [dev.17](docs/dev-log/v1.0-dev.17.md)；星潮内容演进（`radar-3` / 2A / `radar-4`）与首页卡面重绘/收尾区方案 A 均已合入 `dev`（PR #7～#11），详见 [dev.16](docs/dev-log/v1.0-dev.16.md)；星潮基础工程（PR #6）详见 [dev.15](docs/dev-log/v1.0-dev.15.md)。11 月 20 日下午断源的首个故障仍缺现场证据。
 - [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
 - 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
 - Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
@@ -32,6 +30,11 @@
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.19](docs/dev-log/v1.0-dev.19.md) | 登录态五页收边、星潮发布台样式统一（PR #18、#19） |
+| [dev.18](docs/dev-log/v1.0-dev.18.md) | 星潮 2B 7 日风口简报 B1～B5、本机真实试跑与提示词微调（PR #16 合 `dev`） |
+| [dev.17](docs/dev-log/v1.0-dev.17.md) | 前端精修 F1～F5 与星潮 5:1 月夜全景横幅（PR #12～#15 合 `dev`） |
+| [dev.16](docs/dev-log/v1.0-dev.16.md) | 星潮内容演进（`radar-3` / 2A / `radar-4`）与首页妙替/妙压重绘、收尾区方案 A（PR #7～#11） |
+| [dev.15](docs/dev-log/v1.0-dev.15.md) | 星潮基础工程 G1～G6、外部预热、G4b 小样本对账与首版阅读/发布台（PR #6） |
 | [dev.14](docs/dev-log/v1.0-dev.14.md) | PR #4/#5合dev；[评估](docs/design/framework-assessment.md)保留分层、跳过F5；历史验收通过 |
 | [dev.13](docs/dev-log/v1.0-dev.13.md) | 头像入库、云端适配及 Render 与 GitHub Pages 发布验收 |
 | [dev.12](docs/dev-log/v1.0-dev.12.md) | 上线前质量、回归与合并 |
