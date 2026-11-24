@@ -20,12 +20,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const ready = computed(() => props.briefing?.status === 'READY')
-const isTrio = computed(() => (props.briefing?.themes.length ?? 0) === 3)
-
-const sampleTag = computed(() => {
-  if (!props.briefing) return ''
-  return props.briefing.sampleStatus === 'LIMITED' ? '有限样本' : '充分样本'
-})
+const isLimited = computed(() => props.briefing?.sampleStatus === 'LIMITED')
 
 function signalLabel(type: TrendBriefingSignalType): string {
   if (type === 'CONCENTRATION') return '多仓聚集'
@@ -53,11 +48,10 @@ function themeNumber(index: number): string {
           >
             <path d="M8 1.2 9.7 6.3 14.8 8 9.7 9.7 8 14.8 6.3 9.7 1.2 8 6.3 6.3 8 1.2Z" />
           </svg>
-          AI 跨日综合 · 基于 {{ briefing.coveredDays }} 天样本
+          AI 风口速览
         </span>
-        <span class="sample-note" :class="briefing.sampleStatus.toLowerCase()">
-          · {{ sampleTag }}
-        </span>
+        <!-- 满样本天数已在页眉展示，此处仅在有限样本时补充轻提示，避免重复标签。 -->
+        <span v-if="isLimited" class="sample-note">· 有限样本</span>
       </div>
       <span v-if="briefing.generatedAt" class="generated-at">
         生成于 {{ trendTime(briefing.generatedAt) }}（北京时间）
@@ -73,14 +67,9 @@ function themeNumber(index: number): string {
       <p class="overview">{{ briefing.overview }}</p>
     </div>
 
-    <!-- 3 条主题采用「1 条通栏主风口 + 2 条并列宽卡」Soft Bento 结构，2 条时自然双列舒展。 -->
-    <div class="theme-grid" :class="{ 'is-trio': isTrio }">
-      <article
-        v-for="(theme, index) in briefing.themes"
-        :key="theme.title"
-        class="theme-item"
-        :class="{ 'is-lead': isTrio && index === 0 }"
-      >
+    <!-- 2～3 条风向采用完全一致的等宽单列排版，避免上下异形拼块并提升通俗扫读速度。 -->
+    <div class="theme-list">
+      <article v-for="(theme, index) in briefing.themes" :key="theme.title" class="theme-item">
         <div class="theme-head">
           <div class="theme-heading">
             <span class="theme-index" aria-hidden="true">{{ themeNumber(index) }}</span>
@@ -92,7 +81,7 @@ function themeNumber(index: number): string {
         </div>
         <p class="theme-summary">{{ theme.summary }}</p>
         <div class="evidence-row" aria-label="实名证据仓库">
-          <span class="evidence-label">证据仓</span>
+          <span class="evidence-label">代表仓库</span>
           <div class="evidence-links">
             <template v-for="repo in theme.evidenceRepos" :key="repo.fullName">
               <a
@@ -134,7 +123,6 @@ function themeNumber(index: number): string {
   margin: 0 0 34px;
   padding: clamp(22px, 2.8vw, 30px);
   background: #ffffff;
-  /* 四边一致细边框搭配极轻弥散阴影，取代单边粗框在圆角处的视觉突兀感。 */
   border: 1px solid #dce6ea;
   border-radius: 16px;
   box-shadow: 0 4px 18px rgba(20, 47, 70, 0.04);
@@ -161,13 +149,12 @@ function themeNumber(index: number): string {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 999px;
-  /* 暖金轻底呼应横幅弯月与星光，作为首屏唯一暖色焦点。 */
+  /* 暖金轻底呼应横幅弯月与星光，作为简报区唯一暖色焦点。 */
   background: #fdf6e4;
   border: 1px solid #eed9a6;
   color: #7a5210;
   font-size: 12px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 .spark-icon {
@@ -178,14 +165,6 @@ function themeNumber(index: number): string {
 .sample-note {
   font-size: 12.5px;
   font-weight: 600;
-  color: #4f6678;
-}
-
-.sample-note.sufficient {
-  color: #2f6b4f;
-}
-
-.sample-note.limited {
   color: #8b5d16;
 }
 
@@ -212,7 +191,6 @@ function themeNumber(index: number): string {
 
 .headline {
   margin: 0 0 10px;
-  /* 统一采用柔和现代无衬线字体与 600 字重，避免 Windows 回退锋利宋体导致割裂感。 */
   font-family: var(--ph-font);
   font-size: clamp(20px, 2.2vw, 24px);
   font-weight: 600;
@@ -232,30 +210,22 @@ function themeNumber(index: number): string {
   overflow-wrap: anywhere;
 }
 
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-top: 22px;
 }
 
 .theme-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 11px;
   padding: 18px 20px;
   border: 1px solid #e4eef2;
   border-radius: 14px;
-  background: #f6fafc;
+  background: #f7fafc;
   min-width: 0;
-}
-
-.theme-item.is-lead {
-  grid-column: 1 / -1;
-  padding: 20px 22px;
-  /* 通过极淡暖象牙色面与细边自然标示主风口，不再叠加单边粗竖线。 */
-  border: 1px solid #efe4ca;
-  background: #fdfaf2;
 }
 
 .theme-head {
@@ -279,18 +249,13 @@ function themeNumber(index: number): string {
   justify-content: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #e6eff3;
-  color: #456072;
+  background: #e7f0f4;
+  color: #38586b;
   font-size: 11.5px;
   font-weight: 700;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
   flex: none;
-}
-
-.theme-item.is-lead .theme-index {
-  background: #f6e7c6;
-  color: #8f5e11;
 }
 
 .theme-title {
@@ -300,10 +265,6 @@ function themeNumber(index: number): string {
   color: var(--st-ink-deep);
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.theme-item.is-lead .theme-title {
-  font-size: 16.5px;
 }
 
 .signal-tag {
@@ -338,22 +299,19 @@ function themeNumber(index: number): string {
 }
 
 .evidence-row {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px dashed #d9e5e9;
+  padding-top: 10px;
+  border-top: 1px dashed #dce7eb;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.theme-item.is-lead .evidence-row {
-  border-top-color: #eadec0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 
 .evidence-label {
   font-size: 12px;
   font-weight: 600;
   color: #5b7182;
+  flex: none;
 }
 
 .evidence-links {
@@ -379,17 +337,6 @@ function themeNumber(index: number): string {
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease;
-}
-
-.theme-item.is-lead .repo-link {
-  background: #f4efe0;
-  color: #3f4b56;
-}
-
-.theme-item.is-lead .repo-link:hover {
-  background: #ece3cc;
-  border-color: #d6c397;
-  color: var(--st-ink-deep);
 }
 
 .repo-link:hover {
@@ -460,24 +407,13 @@ function themeNumber(index: number): string {
   margin-top: 4px;
 }
 
-@media (max-width: 720px) {
-  .theme-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .theme-item.is-lead {
-    grid-column: auto;
-  }
-}
-
 @media (max-width: 620px) {
   .briefing-card {
     padding: 18px 16px;
     margin-bottom: 26px;
   }
 
-  .theme-item,
-  .theme-item.is-lead {
+  .theme-item {
     padding: 16px 14px;
   }
 }

@@ -323,7 +323,7 @@ test('TrendWindowBriefing.vue 在 ABSENT 时零占位渲染，在 READY 时渲�
   )
   await nextTick()
   const text = collectText(readyDom.root)
-  assert.match(text, /AI 跨日综合 · 基于 4 天样本/)
+  assert.match(text, /AI 风口速览/)
   assert.match(text, /有限样本/)
   assert.match(text, /基于较早日报快照生成/)
   assert.match(text, /本地代理编排与离线配置校验成为本周集中方向/)

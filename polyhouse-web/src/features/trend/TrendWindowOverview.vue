@@ -59,7 +59,7 @@ const sampleBadge = computed(() => {
   if (!props.stats) return ''
   if (props.stats.sampleStatus === 'INSUFFICIENT') return '样本偏少'
   if (props.stats.sampleStatus === 'LIMITED') return '观察中'
-  return '样本充足'
+  return ''
 })
 
 const missingDatesText = computed(() =>
@@ -134,7 +134,9 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
         <div class="head-title">
           <h2>近 7 日榜内风向观察</h2>
           <span class="status-tag" :class="stats.sampleStatus.toLowerCase()">
-            覆盖 {{ stats.coveredDays }}/{{ stats.windowDays }} 天 · {{ sampleBadge }}
+            覆盖 {{ stats.coveredDays }}/{{ stats.windowDays }} 天<template v-if="sampleBadge">
+              · {{ sampleBadge }}</template
+            >
           </span>
         </div>
         <time class="window-range">{{ stats.windowStart }} ～ {{ stats.windowEnd }}</time>
