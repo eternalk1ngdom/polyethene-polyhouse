@@ -4,11 +4,11 @@ import { ElButton } from 'element-plus'
 import {
   coverBounds,
   coverFrames,
-  inspectLocalCover,
   type CoverFrame,
   type CoverPosition,
 } from '../core/localCoverCrop'
 import type { LocalProfileCover } from '../utils/localProfileCover'
+import type { LocalCoverDecodeReply } from '../workers/localCoverDecode.worker'
 
 interface Props {
   save: (cover: LocalProfileCover) => Promise<void>
@@ -33,14 +33,15 @@ const position = computed(() => positions.value[frame.value])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
-let selection = 0
+let reader: Worker | undefined
+let readTimeout: number | undefined
 let active = true
 let drag: { id: number; x: number; y: number } | undefined
 
 onMounted(() => input.value?.focus())
 onBeforeUnmount(() => {
   active = false
-  selection++
+  stopReading()
   bitmap.value?.close()
 })
 
@@ -77,36 +78,61 @@ watchEffect(
   { flush: 'post' },
 )
 
-async function choose(event: Event) {
+function stopReading() {
+  reader?.terminate()
+  reader = undefined
+  window.clearTimeout(readTimeout)
+  loading.value = false
+}
+
+function rejectFile(message: string) {
+  stopReading()
+  error.value = message
+  if (input.value) input.value.value = ''
+}
+
+function choose(event: Event) {
   if (!(event.target instanceof HTMLInputElement) || saving.value) return
   const file = event.target.files?.[0]
   if (!file) return
-  const request = ++selection
+  stopReading()
+  // 已选择新文件，旧草稿不能再被保存。浏览器里正式使用的卡面只在确认保存后替换。
+  bitmap.value?.close()
+  bitmap.value = undefined
   error.value = ''
+  if (file.size > 8 * 1024 * 1024) {
+    rejectFile('请选择 8 MiB 以内的图片。')
+    return
+  }
   loading.value = true
   try {
-    if (file.size > 8 * 1024 * 1024) throw new Error('请选择 8 MiB 以内的图片。')
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    if (request !== selection) return
-    const mime = inspectLocalCover(bytes)
-    const decoded = await createImageBitmap(new Blob([bytes], { type: mime }))
-    if (request !== selection) {
-      decoded.close()
-      return
+    const worker = new Worker(new URL('../workers/localCoverDecode.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    reader = worker
+    worker.onmessage = ({ data }: MessageEvent<LocalCoverDecodeReply>) => {
+      if (reader !== worker) {
+        if ('bitmap' in data) data.bitmap.close()
+        return
+      }
+      if ('error' in data) {
+        rejectFile(data.error)
+        return
+      }
+      stopReading()
+      bitmap.value = data.bitmap
+      positions.value = { desktop: centered(), mobile: centered() }
     }
-    bitmap.value?.close()
-    bitmap.value = decoded
-    positions.value = { desktop: centered(), mobile: centered() }
-  } catch (reason) {
-    if (request === selection)
-      error.value =
-        reason instanceof DOMException
-          ? '无法读取这张图片，请重新选择。'
-          : reason instanceof Error
-            ? reason.message
-            : '无法读取这张图片。'
-  } finally {
-    if (request === selection) loading.value = false
+    worker.onerror = worker.onmessageerror = () => {
+      if (reader === worker) rejectFile('无法读取这张图片，请重新选择。')
+    }
+    // 个别文件或浏览器解码器可能一直没有响应，终止这次任务后仍可继续选图。
+    readTimeout = window.setTimeout(() => {
+      if (reader === worker) rejectFile('读取图片超时，请重新选择或换一张较小的静态图片。')
+    }, 15_000)
+    worker.postMessage(file)
+  } catch {
+    rejectFile('当前浏览器无法启动图片读取，请刷新页面后重试。')
   }
 }
 
@@ -199,13 +225,13 @@ async function save() {
       type="file"
       accept="image/jpeg,image/png,image/webp"
       :disabled="saving"
-      @click="input && (input.value = '')"
       @change="choose"
     />
     <p class="editor-note">
       支持静态 JPEG、PNG 或 WebP，最大 8 MiB。桌面卡面较宽，建议选择横向图片。桌面和手机可分别取景，保存后如需重新裁剪，请再次选择原图。
     </p>
     <p v-if="loading" role="status">正在读取图片…</p>
+    <p v-if="error" role="alert">{{ error }}</p>
     <fieldset v-if="bitmap" class="editor-controls" :disabled="saving || loading">
       <div class="editor-buttons frame-buttons">
         <ElButton
@@ -245,7 +271,6 @@ async function save() {
         <ElButton @click="positions[frame] = centered()">重置取景</ElButton>
       </div>
     </fieldset>
-    <p v-if="error" role="alert">{{ error }}</p>
     <div class="editor-buttons">
       <ElButton :disabled="saving" @click="emit('cancel')">取消</ElButton>
       <ElButton native-type="submit" type="primary" :loading="saving" :disabled="!bitmap || loading"

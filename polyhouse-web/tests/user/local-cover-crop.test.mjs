@@ -48,6 +48,19 @@ function pngHeader(width, height, animated = false) {
 test('解码前拒绝过大的像素面积、动画及伪装图片', () => {
   assert.equal(inspectLocalCover(pngHeader(4000, 4000)), 'image/png')
   assert.throws(() => inspectLocalCover(pngHeader(4001, 4000)), /像素过大/)
-  assert.throws(() => inspectLocalCover(pngHeader(120, 480, true)), /动画/)
+  assert.throws(() => inspectLocalCover(pngHeader(120, 480, true)), /不支持动图/)
   assert.throws(() => inspectLocalCover(Buffer.from('not an image')), /静态/)
+})
+
+test('按文件内容识别 GIF 和 WebP 动画标志，同时允许静态扩展 WebP', () => {
+  for (const header of ['GIF87a', 'GIF89a'])
+    assert.throws(() => inspectLocalCover(Buffer.from(header)), /不支持 GIF/)
+  const bytes = Buffer.alloc(30)
+  bytes.write('RIFF')
+  bytes.writeUInt32LE(22, 4)
+  bytes.write('WEBPVP8X', 8)
+  bytes.writeUInt32LE(10, 16)
+  assert.equal(inspectLocalCover(bytes), 'image/webp')
+  bytes[20] = 0x12
+  assert.throws(() => inspectLocalCover(bytes), /不支持动图/)
 })
