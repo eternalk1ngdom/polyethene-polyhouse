@@ -11,6 +11,7 @@ import type {
 import TrendWindowBriefing from './TrendWindowBriefing.vue'
 import {
   categoryLabel,
+  categoryTone,
   shortTrendDate,
   trendDeltaPercent,
   trendMedianNumber,
@@ -41,9 +42,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const DEFAULT_SAMPLE_LIMIT = 3
-// 从月夜全景横幅提取的 5 阶低饱和色，供分类总览堆叠条与下方分类卡进度条一一对应。
-const CATEGORY_PALETTE = ['#1e5575', '#348391', '#d49a3a', '#7c6296', '#8ca4b3'] as const
-
 const expandedCategories = ref<Record<string, boolean>>({})
 
 watch(
@@ -79,20 +77,16 @@ const scopeSummaryHint = computed(() => {
 const proportionSegments = computed(() => {
   if (!props.stats || isSmallSample.value) return []
   return props.stats.categories
-    .map((cat, idx) => ({
+    .map((cat) => ({
       category: cat.category,
       label: categoryLabel(cat.category),
       share: cat.windowShare ?? 0,
       shareText: trendPercent(cat.windowShare),
       count: cat.windowUniqueCount,
-      color: categoryColor(idx),
+      color: categoryTone(cat.category).accent,
     }))
     .filter((seg) => seg.share > 0)
 })
-
-function categoryColor(index: number): string {
-  return CATEGORY_PALETTE[Math.min(index, CATEGORY_PALETTE.length - 1)] ?? '#8ca4b3'
-}
 
 function barWidth(share: number | null): string {
   if (share === null) return '0%'
@@ -255,10 +249,10 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 
           <div class="category-grid">
             <article
-              v-for="(cat, idx) in stats.categories"
+              v-for="cat in stats.categories"
               :key="cat.category"
               class="category-item"
-              :style="{ '--cat-accent': categoryColor(idx) }"
+              :style="{ '--cat-accent': categoryTone(cat.category).accent }"
             >
               <div class="cat-top">
                 <div class="cat-title-wrap">
@@ -413,9 +407,15 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
                     }}<ElIcon class="ext-icon" aria-hidden="true"><TopRight /></ElIcon
                   ></a>
                 </h4>
-                <span v-if="repo.category" class="cat-pill">{{
-                  categoryLabel(repo.category)
-                }}</span>
+                <span
+                  v-if="repo.category"
+                  class="cat-pill"
+                  :style="{
+                    backgroundColor: categoryTone(repo.category).bg,
+                    color: categoryTone(repo.category).ink,
+                  }"
+                  >{{ categoryLabel(repo.category) }}</span
+                >
                 <span v-if="!repo.inAnchorDay" class="off-anchor">本期未在榜</span>
               </div>
               <p v-if="repo.definition" class="rec-definition">{{ repo.definition }}</p>
@@ -545,14 +545,26 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .kpi-item.tone-ocean {
   background: #eef4f8;
 }
+.kpi-item.tone-ocean .kpi-value {
+  color: #143a54;
+}
 .kpi-item.tone-teal {
   background: #eaf4f1;
+}
+.kpi-item.tone-teal .kpi-value {
+  color: #134850;
 }
 .kpi-item.tone-gold {
   background: #fbf4e2;
 }
+.kpi-item.tone-gold .kpi-value {
+  color: #6d480d;
+}
 .kpi-item.tone-dusk {
   background: #f2f1f7;
+}
+.kpi-item.tone-dusk .kpi-value {
+  color: #3c2d5e;
 }
 .kpi-label {
   font-size: 12px;

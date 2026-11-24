@@ -3,7 +3,7 @@ import { ElIcon } from 'element-plus'
 import { StarFilled } from '@element-plus/icons-vue'
 import type { TrendProject } from '../../api/trend'
 import { languageColor } from './languageColors'
-import { categoryLabel, trendNumber } from './presentation'
+import { categoryLabel, categoryTone, trendNumber } from './presentation'
 
 interface Props {
   /** 排名和星标取自同一期，筛选后仍可与来源逐项核对。 */
@@ -49,9 +49,15 @@ const emit = defineEmits<Emits>()
           :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
           >{{ project.primaryLanguage ?? '语言未知' }}</span
         >
-        <span v-if="project.insight" class="category">{{
-          categoryLabel(project.insight.category)
-        }}</span>
+        <span
+          v-if="project.insight"
+          class="category"
+          :style="{
+            backgroundColor: categoryTone(project.insight.category).bg,
+            color: categoryTone(project.insight.category).ink,
+          }"
+          >{{ categoryLabel(project.insight.category) }}</span
+        >
       </div>
     </div>
     <span class="stars" role="img" :aria-label="`本期新增星标：${trendNumber(project.starsAdded)}`"

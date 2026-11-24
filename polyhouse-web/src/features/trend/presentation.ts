@@ -63,6 +63,33 @@ const categoryLabels: Record<string, string> = {
   OTHER: '其他方向',
 }
 
+/** 分类固定语义配色：贯穿 7 日堆叠总览条、分类卡、多日连榜、日榜与项目详情。 */
+export interface TrendCategoryTone {
+  /** 占比进度条与图例圆点主色。 */
+  accent: string
+  /** 分类胶囊柔和浅底色。 */
+  bg: string
+  /** 分类胶囊深色文字（与浅底满足 WCAG AA 对比度）。 */
+  ink: string
+}
+
+const categoryTones: Record<string, TrendCategoryTone> = {
+  DEVTOOLS: { accent: '#1e5575', bg: '#e8f1f6', ink: '#16435e' },
+  AI_AGENT: { accent: '#257e8c', bg: '#e5f3f5', ink: '#175762' },
+  AI_INFRA: { accent: '#c98a2b', bg: '#fbf2de', ink: '#7d5312' },
+  FRONTEND: { accent: '#74589c', bg: '#f1ebf8', ink: '#513874' },
+  BACKEND: { accent: '#3d5a99', bg: '#ebf0fa', ink: '#2b4273' },
+  DESKTOP: { accent: '#c26551', bg: '#faedea', ink: '#843d2e' },
+  GRAPHICS: { accent: '#2e7d62', bg: '#e7f4ef', ink: '#1f5c47' },
+  OTHER: { accent: '#738896', bg: '#eef2f5', ink: '#495d6b' },
+}
+
+/** 返回固定八大类对应的柔和语义色；未知或空分类安全回退到海雾灰。 */
+export function categoryTone(category: string | null | undefined): TrendCategoryTone {
+  if (!category) return categoryTones.OTHER!
+  return Object.hasOwn(categoryTones, category) ? categoryTones[category]! : categoryTones.OTHER!
+}
+
 /** 将后端固定八大类枚举转为通俗中文标签，未知代号安全回退而不暴露内部字段。 */
 export function categoryLabel(category: string | null): string {
   if (!category) return '未分类'

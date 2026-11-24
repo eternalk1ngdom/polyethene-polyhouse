@@ -67,9 +67,14 @@ function themeNumber(index: number): string {
       <p class="overview">{{ briefing.overview }}</p>
     </div>
 
-    <!-- 2～3 条风向采用完全一致的等宽单列排版，避免上下异形拼块并提升通俗扫读速度。 -->
+    <!-- 2～3 条风向采用完全一致的等宽单列排版，并按风口信号语义轻度着色区分性质。 -->
     <div class="theme-list">
-      <article v-for="(theme, index) in briefing.themes" :key="theme.title" class="theme-item">
+      <article
+        v-for="(theme, index) in briefing.themes"
+        :key="theme.title"
+        class="theme-item"
+        :class="theme.signalType.toLowerCase()"
+      >
         <div class="theme-head">
           <div class="theme-heading">
             <span class="theme-index" aria-hidden="true">{{ themeNumber(index) }}</span>
@@ -149,16 +154,16 @@ function themeNumber(index: number): string {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 999px;
-  /* 暖金轻底呼应横幅弯月与星光，作为简报区唯一暖色焦点。 */
-  background: #fdf6e4;
-  border: 1px solid #eed9a6;
-  color: #7a5210;
+  /* 星夜靛紫微渐变呼应月夜横幅夜空色调，与海蓝页面融洽并彻底区分黄色星标。 */
+  background: linear-gradient(135deg, #eef1fc 0%, #f3ecfb 100%);
+  border: 1px solid #d5d7f2;
+  color: #3f3d8f;
   font-size: 12px;
   font-weight: 600;
 }
 
 .spark-icon {
-  color: #c88a2b;
+  color: #635cc7;
   flex: none;
 }
 
@@ -228,6 +233,22 @@ function themeNumber(index: number): string {
   min-width: 0;
 }
 
+/* 三类风口信号共享相同结构与间距，仅以极淡同色系微底区分持续霸榜、新苗头与多仓聚集。 */
+.theme-item.recurring {
+  background: #f3faf9;
+  border-color: #d8ece9;
+}
+
+.theme-item.emerging {
+  background: #f8f5fc;
+  border-color: #e6def2;
+}
+
+.theme-item.concentration {
+  background: #f4f8fc;
+  border-color: #dbe7f3;
+}
+
 .theme-head {
   display: flex;
   flex-wrap: wrap;
@@ -258,6 +279,21 @@ function themeNumber(index: number): string {
   flex: none;
 }
 
+.theme-item.recurring .theme-index {
+  background: #dff1ee;
+  color: #17575e;
+}
+
+.theme-item.emerging .theme-index {
+  background: #ede4f8;
+  color: #563a7a;
+}
+
+.theme-item.concentration .theme-index {
+  background: #e1eef9;
+  color: #184b73;
+}
+
 .theme-title {
   margin: 0;
   font-size: 16px;
@@ -276,18 +312,18 @@ function themeNumber(index: number): string {
 }
 
 .signal-tag.concentration {
-  background: #e5eff6;
-  color: #16486b;
+  background: #e1eef9;
+  color: #184b73;
 }
 
 .signal-tag.recurring {
-  background: #e4f0ee;
-  color: #1d4e5a;
+  background: #dff1ee;
+  color: #17575e;
 }
 
 .signal-tag.emerging {
-  background: #f2ecf7;
-  color: #5b3a73;
+  background: #ede4f8;
+  color: #563a7a;
 }
 
 .theme-summary {
@@ -305,6 +341,18 @@ function themeNumber(index: number): string {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
+}
+
+.theme-item.recurring .evidence-row {
+  border-top-color: #cfe6e2;
+}
+
+.theme-item.emerging .evidence-row {
+  border-top-color: #dfd4ee;
+}
+
+.theme-item.concentration .evidence-row {
+  border-top-color: #d0e0ef;
 }
 
 .evidence-label {
@@ -327,7 +375,8 @@ function themeNumber(index: number): string {
   padding: 5px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #e9f2f5;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(20, 47, 70, 0.05);
   color: #194c69;
   font-size: 12.5px;
   font-weight: 600;
@@ -340,7 +389,7 @@ function themeNumber(index: number): string {
 }
 
 .repo-link:hover {
-  background: #dfecf1;
+  background: #f1f7fa;
   border-color: #a9c5d4;
   color: var(--st-ink-deep);
 }
