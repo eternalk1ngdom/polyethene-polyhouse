@@ -24,6 +24,10 @@ public enum ErrorCode {
     NOT_ACCEPTABLE(40600, "不支持请求的响应格式", HttpStatus.NOT_ACCEPTABLE),
     /** 操作与当前数据状态冲突，例如账号唯一约束冲突。 */
     CONFLICT(40900, "数据状态冲突", HttpStatus.CONFLICT),
+    /** 报价变化时需要重新确认支付金额。 */
+    COVER_QUOTE_CHANGED(40901, "卡面报价已更新", HttpStatus.CONFLICT),
+    /** 消费事务按锁内余额结算。 */
+    COVER_COINS_INSUFFICIENT(40902, "可用硬币不足", HttpStatus.CONFLICT),
     /** 请求体积超出服务允许的范围。 */
     PAYLOAD_TOO_LARGE(41300, "请求内容过大", HttpStatus.PAYLOAD_TOO_LARGE),
     /** 请求的 Content-Type 与接口要求不兼容。 */
