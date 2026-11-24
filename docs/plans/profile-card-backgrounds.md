@@ -36,6 +36,8 @@
 
 ## 人文与赛博朋克预选
 
+本节保留首轮图稿。用户随后明确人文方向为现代人像，并希望分别比较纯写实与纯二次元；当前选图见[第二轮](#现代人像与赛博双画风)。
+
 应用户要求扩展至人物题材，两组均为自上而下三幅，供挑选。A 为默认款，G 是此前选中的收藏方向；新增六幅待选。
 
 ![人文组三幅，从上到下为幕后皮影、末场散映、清早一碗面](../design/profile-covers/human-stories-studies.webp)
@@ -49,6 +51,18 @@
 - **赛博 1 · 雨巷修理铺**。窗外是青色雨夜，工作灯下的技师正在校准一只机械手。窄幅可集中在灯、工具尖端和指节上。
 - **赛博 2 · 高架换班**。日光穿过层叠高架，穿朱红工装的维修员倚栏等车。奶油白与氧化绿构成旧工业海报的纸感。
 - **赛博 3 · 凌晨调频**。两位地下电台主持人在调音台上方递过耳机，薄荷绿波形从暗紫像素里亮起来。适合继续发展为深色静态卡面。
+
+## 现代人像与赛博双画风
+
+现代人像用当代服装、姿态与眼神表达个性；赛博题材将同一构图各做一幅写实和二次元。每张选型图均按从上到下阅读，以下编号可用于指认单幅。
+
+| 图组 | 上 | 中 | 下 |
+| --- | --- | --- | --- |
+| [现代人像](../design/profile-covers/contemporary-portraits.webp) | M1 排练间隙，舞者用伸展的手臂带出回头一笑 | M2 散场以后，银发乐手在红幕前直视镜头 | M3 末班地铁，乘客望向车窗，玻璃上留着侧脸倒影 |
+| 赛博人物 · [纯写实](../design/profile-covers/cyber-portraits-photo.webp) / [纯二次元](../design/profile-covers/cyber-portraits-anime.webp) | S1 高架回望，荧光领口托住脸，耳后露出义体 | S2 白噪协议，红色镜腿与电梯门缝呼应 | S3 末班信号，托腮望窗，颈侧亮着一线青光 |
+| 赛博城市 · [纯写实](../design/profile-covers/cyber-city-photo.webp) / [纯二次元](../design/profile-covers/cyber-city-anime.webp) | S4 雨幕逆行，俯拍黑伞之间唯一一把透明红伞 | S5 对楼灯火，远望一格亮着暖灯的洗衣房 | S6 底盘之下，低机位沿检修灯找到技师的目光 |
+
+视觉参考来自 CD PROJEKT RED 2026 年 10 月的拍照模式活动及 Netflix 发布的动画剧照。前者的义体配色主题用于 S1～S3 的局部色彩设计，后者用来观察角色侧影和明暗色面的关系。本轮为原创角色选型；定稿时还须用实际头像和手机横幅验证，尤其是 S5 中远处人物的辨识度。[CD PROJEKT RED 官方活动](https://www.cyberpunk.net/en/news/52151/photo-mode-challenge-edgerunners-2-update-edition) / [Netflix 官方剧照](https://www.netflix.com/tudum/articles/cyberpunk-edgerunners-2-release-date-news)
 
 ## 现有页面与奖励依据
 
