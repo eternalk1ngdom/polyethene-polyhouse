@@ -14,6 +14,8 @@ import {
   TrendCharts,
   User,
 } from '@element-plus/icons-vue'
+import ProfileCoverPicker from '../components/ProfileCoverPicker.vue'
+import type { CoverKey } from '../api/profileCovers'
 import UserAvatar from '../components/UserAvatar.vue'
 import AvatarUploadDialog from '../components/AvatarUploadDialog.vue'
 import ProfileSubmissionsPanel from '../components/ProfileSubmissionsPanel.vue'
@@ -32,6 +34,7 @@ const accountUi = useAccountUiStore()
 const growth = useUserGrowthStore()
 const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
+const equippedCover = ref<CoverKey>('window')
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
 const route = useRoute()
@@ -81,6 +84,7 @@ watch(
   () => {
     refreshSequence++
     refreshing.value = false
+    equippedCover.value = 'window'
     avatarVisible.value = false
     avatarNotice.value = ''
   },
@@ -133,8 +137,26 @@ onMounted(() => {
     >
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
-        <div class="profile-cover">
+        <div class="profile-cover" :data-cover="equippedCover">
           <span>我的个人空间</span>
+          <ProfileCoverPicker
+            v-if="!userStore.requiresPasswordChange"
+            :key="userStore.token"
+            @applied="equippedCover = $event"
+          >
+            <template #preview="{ cover }">
+              <div class="profile-cover cover-preview" :data-cover="cover">
+                <span>我的个人空间</span>
+                <div class="preview-avatar">
+                  <UserAvatar
+                    :name="userDisplayName(userStore.user)"
+                    :src="userStore.user.avatar"
+                    :size="44"
+                  />
+                </div>
+              </div>
+            </template>
+          </ProfileCoverPicker>
         </div>
         <div class="profile-overview">
           <button
@@ -412,6 +434,7 @@ onMounted(() => {
   background: white;
 }
 .profile-cover {
+  position: relative;
   --cover-art: url('../assets/profile-window-panorama.webp');
   height: 180px;
   padding: 25px 34px;
@@ -419,6 +442,17 @@ onMounted(() => {
   color: var(--ph-ink);
   font-size: 13px;
   letter-spacing: 0.08em;
+}
+.cover-preview {
+  border-radius: 12px;
+}
+.preview-avatar {
+  position: absolute;
+  bottom: -14px;
+  left: 15px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: white;
 }
 .profile-cover[data-cover='koi'],
 .profile-cover[data-cover='astrolabe'] {

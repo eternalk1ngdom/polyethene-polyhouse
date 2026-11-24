@@ -88,6 +88,14 @@ export const useUserStore = defineStore('user', () => {
     cacheProfile()
   }
 
+  /** 已提交交易的余额同时作为成长资料暂时不可用时的回退值。 */
+  function applyCoverBalance(currentToken: string, id: string, coins: string): void {
+    if (currentToken !== token.value || user.value?.id !== id) return
+    profileRevision++
+    user.value = { ...user.value, coins }
+    cacheProfile()
+  }
+
   /** 内存与 localStorage 一并失效，防止刷新页面又恢复已退出的 Token。 */
   function clearSession(): void {
     const previousToken = token.value
@@ -293,6 +301,7 @@ export const useUserStore = defineStore('user', () => {
     requirePasswordChange,
     changePassword,
     setSession,
+    applyCoverBalance,
     clearSession,
     expireSession,
     login,

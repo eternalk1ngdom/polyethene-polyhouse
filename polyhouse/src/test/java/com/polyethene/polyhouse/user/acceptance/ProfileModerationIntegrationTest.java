@@ -98,6 +98,66 @@ class ProfileModerationIntegrationTest {
   if(Files.exists(sandbox.root))try(var files=Files.walk(sandbox.root)){for(Path path:files.sorted(Comparator.reverseOrder()).toList())if(!path.equals(sandbox.root))Files.deleteIfExists(path);}
  }
  @AfterAll static void drop()throws Exception{if(sandbox!=null)sandbox.close();}
+ /** 四种身份、扣币与偏好都经过真实 HTTP 和随机库，用同一账号的第二端验证幂等。 */
+ @Test void profileCoverLifecycle() throws Exception {
+    String base = "/api/profile/covers";
+    var brass = Map.of("coverKey", "astrolabe");
+    var koi = Map.of("coverKey", "koi");
+    var purchase = Map.of("coverKey", "astrolabe", "quoteVersion", "1");
+    String second = auth.login(new LoginDTO("p4_user", PASSWORD, "H5"), null).accessToken();
+    jdbc.update("UPDATE sys_user SET coins=9, experience=199 WHERE id=?", user);
+    var initial = call("GET", base, userToken, null);
+    assertThat(initial.headers().firstValue("cache-control")).contains("no-store");
+    assertThat(json.readTree(initial.body()).at("/data/equipped").asText()).isEqualTo("window");
+    assertThat(call("GET", base, null, null).statusCode()).isEqualTo(401);
+    assertThat(call("POST", base+"/purchase", userToken, purchase).statusCode()).isEqualTo(409);
+    assertThat(call("POST", base+"/equip", userToken, koi).statusCode()).isEqualTo(403);
+    assertThat(call("POST", base+"/equip", adminToken, brass).statusCode()).isEqualTo(403);
+    jdbc.update("UPDATE sys_user SET coins=10 WHERE id=?", user);
+    assertThat(call("POST", base+"/purchase", userToken, Map.of("coverKey","astrolabe","quoteVersion","0")).statusCode()).isEqualTo(409);
+    // 在隔离库模拟扣款后写凭证失败，必须退回刚扣的硬币。
+    jdbc.execute("CREATE TRIGGER cover_insert_failure BEFORE INSERT ON sys_profile_cover_purchase "
+        + "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='fixture'");
+    try {
+        assertThat(call("POST",base+"/purchase",userToken,purchase).statusCode()).isGreaterThanOrEqualTo(500);
+        assertThat(jdbc.queryForObject("SELECT coins FROM sys_user WHERE id=?",Long.class,user)).isEqualTo(10);
+    } finally {
+        jdbc.execute("DROP TRIGGER cover_insert_failure");
+    }
+    // 两端跨日恢复会话并购买，先发的一枚奖励和两笔并发意图只产生一次支出。
+    jdbc.update("UPDATE sys_user SET coins=9,experience=190 WHERE id=?",user);
+    jdbc.update("UPDATE sys_user_growth_reward SET reward_date=DATE_SUB(reward_date,INTERVAL 1 DAY) WHERE user_id=?",user);
+    try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+        var first = workers.submit(()->call("POST",base+"/purchase",userToken,purchase));
+        var next = workers.submit(()->call("POST",base+"/purchase",second,purchase));
+        for (var result : List.of(first,next)) {
+            var response=result.get(20,TimeUnit.SECONDS);
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(json.readTree(response.body()).at("/data/coins").asText()).isEqualTo("0");
+        }
+    }
+    assertThat(count("sys_profile_cover_purchase")).isEqualTo(1);
+    assertThat(call("POST",base+"/equip",second,brass).statusCode()).isEqualTo(200);
+    assertThat(json.readTree(call("GET",base,userToken,null).body()).at("/data/equipped").asText()).isEqualTo("astrolabe");
+    assertThat(jdbc.queryForObject("SELECT experience FROM sys_user WHERE id=?",Long.class,user)).isEqualTo(200);
+    assertThat(call("POST",base+"/equip",userToken,koi).statusCode()).isEqualTo(200);
+    // 真实购买在身份升降后仍然有效。
+    for (var role : List.of(UserRoleEnum.INSIDER, UserRoleEnum.USER)) {
+        jdbc.update("UPDATE sys_user SET role=? WHERE id=?", role.getCode(), user);
+        assertThat(call("POST",base+"/equip",userToken,brass).statusCode()).isEqualTo(200);
+    }
+    jdbc.update("UPDATE sys_user SET password_change_required=1 WHERE id=?",admin);
+    assertThat(call("GET",base,adminToken,null).statusCode()).isEqualTo(403);
+    for (String token : List.of(otherToken,ownerToken)) {
+        assertThat(call("POST",base+"/purchase",token,purchase).statusCode()).isEqualTo(200);
+        assertThat(call("POST",base+"/equip",token,koi).statusCode()).isEqualTo(200);
+    }
+    assertThat(count("sys_profile_cover_purchase")).isEqualTo(1);
+    jdbc.update("UPDATE sys_user SET role=? WHERE id=?",UserRoleEnum.USER.getCode(),other);
+    assertThat(json.readTree(call("GET",base,otherToken,null).body()).at("/data/equipped").asText()).isEqualTo("window");
+
+ }
+
  @Test void nicknameIsPrivateUntilApprovalAndFieldsDoNotOverwriteGrowth()throws Exception{
   String before=fingerprint(user);var s=nickname("新的小屋名字",userToken);
   assertThat(publicNickname(user)).isEqualTo("旧昵称");assertThat(profiles.mine(userToken).submissions()).hasSize(1);
@@ -374,6 +434,8 @@ class ProfileModerationIntegrationTest {
                 try {
                     ScriptUtils.executeSqlScript(connection, new EncodedResource(
                             new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
+                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                            new FileSystemResource("sql/016_profile_covers.sql"), StandardCharsets.UTF_8));
                 } catch (Exception error) {
                     try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
                     throw error;
