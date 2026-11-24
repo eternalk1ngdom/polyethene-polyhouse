@@ -168,6 +168,15 @@ class TrendBriefingCodecTest {
         var badCached = (ObjectNode) TrendFixture.json().readTree(base);
         ((ObjectNode) badCached.get("themes").get(0)).putArray("evidenceRepos").add("not-a-repo").add("acme/beta");
         assertThatThrownBy(() -> codec.cached(badCached.toString())).isInstanceOf(BusinessException.class);
+
+        // 历史入库旧稿（导语/摘要在 161～240 字符之间）在 cached() 中必须继续兼容，但新生成 parse() 须受 160 字符精炼上限约束。
+        var legacyLong = (ObjectNode) TrendFixture.json().readTree(base);
+        String legacyOverview = "这周大家都在给编程助手配现成技能包与插件，让本地开发少写重复配置。".repeat(6).substring(0, 190);
+        String legacySummary = "好几个上榜项目都在帮开发者把常用的需求澄清和代码检查流程打包成即插即用的小技能。".repeat(5).substring(0, 200);
+        legacyLong.put("overview", legacyOverview);
+        ((ObjectNode) legacyLong.get("themes").get(0)).put("summary", legacySummary);
+        assertThat(codec.cached(legacyLong.toString()).overview()).isEqualTo(legacyOverview);
+        assertRejected(legacyLong.toString(), whitelist, "TOO_LONG_overview");
     }
 
     @Test void validatesEnvelopeUsageAndIgnoresIncompleteChoices() throws Exception {

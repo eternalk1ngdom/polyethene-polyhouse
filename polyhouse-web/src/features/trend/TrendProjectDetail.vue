@@ -6,6 +6,8 @@ import voyage from '../../assets/startide-voyage.webp'
 import type { TrendProject, TrendReport } from '../../api/trend'
 import { languageColor } from './languageColors'
 import {
+  categoryLabel,
+  categoryTone,
   insightLabel,
   insightReasonLabel,
   trendNumber,
@@ -51,9 +53,22 @@ const facts = computed(() => [
 <template>
   <article class="story" :key="project.fullName">
     <header class="story-head">
-      <p class="dateline"><em>StarTide</em> {{ report.periodKey }}</p>
+      <p class="dateline">
+        <em>StarTide</em> {{ report.periodKey }}
+        <span
+          v-if="insight"
+          class="story-category"
+          :style="{
+            backgroundColor: categoryTone(insight.category).bg,
+            color: categoryTone(insight.category).ink,
+          }"
+          >{{ categoryLabel(insight.category) }}</span
+        >
+      </p>
       <h1 tabindex="-1">
-        <small>{{ project.fullName.split('/')[0] }}/</small><wbr />{{ project.fullName.split('/')[1] }}
+        <small>{{ project.fullName.split('/')[0] }}/</small><wbr />{{
+          project.fullName.split('/')[1]
+        }}
       </h1>
       <a class="repo" :href="project.repoUrl" target="_blank" rel="noopener noreferrer"
         >在 GitHub 查看 <ElIcon aria-hidden="true"><TopRight /></ElIcon
@@ -204,6 +219,14 @@ const facts = computed(() => [
     italic 17px Georgia,
     serif;
 }
+.story-category {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
 .edition-stamp {
   position: absolute;
   top: 50%;
@@ -324,12 +347,12 @@ details {
 .signal-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
-  border: 1px solid #c8d5db;
+  padding: 2px 9px;
+  border: 1px solid #d5d7f2;
   border-radius: 999px;
-  background: transparent;
-  color: #475c6b;
-  font-size: 12px;
+  background: linear-gradient(135deg, #eef1fc 0%, #f3ecfb 100%);
+  color: #3f3d8f;
+  font-size: 11.5px;
   font-weight: 600;
   line-height: 1.5;
 }

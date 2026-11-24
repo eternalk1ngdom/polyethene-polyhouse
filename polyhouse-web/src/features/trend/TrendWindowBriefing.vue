@@ -20,16 +20,16 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const ready = computed(() => props.briefing?.status === 'READY')
-
-const sampleTag = computed(() => {
-  if (!props.briefing) return ''
-  return props.briefing.sampleStatus === 'LIMITED' ? '有限样本' : '充分样本'
-})
+const isLimited = computed(() => props.briefing?.sampleStatus === 'LIMITED')
 
 function signalLabel(type: TrendBriefingSignalType): string {
   if (type === 'CONCENTRATION') return '多仓聚集'
   if (type === 'RECURRING') return '持续霸榜'
   return '新苗头'
+}
+
+function themeNumber(index: number): string {
+  return String(index + 1).padStart(2, '0')
 }
 </script>
 
@@ -37,10 +37,21 @@ function signalLabel(type: TrendBriefingSignalType): string {
   <section v-if="ready && briefing" class="briefing-card" aria-labelledby="briefing-headline">
     <div class="briefing-meta">
       <div class="meta-pills">
-        <span class="ai-pill">AI 跨日综合 · 基于 {{ briefing.coveredDays }} 天样本</span>
-        <span class="sample-pill" :class="briefing.sampleStatus.toLowerCase()">{{
-          sampleTag
-        }}</span>
+        <span class="ai-pill">
+          <svg
+            class="spark-icon"
+            viewBox="0 0 16 16"
+            width="13"
+            height="13"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M8 1.2 9.7 6.3 14.8 8 9.7 9.7 8 14.8 6.3 9.7 1.2 8 6.3 6.3 8 1.2Z" />
+          </svg>
+          AI 风口速览
+        </span>
+        <!-- 满样本天数已在页眉展示，此处仅在有限样本时补充轻提示，避免重复标签。 -->
+        <span v-if="isLimited" class="sample-note">· 有限样本</span>
       </div>
       <span v-if="briefing.generatedAt" class="generated-at">
         生成于 {{ trendTime(briefing.generatedAt) }}（北京时间）
@@ -51,20 +62,31 @@ function signalLabel(type: TrendBriefingSignalType): string {
       基于较早日报快照生成，最新日报变动尚未重新综合，以下仍可结合下方实时 7 日统计核对。
     </p>
 
-    <h3 id="briefing-headline" class="headline">{{ briefing.headline }}</h3>
-    <p class="overview">{{ briefing.overview }}</p>
+    <div class="briefing-lead">
+      <h3 id="briefing-headline" class="headline">{{ briefing.headline }}</h3>
+      <p class="overview">{{ briefing.overview }}</p>
+    </div>
 
-    <div class="theme-grid">
-      <article v-for="theme in briefing.themes" :key="theme.title" class="theme-item">
+    <!-- 2～3 条风向采用完全一致的等宽单列排版，并按风口信号语义轻度着色区分性质。 -->
+    <div class="theme-list">
+      <article
+        v-for="(theme, index) in briefing.themes"
+        :key="theme.title"
+        class="theme-item"
+        :class="theme.signalType.toLowerCase()"
+      >
         <div class="theme-head">
-          <h4 class="theme-title">{{ theme.title }}</h4>
+          <div class="theme-heading">
+            <span class="theme-index" aria-hidden="true">{{ themeNumber(index) }}</span>
+            <h4 class="theme-title">{{ theme.title }}</h4>
+          </div>
           <span class="signal-tag" :class="theme.signalType.toLowerCase()">
             {{ signalLabel(theme.signalType) }}
           </span>
         </div>
         <p class="theme-summary">{{ theme.summary }}</p>
         <div class="evidence-row" aria-label="实名证据仓库">
-          <span class="evidence-label">证据仓</span>
+          <span class="evidence-label">代表仓库</span>
           <div class="evidence-links">
             <template v-for="repo in theme.evidenceRepos" :key="repo.fullName">
               <a
@@ -91,23 +113,24 @@ function signalLabel(type: TrendBriefingSignalType): string {
       </article>
     </div>
 
-    <aside v-if="briefing.watchouts.length" class="watchouts" aria-label="冷静边界提醒">
-      <span class="watchout-title">边界提醒</span>
+    <!-- 冷静边界提醒默认折叠在简报底部，带明确展开指示箭头，保持主阅读流清爽。 -->
+    <details v-if="briefing.watchouts.length" class="watchouts">
+      <summary class="watchout-summary">边界提醒（{{ briefing.watchouts.length }} 条）</summary>
       <ul>
         <li v-for="line in briefing.watchouts" :key="line">{{ line }}</li>
       </ul>
-    </aside>
+    </details>
   </section>
 </template>
 
 <style scoped>
 .briefing-card {
-  margin: 0 0 22px;
-  padding: 20px 22px;
-  background: var(--st-surface);
-  border: 1px solid var(--st-line-strong);
-  border-top: 3px solid var(--st-accent);
-  border-radius: 12px;
+  margin: 0 0 34px;
+  padding: clamp(22px, 2.8vw, 30px);
+  background: #ffffff;
+  border: 1px solid #dce6ea;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(20, 47, 70, 0.04);
 }
 
 .briefing-meta {
@@ -128,89 +151,102 @@ function signalLabel(type: TrendBriefingSignalType): string {
 .ai-pill {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  gap: 6px;
+  padding: 4px 12px;
   border-radius: 999px;
-  background: var(--st-pill-bg);
-  color: var(--st-pill-ink);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.sample-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
+  /* 星夜靛紫微渐变呼应月夜横幅夜空色调，与海蓝页面融洽并彻底区分黄色星标。 */
+  background: linear-gradient(135deg, #eef1fc 0%, #f3ecfb 100%);
+  border: 1px solid #d5d7f2;
+  color: #3f3d8f;
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid var(--st-line-strong);
-  color: var(--st-muted);
 }
 
-.sample-pill.limited {
-  background: #fdf6e7;
-  border-color: #e6cfa0;
-  color: #7c5617;
+.spark-icon {
+  color: #635cc7;
+  flex: none;
 }
 
-.sample-pill.sufficient {
-  background: #eef6f1;
-  border-color: #c2decb;
-  color: #1f5c3e;
+.sample-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b5d16;
 }
 
 .generated-at {
   font-size: 12px;
-  color: var(--st-muted);
+  color: #5b7182;
   font-variant-numeric: tabular-nums;
 }
 
 .stale-banner {
-  margin: 12px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #f6f8fa;
-  border: 1px solid var(--st-line);
-  color: var(--st-muted);
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fdf6e7;
+  border: 1px solid #ecd8ad;
+  color: #7c5617;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+.briefing-lead {
+  margin-top: 18px;
 }
 
 .headline {
-  margin: 14px 0 8px;
-  font:
-    700 clamp(19px, 2.2vw, 23px)/1.32 Georgia,
-    'Songti SC',
-    SimSun,
-    serif;
+  margin: 0 0 10px;
+  font-family: var(--ph-font);
+  font-size: clamp(20px, 2.2vw, 24px);
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: -0.015em;
   color: var(--st-ink-deep);
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
 .overview {
   margin: 0;
-  color: var(--st-ink);
+  max-width: 82ch;
+  color: #364e60;
   font-size: 14.5px;
-  line-height: 1.68;
+  line-height: 1.76;
   overflow-wrap: anywhere;
 }
 
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+.theme-list {
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  margin-top: 16px;
+  margin-top: 22px;
 }
 
 .theme-item {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 15px 16px;
-  border: 1px solid var(--st-line);
-  border-radius: 10px;
-  background: #fafcfd;
+  gap: 11px;
+  padding: 18px 20px;
+  border: 1px solid #e4eef2;
+  border-radius: 14px;
+  background: #f7fafc;
   min-width: 0;
+}
+
+/* 三类风口信号共享相同结构与间距，仅以极淡同色系微底区分持续霸榜、新苗头与多仓聚集。 */
+.theme-item.recurring {
+  background: #f3faf9;
+  border-color: #d8ece9;
+}
+
+.theme-item.emerging {
+  background: #f8f5fc;
+  border-color: #e6def2;
+}
+
+.theme-item.concentration {
+  background: #f4f8fc;
+  border-color: #dbe7f3;
 }
 
 .theme-head {
@@ -218,92 +254,143 @@ function signalLabel(type: TrendBriefingSignalType): string {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 10px;
+  gap: 8px 12px;
+}
+
+.theme-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.theme-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e7f0f4;
+  color: #38586b;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.theme-item.recurring .theme-index {
+  background: #dff1ee;
+  color: #17575e;
+}
+
+.theme-item.emerging .theme-index {
+  background: #ede4f8;
+  color: #563a7a;
+}
+
+.theme-item.concentration .theme-index {
+  background: #e1eef9;
+  color: #184b73;
 }
 
 .theme-title {
   margin: 0;
-  font-size: 15.5px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 650;
   color: var(--st-ink-deep);
-  line-height: 1.38;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .signal-tag {
   flex: none;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11.5px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .signal-tag.concentration {
-  background: #e5eff6;
-  color: #16486b;
+  background: #e1eef9;
+  color: #184b73;
 }
 
 .signal-tag.recurring {
-  background: #e4f0ee;
-  color: #1d4e5a;
+  background: #dff1ee;
+  color: #17575e;
 }
 
 .signal-tag.emerging {
-  background: #f4eef8;
-  color: #5b3a73;
+  background: #ede4f8;
+  color: #563a7a;
 }
 
 .theme-summary {
   margin: 0;
-  color: var(--st-ink);
-  font-size: 13.8px;
-  line-height: 1.65;
+  color: #2b4153;
+  font-size: 14px;
+  line-height: 1.74;
   overflow-wrap: anywhere;
 }
 
 .evidence-row {
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px dashed var(--st-line);
+  padding-top: 10px;
+  border-top: 1px dashed #dce7eb;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.theme-item.recurring .evidence-row {
+  border-top-color: #cfe6e2;
+}
+
+.theme-item.emerging .evidence-row {
+  border-top-color: #dfd4ee;
+}
+
+.theme-item.concentration .evidence-row {
+  border-top-color: #d0e0ef;
 }
 
 .evidence-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--st-muted);
+  color: #5b7182;
+  flex: none;
 }
 
 .evidence-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 8px;
 }
 
 .repo-link {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 4px 9px;
-  border-radius: 6px;
-  border: 1px solid var(--st-line-strong);
-  background: var(--st-surface);
-  color: var(--st-link);
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(20, 47, 70, 0.05);
+  color: #194c69;
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.35;
   text-decoration: none;
   overflow-wrap: anywhere;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+    background-color 0.16s ease,
+    border-color 0.16s ease;
 }
 
 .repo-link:hover {
-  background: #eef4f7;
-  border-color: var(--st-accent);
+  background: #f1f7fa;
+  border-color: #a9c5d4;
   color: var(--st-ink-deep);
 }
 
@@ -311,46 +398,72 @@ function signalLabel(type: TrendBriefingSignalType): string {
   border-color: var(--st-ink-deep);
 }
 
-.repo-link:focus-visible {
-  outline: 2px solid var(--st-accent);
-  outline-offset: 2px;
-}
-
 .watchouts {
-  margin-top: 16px;
-  padding: 10px 14px;
-  border-left: 3px solid var(--st-line-strong);
-  background: #f8fafb;
-  border-radius: 0 8px 8px 0;
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid #e7eff2;
+  font-size: 13px;
+  color: var(--st-muted);
 }
 
-.watchout-title {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--st-muted);
-  margin-bottom: 4px;
+.watchout-summary {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px 6px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #4f6678;
+  font-variant-numeric: tabular-nums;
+  list-style: none;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.watchout-summary::-webkit-details-marker {
+  display: none;
+}
+
+.watchout-summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 7px;
+  color: #6b8496;
+  transition: transform 0.16s ease;
+}
+
+.watchouts[open] .watchout-summary::before {
+  transform: rotate(90deg);
+}
+
+.watchout-summary:hover {
+  background: #f4f8fa;
+  color: var(--st-ink-deep);
 }
 
 .watchouts ul {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--st-muted);
-  font-size: 13px;
-  line-height: 1.58;
+  margin: 6px 0 4px;
+  padding-left: 20px;
+  line-height: 1.68;
 }
 
 .watchouts li + li {
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 620px) {
   .briefing-card {
-    padding: 16px 14px;
+    padding: 18px 16px;
+    margin-bottom: 26px;
   }
 
-  .theme-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .theme-item {
+    padding: 16px 14px;
   }
 }
 </style>

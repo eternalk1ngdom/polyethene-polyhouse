@@ -468,9 +468,10 @@ watch(
   gap: 4px 16px;
   color: #142f46;
   font:
-    700 clamp(36px, 5vw, 62px)/1.1 Georgia,
-    'Songti SC',
-    SimSun,
+    700 clamp(36px, 5vw, 62px)/1.1 'Songti SC',
+    'STSong',
+    'Noto Serif SC',
+    Georgia,
     serif;
 }
 .cover h1 em {
@@ -486,42 +487,43 @@ watch(
   align-items: center;
 }
 .toolbar {
-  gap: 8px 18px;
+  gap: 10px 18px;
   flex-wrap: wrap;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--st-line-strong);
+  padding: 16px 0;
+  border-bottom: 1px solid #dce6ea;
 }
 .view-switch {
   display: inline-flex;
   align-items: center;
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
-  border: 1px solid #b6c5cc;
-  border-radius: 10px;
-  background: #edf2f2;
+  border: 1px solid #cad8de;
+  border-radius: 12px;
+  background: #f0f5f7;
   max-width: 100%;
 }
 .view-tab {
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 15px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
-  color: #354b59;
+  color: #3a5261;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
 }
 .view-tab:hover {
-  background: #e1eaec;
+  background: #e4eef1;
 }
 .view-tab:active {
   border-color: #154e78;
 }
 .view-tab.active {
   background: #ffffff;
-  border-color: #9daeb8;
+  border-color: #c2d2da;
   color: #142f46;
+  box-shadow: 0 1px 3px rgba(20, 47, 70, 0.08);
 }
 .view-tab:focus-visible {
   outline: none;
@@ -530,6 +532,15 @@ watch(
 }
 .owner-link {
   margin-inline-start: auto;
+  padding: 0 14px;
+  border: 1px solid #cddbe0;
+  border-radius: 999px;
+  background: #f8fbfc;
+}
+.owner-link:hover {
+  background: #edf5f7;
+  border-color: #9cbccf;
+  text-decoration: none;
 }
 .control {
   gap: 8px;
@@ -541,11 +552,11 @@ select {
   min-height: 44px;
   max-width: 100%;
   min-width: 0;
-  padding: 6px 9px;
-  border: 1px solid #9daeb8;
+  padding: 6px 10px;
+  border: 1px solid #cad8de;
   background: white;
   color: #213951;
-  border-radius: 9px;
+  border-radius: 10px;
 }
 select:focus-visible {
   outline: none;
@@ -605,7 +616,7 @@ select:focus-visible {
   margin: 6px 0 12px;
 }
 .columns {
-  border-bottom: 2px solid #273b50;
+  border-bottom: 1px solid #cfdde2;
   padding: 8px 0;
   font-weight: 650;
 }

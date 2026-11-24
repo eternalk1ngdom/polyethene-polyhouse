@@ -151,13 +151,29 @@ function makeWindowPayload(patch = {}) {
 
 test('presentation 分类与统计格式化函数处理缺失值、.5 中位数与占比变化', async () => {
   const presentationUrl = await transpileTs('../../src/features/trend/presentation.ts')
-  const { categoryLabel, trendPercent, trendDeltaPercent, trendMedianNumber, shortTrendDate } =
-    await import(presentationUrl)
+  const {
+    categoryLabel,
+    categoryTone,
+    trendCategoryKeys,
+    trendPercent,
+    trendDeltaPercent,
+    trendMedianNumber,
+    shortTrendDate,
+  } = await import(presentationUrl)
 
   assert.equal(categoryLabel('DEVTOOLS'), '开发工具')
   assert.equal(categoryLabel('AI_AGENT'), 'AI 智能体')
   assert.equal(categoryLabel(null), '未分类')
   assert.equal(categoryLabel('UNKNOWN_NEW'), '其他方向')
+
+  for (const key of trendCategoryKeys) {
+    const tone = categoryTone(key)
+    assert.match(tone.accent, /^#[0-9a-f]{6}$/i)
+    assert.match(tone.bg, /^#[0-9a-f]{6}$/i)
+    assert.match(tone.ink, /^#[0-9a-f]{6}$/i)
+  }
+  assert.deepEqual(categoryTone('UNKNOWN_NEW'), categoryTone('OTHER'))
+  assert.deepEqual(categoryTone(null), categoryTone('OTHER'))
 
   assert.equal(trendPercent(0.4), '40%')
   assert.equal(trendPercent(null), '—')
