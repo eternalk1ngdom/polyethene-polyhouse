@@ -70,6 +70,12 @@
 
 ![末班信号二次元精修稿](../design/profile-covers/last-signal-anime.webp)
 
+**霓虹夜街版**。按用户反馈将窗外从远郊高架改成贴近列车的夜生活街区，保留上图供比较。近处用暗色钢架遮住一部分店招，中层用有人经过的天桥和夜市交代街区尺度，远处用鱼形广告和冷色塔楼拉开距离。窗边珊瑚色立面为手背、鼻尖和发梢提供暖光，拳面贴脸处、刘海下和下颌保留暗部，颈侧青光集中在义体附近。
+
+![末班信号霓虹夜街版](../design/profile-covers/last-signal-neon.webp)
+
+本稿参考了三个不同问题：夜生活街区里摊档与高楼如何共处，动画背景怎样借招牌和人流传递信息，以及实景霓虹如何成为人物的光源。对应参考为 [CD PROJEKT RED 夜城街拍指南](https://www.cyberpunk.net/en/news/50110/your-trip-to-night-city-best-spots-for-street-photography)、[《攻壳机动队》押井守访谈](https://theghostintheshell.jp/en/feature/interview02_1)和[美国电影摄影师协会《银翼杀手》摄影访谈](https://theasc.com/article/blade-runner-cronenweths-photography/)。
+
 ## 现有页面与奖励依据
 
 - [个人空间页面](../../polyhouse-web/src/views/AccountView.vue)改版前的封面是淡紫底、左上角空间标签、装饰字和右上角椭圆印章。桌面容器最大宽 1160 CSS 像素，封面高 180；视口宽度到 760 时封面高 145，手机页宽为视口减 40。头像大小 92，资料区向上叠 36。窄屏的刷新按钮独占下一行。[现有分区约定](pre-p5-account-workspace-ui.md)
