@@ -2,7 +2,7 @@
 
 更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.20.md](docs/dev-log/v1.0-dev.20.md)。
 
-- [本地自定义卡面](docs/plans/local-profile-cover.md)已合入 dev。选中动图后旧草稿仍可保存的问题已在修复分支处理，见[动图选取与读取恢复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)。
+- [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
 
 - [个人空间卡面](docs/dev-log/v1.0-dev.20.md#购买与佩戴)已实现购买、等级解锁与跨端佩戴（PR #20 合 `dev`）。
