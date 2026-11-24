@@ -2,7 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { ElIcon } from 'element-plus'
 import { StarFilled, TopRight } from '@element-plus/icons-vue'
-import type { TrendWindowCategoryStat, TrendWindowSampleRepo, TrendWindowStats } from '../../api/trend'
+import type {
+  TrendBriefing,
+  TrendWindowCategoryStat,
+  TrendWindowSampleRepo,
+  TrendWindowStats,
+} from '../../api/trend'
+import TrendWindowBriefing from './TrendWindowBriefing.vue'
 import {
   categoryLabel,
   shortTrendDate,
@@ -16,6 +22,8 @@ import {
 interface Props {
   /** 7 日确定性统计数据，加载中或失败时为 null。 */
   stats: TrendWindowStats | null
+  /** 可选 7 日 AI 风口简报；未生成（ABSENT）或加载失败时为 null，无缝保持纯净 2A 统计。 */
+  briefing?: TrendBriefing | null
   /** 正在请求近 7 日统计。 */
   loading: boolean
   /** 加载失败提示。 */
@@ -100,6 +108,12 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
         </p>
       </header>
 
+      <TrendWindowBriefing
+        :briefing="briefing ?? null"
+        :resolve-detail-href="resolveDetailHref"
+        @open-project="(event, name) => emit('openProject', event, name)"
+      />
+
       <div class="kpi-strip" aria-label="窗口核心覆盖指标">
         <div class="kpi-item">
           <span class="kpi-label">7 日去重仓库</span>
@@ -139,13 +153,16 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
           缺采日期：{{ missingDatesText }}（未采集日期不补猜，连续上榜遇缺口自然断开）。
         </p>
         <p>
-          锚点日（{{ shortTrendDate(stats.anchorDate) }}）共 {{ stats.anchorSummary.totalItems }}
-          项：已分类 {{ stats.anchorSummary.classifiedItems }}、资料清单
+          锚点日（{{ shortTrendDate(stats.anchorDate) }}）共
+          {{ stats.anchorSummary.totalItems }} 项：已分类
+          {{ stats.anchorSummary.classifiedItems }}、资料清单
           {{ stats.anchorSummary.docListItems }}、待解读
           {{ stats.anchorSummary.missingInsightItems }}。
         </p>
         <p v-if="stats.windowSummary.staleClassifiedRepoCount > 0">
-          旧稿归类提示：{{ stats.windowSummary.staleClassifiedRepoCount }}
+          旧稿归类提示：{{
+            stats.windowSummary.staleClassifiedRepoCount
+          }}
           个仓库的分类来自沿用旧解读<template v-if="stats.windowSummary.oldestStaleAnalyzedAt"
             >（最早原稿生成于
             {{ trendTime(stats.windowSummary.oldestStaleAnalyzedAt) }}，北京时间）</template
@@ -165,8 +182,9 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
           >
         </div>
         <p v-if="!stats.categories.length" class="empty-note">
-          当前窗口暂无具备有效分类的解读（资料清单 {{ stats.windowSummary.docListRepoCount }}
-          个，待解读 {{ stats.windowSummary.missingInsightRepoCount }} 个）。
+          当前窗口暂无具备有效分类的解读（资料清单
+          {{ stats.windowSummary.docListRepoCount }} 个，待解读
+          {{ stats.windowSummary.missingInsightRepoCount }} 个）。
         </p>
         <div v-else class="category-grid">
           <article v-for="cat in stats.categories" :key="cat.category" class="category-item">

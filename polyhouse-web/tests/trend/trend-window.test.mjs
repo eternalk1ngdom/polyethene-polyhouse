@@ -151,13 +151,8 @@ function makeWindowPayload(patch = {}) {
 
 test('presentation 分类与统计格式化函数处理缺失值、.5 中位数与占比变化', async () => {
   const presentationUrl = await transpileTs('../../src/features/trend/presentation.ts')
-  const {
-    categoryLabel,
-    trendPercent,
-    trendDeltaPercent,
-    trendMedianNumber,
-    shortTrendDate,
-  } = await import(presentationUrl)
+  const { categoryLabel, trendPercent, trendDeltaPercent, trendMedianNumber, shortTrendDate } =
+    await import(presentationUrl)
 
   assert.equal(categoryLabel('DEVTOOLS'), '开发工具')
   assert.equal(categoryLabel('AI_AGENT'), 'AI 智能体')
@@ -231,8 +226,12 @@ test('getTrendWindow 严格解码 7 日统计结构并拒绝越界比例或非�
 test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示、占比条及链接去向', async () => {
   const presentationUrl = await transpileTs('../../src/features/trend/presentation.ts')
   const iconsUrl = dataUrl('export const ElIcon = {}, TopRight = {}, StarFilled = {};')
+  const briefingStubUrl = dataUrl('export default { render() { return null } };')
   const { descriptor } = parse(
-    await readFile(new URL('../../src/features/trend/TrendWindowOverview.vue', import.meta.url), 'utf8'),
+    await readFile(
+      new URL('../../src/features/trend/TrendWindowOverview.vue', import.meta.url),
+      'utf8',
+    ),
   )
   const id = 'trend-window-overview-test'
   const compiledScript = compileScript(descriptor, { id })
@@ -244,6 +243,7 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
     .replaceAll("from 'element-plus'", `from '${iconsUrl}'`)
     .replaceAll("from '@element-plus/icons-vue'", `from '${iconsUrl}'`)
     .replaceAll("from './presentation'", `from '${presentationUrl}'`)
+    .replaceAll("from './TrendWindowBriefing.vue'", `from '${briefingStubUrl}'`)
 
   const templateCode = compileTemplate({
     id,
@@ -320,9 +320,7 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
     return out
   }
   const textOf = (node) =>
-    node.tag === '#text'
-      ? node.text
-      : (node.children || []).map((child) => textOf(child)).join('')
+    node.tag === '#text' ? node.text : (node.children || []).map((child) => textOf(child)).join('')
 
   // 1. 充足样本：所有分类默认展示前 3 个代表项目，超过 3 个可点击「展开全部 N 个」
   const fullMount = mountOverview(makeWindowPayload())
@@ -337,7 +335,10 @@ test('TrendWindowOverview 整版报刊渲染区分充足样本与小样本展示
   // 默认只显示前 3 个代表项目，第 4 个隐藏，点击展开后出现
   assert.ok(fullText.includes('acme/lint'))
   assert.ok(!fullText.includes('acme/fourth-tool'))
-  const expandBtn = findAll(fullMount.root, (n) => n.tag === 'button' && n.attrs?.class === 'more-repos-btn')[0]
+  const expandBtn = findAll(
+    fullMount.root,
+    (n) => n.tag === 'button' && n.attrs?.class === 'more-repos-btn',
+  )[0]
   assert.ok(expandBtn)
   assert.equal(textOf(expandBtn).trim(), '展开全部 4 个')
   expandBtn.attrs.onClick()
