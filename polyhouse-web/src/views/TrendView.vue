@@ -45,6 +45,7 @@ const {
   loadingDates,
   loadDates,
   windowStats,
+  windowBriefing,
   windowError,
   loadingWindow,
   loadWindow,
@@ -347,6 +348,7 @@ watch(
         <TrendWindowOverview
           v-if="isWindowView"
           :stats="windowStats"
+          :briefing="windowBriefing"
           :loading="loadingWindow"
           :error="windowError"
           :resolve-detail-href="(name) => router.resolve(detailLocation(name)).href"

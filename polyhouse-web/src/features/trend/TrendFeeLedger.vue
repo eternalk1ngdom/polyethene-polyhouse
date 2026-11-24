@@ -62,7 +62,11 @@ function yuan(micros: number): string {
         <p v-if="!fees.pending.length">当前没有在途或待核对的请求。</p>
         <ul v-else>
           <li v-for="entry in fees.pending" :key="entry.requestId">
-            <span>仓库编号 {{ entry.repositoryId }}</span>
+            <span>{{
+              entry.chargeKind === 'BRIEFING'
+                ? `7 日风口简报 ${entry.repositoryId.replace(/^briefing:/, '')}`
+                : `仓库编号 ${entry.repositoryId}`
+            }}</span>
             <strong
               >{{ entry.state === 'UNKNOWN' ? '待核对' : '在途' }} ·
               {{ yuan(entry.reservedMicros) }}</strong

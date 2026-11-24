@@ -1,10 +1,12 @@
 import { onScopeDispose, ref, watch, type ComputedRef } from 'vue'
 import { ApiError } from '../../api/index'
 import {
+  getTrendBriefing,
   getTrendPeriods,
   getTrendReport,
   getTrendWindow,
   isTrendDate,
+  type TrendBriefing,
   type TrendReport,
   type TrendWindowStats,
 } from '../../api/trend'
@@ -25,6 +27,7 @@ export function useTrendEdition(
   const dateError = ref(false)
   const dateBlockedUntil = ref(0)
   const windowStats = ref<TrendWindowStats | null>(null)
+  const windowBriefing = ref<TrendBriefing | null>(null)
   const windowError = ref('')
   const loadingWindow = ref(false)
   let reportBlockedUntil = 0
@@ -32,14 +35,32 @@ export function useTrendEdition(
   let reportRequest: AbortController | undefined
   let datesRequest: AbortController | undefined
   let windowRequest: AbortController | undefined
+  let briefingRequest: AbortController | undefined
+
+  async function loadBriefing(anchorKey: string) {
+    briefingRequest?.abort()
+    const request = new AbortController()
+    briefingRequest = request
+    try {
+      const result = await getTrendBriefing(anchorKey, request.signal)
+      if (!request.signal.aborted) {
+        windowBriefing.value = result.status === 'READY' ? result : null
+      }
+    } catch {
+      // 简报读取失败静默降级，绝不阻断或干扰 2A 确定性统计展示。
+      if (!request.signal.aborted) windowBriefing.value = null
+    }
+  }
 
   async function loadWindow(anchorKey?: string) {
     const key = anchorKey ?? report.value?.periodKey
     windowRequest?.abort()
+    briefingRequest?.abort()
     windowError.value = ''
     loadingWindow.value = false
     if (!key || !isTrendDate(key)) {
       windowStats.value = null
+      windowBriefing.value = null
       return
     }
     if (Date.now() < windowBlockedUntil) {
@@ -49,6 +70,7 @@ export function useTrendEdition(
     const request = new AbortController()
     windowRequest = request
     loadingWindow.value = true
+    void loadBriefing(key)
     try {
       const result = await getTrendWindow(key, request.signal)
       if (!request.signal.aborted) windowStats.value = result
@@ -69,8 +91,10 @@ export function useTrendEdition(
   async function loadReport() {
     reportRequest?.abort()
     windowRequest?.abort()
+    briefingRequest?.abort()
     report.value = null
     windowStats.value = null
+    windowBriefing.value = null
     windowError.value = ''
     loadingWindow.value = false
     noReport.value = false
@@ -154,6 +178,7 @@ export function useTrendEdition(
     reportRequest?.abort()
     datesRequest?.abort()
     windowRequest?.abort()
+    briefingRequest?.abort()
   })
   return {
     report,
@@ -167,6 +192,7 @@ export function useTrendEdition(
     loadingDates,
     loadDates,
     windowStats,
+    windowBriefing,
     windowError,
     loadingWindow,
     loadWindow,

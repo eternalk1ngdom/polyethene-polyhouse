@@ -4,7 +4,8 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [前端视觉与体验精修候选清单](frontend-polish-phase.md) | 候选清单（F1～F5），待按项确认后分批立项实施 | 待立项（`dev` `363d5fe` 后） |
+| [星潮 2B：7 日风口简报](startide-window-briefing.md) | 规划草案（B1～B5），待新会话确认 4 项设计点后分闭环实施 | 下一阶段（`dev` `b88ab20` 后） |
+| [前端视觉与体验精修候选清单](frontend-polish-phase.md) | 已完成（F1/F3 由 PR #12、F2 由 PR #13、F4/F5 由 PR #15 合入 `dev` `b88ab20`） | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [首页工具列表之后，留什么？](home-closing-section.md) | 预览 B 后最终采用 A，独立说明区已移除，旧书签落到页脚 | [dev.15](../dev-log/v1.0-dev.15.md#首页收尾区方案) |
 | [GitHub 开源技术雷达](github-tech-radar.md) | G4 真实小样本对账通过，G6 真实联调及本机开发库迁移完成，云端待验 | [dev.15](../dev-log/v1.0-dev.15.md) |
 | [星潮前端设计](trend-frontend-design.md) | G6 本地真实浏览器联调通过，保留首版接口与交互基线 | [dev.15](../dev-log/v1.0-dev.15.md) |
