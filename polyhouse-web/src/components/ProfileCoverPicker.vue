@@ -103,7 +103,7 @@ async function loadLocal() {
     localError.value =
       reason instanceof Error && reason.message.startsWith('请关闭')
         ? reason.message
-        : '暂时无法读取浏览器里的卡面。'
+        : '暂时无法读取此浏览器保存的本地图片，请重新打开卡面设置。'
   }
 }
 
@@ -147,7 +147,7 @@ async function saveCustom(cover: LocalProfileCover) {
   try {
     await saveLocalCover(accountId, cover)
   } catch {
-    throw new Error('无法保存本地图，请检查浏览器存储空间后重试。')
+    throw new Error('无法保存本地图片，请检查浏览器的存储空间和权限后重试。')
   }
   if (!isCurrentAccount()) return
   await loadLocal()
@@ -165,7 +165,10 @@ async function changeLocal(action: 'toggle' | 'delete') {
     if (action === 'delete')
       await nextTick(() => editButton.value?.querySelector('button')?.focus())
   } catch {
-    localError.value = '无法更新本地图，请检查浏览器存储权限后重试。'
+    localError.value =
+      action === 'delete'
+        ? '无法删除本地图片，请检查浏览器的存储权限后重试。'
+        : '无法切换卡面，请检查浏览器的存储权限后重试。'
   } finally {
     localBusy.value = false
   }
@@ -331,26 +334,26 @@ async function submit() {
           }}
         </ElButton>
       </template>
-      <section class="local-cover-settings" aria-label="本地自定义">
-        <h3>本地自定义</h3>
-        <p>只保存在当前浏览器，清除网站数据后需重新选择。</p>
-        <p v-if="localCover">本机显示：{{ localEnabled ? '自定义卡面' : '账号官方卡面' }}</p>
+      <section class="local-cover-settings" aria-labelledby="local-cover-heading">
+        <h3 id="local-cover-heading">自定义卡面</h3>
+        <p>本地图片只在当前浏览器中对你可见。清除网站数据后需重新选择。</p>
+        <p v-if="localCover">当前浏览器显示：{{ localEnabled ? '本地图片' : '账号官方卡面' }}</p>
         <p v-if="localError" role="status">{{ localError }}</p>
         <div class="local-actions">
           <div ref="editButton">
             <ElButton :disabled="busy || localBusy" @click="editing = true">{{
-              localCover ? '更换本地图' : '选择本地图'
+              localCover ? '更换本地图片' : '选择本地图片'
             }}</ElButton>
           </div>
           <template v-if="localCover">
             <ElButton :disabled="localBusy" @click="changeLocal('toggle')">{{
-              localEnabled ? '本机显示官方卡面' : '重新使用本地图'
+              localEnabled ? '切换到官方卡面' : '使用本地图片'
             }}</ElButton>
-            <ElButton :disabled="localBusy" @click="confirmDelete = true">删除本地图</ElButton>
+            <ElButton :disabled="localBusy" @click="confirmDelete = true">删除本地图片</ElButton>
           </template>
         </div>
         <div v-if="confirmDelete && localCover" class="local-confirm">
-          <p>删除后，此浏览器会显示账号官方卡面。</p>
+          <p>删除此浏览器保存的卡面后，将显示账号官方卡面。设备上的原图会保留。</p>
           <div class="local-actions">
             <ElButton :disabled="localBusy" @click="confirmDelete = false">保留图片</ElButton>
             <ElButton type="danger" :loading="localBusy" @click="changeLocal('delete')"

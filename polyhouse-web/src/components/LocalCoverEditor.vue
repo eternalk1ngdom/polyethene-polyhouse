@@ -167,7 +167,7 @@ async function encode(image: ImageBitmap, key: CoverFrame): Promise<Blob> {
     if (blob?.type !== 'image/webp') throw new Error('当前浏览器无法导出 WebP。')
     if (blob.size <= 512 * 1024) return blob
   }
-  throw new Error('成图仍然过大，请缩小原图或换一张图片。')
+  throw new Error('裁剪后的图片文件仍然太大，请换一张图片。')
 }
 
 async function save() {
@@ -192,7 +192,7 @@ async function save() {
 
 <template>
   <form class="cover-editor" @submit.prevent="save">
-    <label for="local-cover-file">选择图片</label>
+    <label for="local-cover-file">选择本地图片</label>
     <input
       id="local-cover-file"
       ref="input"
@@ -203,7 +203,7 @@ async function save() {
       @change="choose"
     />
     <p class="editor-note">
-      静态 JPEG、PNG 或 WebP，最大 8 MiB。保存后如需重新裁剪，请再次选择原图。
+      支持静态 JPEG、PNG 或 WebP，最大 8 MiB。桌面卡面较宽，建议选择横向图片。桌面和手机可分别取景，保存后如需重新裁剪，请再次选择原图。
     </p>
     <p v-if="loading" role="status">正在读取图片…</p>
     <fieldset v-if="bitmap" class="editor-controls" :disabled="saving || loading">
@@ -249,7 +249,7 @@ async function save() {
     <div class="editor-buttons">
       <ElButton :disabled="saving" @click="emit('cancel')">取消</ElButton>
       <ElButton native-type="submit" type="primary" :loading="saving" :disabled="!bitmap || loading"
-        >保存并在本机使用</ElButton
+        >保存并使用本地图片</ElButton
       >
     </div>
   </form>
