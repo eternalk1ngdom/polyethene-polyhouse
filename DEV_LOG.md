@@ -2,6 +2,7 @@
 
 更新时间：2026-11-24（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.20.md](docs/dev-log/v1.0-dev.20.md)。
 
+- [本地自定义卡面](docs/plans/local-profile-cover.md)设计完成，待实施。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
 
 - [个人空间卡面](docs/dev-log/v1.0-dev.20.md#购买与佩戴)已实现购买、等级解锁与跨端佩戴（PR #20 合 `dev`）。
