@@ -14,6 +14,8 @@ import {
   TrendCharts,
   User,
 } from '@element-plus/icons-vue'
+import ProfileCoverPicker from '../components/ProfileCoverPicker.vue'
+import type { CoverKey } from '../api/profileCovers'
 import UserAvatar from '../components/UserAvatar.vue'
 import AvatarUploadDialog from '../components/AvatarUploadDialog.vue'
 import ProfileSubmissionsPanel from '../components/ProfileSubmissionsPanel.vue'
@@ -32,6 +34,7 @@ const accountUi = useAccountUiStore()
 const growth = useUserGrowthStore()
 const stats = computed(() => growth.summary ?? userStore.user)
 const refreshing = ref(false)
+const equippedCover = ref<CoverKey>('window')
 const avatarVisible = ref(false)
 const avatarNotice = ref('')
 const route = useRoute()
@@ -81,6 +84,7 @@ watch(
   () => {
     refreshSequence++
     refreshing.value = false
+    equippedCover.value = 'window'
     avatarVisible.value = false
     avatarNotice.value = ''
   },
@@ -133,10 +137,26 @@ onMounted(() => {
     >
     <template v-if="userStore.isLoggedIn && userStore.user">
       <section class="profile-hero" aria-labelledby="profile-name">
-        <div class="profile-cover">
-          <span>MY SPACE / 我的个人空间</span
-          ><span class="cover-word" aria-hidden="true">Hello, you.</span
-          ><span class="cover-stamp" aria-hidden="true">MAKE ROOM<br />FOR YOURSELF</span>
+        <div class="profile-cover" :data-cover="equippedCover">
+          <span>我的个人空间</span>
+          <ProfileCoverPicker
+            v-if="!userStore.requiresPasswordChange"
+            :key="userStore.token"
+            @applied="equippedCover = $event"
+          >
+            <template #preview="{ cover }">
+              <div class="profile-cover cover-preview" :data-cover="cover">
+                <span>我的个人空间</span>
+                <div class="preview-avatar">
+                  <UserAvatar
+                    :name="userDisplayName(userStore.user)"
+                    :src="userStore.user.avatar"
+                    :size="44"
+                  />
+                </div>
+              </div>
+            </template>
+          </ProfileCoverPicker>
         </div>
         <div class="profile-overview">
           <button
@@ -414,38 +434,40 @@ onMounted(() => {
   background: white;
 }
 .profile-cover {
-  height: 180px;
-  background: var(--ph-lilac);
   position: relative;
-  overflow: hidden;
+  --cover-art: url('../assets/profile-window-panorama.webp');
+  height: 180px;
   padding: 25px 34px;
+  background: #f8dfc0 var(--cover-art) 92% center / cover no-repeat;
   color: var(--ph-ink);
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
 }
-.cover-word {
-  position: absolute;
-  right: 13%;
-  bottom: -20px;
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-weight: 500;
-  font-size: clamp(75px, 10vw, 140px);
-  letter-spacing: -6px;
-  color: #443259;
-  transform: rotate(-6deg);
+.cover-preview {
+  border-radius: 12px;
 }
-.cover-stamp {
+.preview-avatar {
   position: absolute;
-  right: 30px;
-  top: 27px;
-  padding: 13px;
-  border: 1px solid #89729e;
-  font-size: 8px;
-  line-height: 1.6;
-  transform: rotate(8deg);
+  bottom: -14px;
+  left: 15px;
+  border: 3px solid white;
   border-radius: 50%;
+  background: white;
 }
+.profile-cover[data-cover='koi'],
+.profile-cover[data-cover='astrolabe'] {
+  color: #fff;
+  background:
+    radial-gradient(ellipse 150px 54px at 68px 33px, #121528cc 36%, transparent),
+    var(--cover-art) 76% center / cover no-repeat #17192e;
+}
+.profile-cover[data-cover='koi'] {
+  --cover-art: url('../assets/profile-koi-panorama.webp');
+}
+.profile-cover[data-cover='astrolabe'] {
+  --cover-art: url('../assets/profile-astrolabe-panorama.webp');
+}
+
 .profile-overview {
   display: flex;
   gap: 24px;
@@ -771,17 +793,6 @@ h1 {
     height: 145px;
     padding: 20px;
   }
-  .cover-stamp {
-    right: 14px;
-    font-size: 7px;
-  }
-  .cover-word {
-    right: 12%;
-    font-size: clamp(48px, 14vw, 68px);
-    line-height: 1.05;
-    white-space: nowrap;
-    bottom: -8px;
-  }
   .profile-overview {
     /* 固定头像列和资料列，刷新按钮独占下一行，避免中间宽度把昵称挤成竖排。 */
     display: grid;
@@ -832,6 +843,18 @@ h1 {
     display: flex;
     justify-content: center;
     margin: 22px 0 0;
+  }
+}
+@media (max-width: 560px) {
+  .profile-cover {
+    --cover-art: url('../assets/profile-window-closeup.webp');
+    background-position: 67% center;
+  }
+  .profile-cover[data-cover='koi'] {
+    --cover-art: url('../assets/profile-koi-closeup.webp');
+  }
+  .profile-cover[data-cover='astrolabe'] {
+    --cover-art: url('../assets/profile-astrolabe-closeup.webp');
   }
 }
 @media (max-width: 480px) {

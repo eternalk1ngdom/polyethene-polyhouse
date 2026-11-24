@@ -95,6 +95,12 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
     return promise
   }
 
+  /** 交易前发出的成长读取不可覆盖交易后的余额。 */
+  function refreshAfterPurchase(): Promise<void> {
+    reset()
+    return refresh()
+  }
+
   watch(
     [
       () => userStore.token,
@@ -113,5 +119,5 @@ export const useUserGrowthStore = defineStore('user-growth', () => {
     clearTimer()
   })
 
-  return { summary, status, errorMessage, refresh }
+  return { summary, status, errorMessage, refresh, refreshAfterPurchase }
 })

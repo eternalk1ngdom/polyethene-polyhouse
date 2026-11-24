@@ -2,6 +2,10 @@
 
 本机 MySQL 8.0 和 TiDB Cloud MySQL Compatible 共用 [001_schema.sql](../../polyhouse/sql/001_schema.sql)。先创建并明确选中一个空库，再执行脚本。脚本建立 13 张业务表、一个空屋主槽和起始发号记录。首次执行后用户表为空，应用启动时也不会自动建表或开户。
 
+## 个人空间卡面追加迁移
+
+卡面版本在基础账号表建立之后执行 [016_profile_covers.sql](../../polyhouse/sql/016_profile_covers.sql)，同样适用于已有账号库。先核对目标库名，执行后用 SHOW CREATE TABLE 分别核对 sys_profile_cover_purchase 的联合主键、正支出约束与外键，及 sys_profile_cover_preference 的账号主键与外键。应用回退时保留两表与用户余额，避免丢失真实支出的凭证。旧版前端会显示默认窗景。迁移不发币、不购买，也无需为旧账号补行。
+
 ## 建库与核对
 
 1. 本机停写并备份后，在 MySQL 客户端执行 `CREATE DATABASE polyhouse_db CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;`。使用 `USE polyhouse_db;` 选中目标。TiDB Cloud 使用控制台给出的 TLS 参数连接并明确选中目标空库。
