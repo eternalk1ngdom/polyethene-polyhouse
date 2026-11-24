@@ -44,14 +44,15 @@ class TrendBriefingCodecTest {
         assertThat(body.path("response_format").path("type").asText()).isEqualTo("json_object");
         assertThat(body.has("tools")).isFalse();
 
-        // 嵌入在 system prompt 中的正面示范 JSON 自身必须严格通过编解码器校验。
+        // 嵌入在 system prompt 中的正面示范 JSON 自身必须严格通过编解码器校验，且包含防硬凑与中文指标要求。
         String system = body.path("messages").get(0).path("content").asText();
+        assertThat(system).contains("宁可只输出 2 条高置信度主题", "严禁照抄输入 JSON 的英文键名");
         String fewShotJson = system.substring(system.indexOf("\n{") + 1).strip();
         var demoWhitelist = Map.of(
-                "demo/code-pilot", "demo/code-pilot",
-                "demo/shell-weaver", "demo/shell-weaver",
-                "demo/yaml-guard", "demo/yaml-guard",
-                "demo/schema-lint", "demo/schema-lint");
+                "demo/ota-diff", "demo/ota-diff",
+                "demo/flash-pack", "demo/flash-pack",
+                "demo/synth-graph", "demo/synth-graph",
+                "demo/dsp-rack", "demo/dsp-rack");
         var parsedDemo = codec.parse(fewShotJson, demoWhitelist);
         assertThat(parsedDemo.themes()).hasSize(2);
         assertThat(parsedDemo.watchouts()).hasSize(2);
