@@ -41,6 +41,9 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const DEFAULT_SAMPLE_LIMIT = 3
+// 从月夜全景横幅提取的 5 阶低饱和色，供分类总览堆叠条与下方分类卡进度条一一对应。
+const CATEGORY_PALETTE = ['#1e5575', '#348391', '#d49a3a', '#7c6296', '#8ca4b3'] as const
+
 const expandedCategories = ref<Record<string, boolean>>({})
 
 watch(
@@ -72,6 +75,24 @@ const scopeSummaryHint = computed(() => {
   }
   return parts.join(' · ')
 })
+
+const proportionSegments = computed(() => {
+  if (!props.stats || isSmallSample.value) return []
+  return props.stats.categories
+    .map((cat, idx) => ({
+      category: cat.category,
+      label: categoryLabel(cat.category),
+      share: cat.windowShare ?? 0,
+      shareText: trendPercent(cat.windowShare),
+      count: cat.windowUniqueCount,
+      color: categoryColor(idx),
+    }))
+    .filter((seg) => seg.share > 0)
+})
+
+function categoryColor(index: number): string {
+  return CATEGORY_PALETTE[Math.min(index, CATEGORY_PALETTE.length - 1)] ?? '#8ca4b3'
+}
 
 function barWidth(share: number | null): string {
   if (share === null) return '0%'
@@ -206,115 +227,147 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
           {{ stats.windowSummary.docListRepoCount }} 个，待解读
           {{ stats.windowSummary.missingInsightRepoCount }} 个）。
         </p>
-        <div v-else class="category-grid">
-          <article
-            v-for="(cat, idx) in stats.categories"
-            :key="cat.category"
-            class="category-item"
-            :class="{ 'is-top': !isSmallSample && idx === 0 }"
-          >
-            <div class="cat-top">
-              <div class="cat-title-wrap">
-                <strong class="cat-name">{{ categoryLabel(cat.category) }}</strong>
-                <span
-                  v-if="cat.staleClassifiedCount > 0"
-                  class="stale-dot"
-                  :title="
-                    cat.oldestStaleAnalyzedAt
-                      ? `含 ${cat.staleClassifiedCount} 个沿用旧解读归类（最早 ${trendTime(cat.oldestStaleAnalyzedAt)}）`
-                      : `含 ${cat.staleClassifiedCount} 个沿用旧解读归类`
-                  "
-                  >含旧稿</span
-                >
-              </div>
-              <span class="cat-count">
-                {{ cat.windowUniqueCount }} 个仓库
-                <template v-if="!isSmallSample && cat.windowShare !== null">
-                  · {{ trendPercent(cat.windowShare) }}
-                </template>
-              </span>
+        <template v-else>
+          <!-- 样本充足时展示 100% 堆叠份额总览条与文字图例，帮助读者快速感知整体赛道格局。 -->
+          <div v-if="proportionSegments.length" class="proportion-overview">
+            <div class="stacked-bar" aria-hidden="true">
+              <span
+                v-for="seg in proportionSegments"
+                :key="seg.category"
+                class="stacked-seg"
+                :style="{ flexGrow: seg.share, backgroundColor: seg.color }"
+              />
             </div>
-            <div
-              v-if="!isSmallSample && cat.windowShare !== null"
-              class="share-track"
-              aria-hidden="true"
+            <ul class="proportion-legend" aria-label="分类占比总览">
+              <li v-for="seg in proportionSegments" :key="seg.category">
+                <span
+                  class="legend-dot"
+                  :style="{ backgroundColor: seg.color }"
+                  aria-hidden="true"
+                />
+                <span class="legend-name">{{ seg.label }}</span>
+                <span class="legend-share">{{ seg.shareText }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="category-grid">
+            <article
+              v-for="(cat, idx) in stats.categories"
+              :key="cat.category"
+              class="category-item"
+              :style="{ '--cat-accent': categoryColor(idx) }"
             >
-              <div class="share-fill" :style="{ width: barWidth(cat.windowShare) }" />
-            </div>
-            <div class="cat-metrics-row">
-              <span class="metric-piece">
-                本期 <strong>{{ cat.anchorDayCount }} 个</strong>
-                <span
-                  v-if="!isSmallSample && cat.shareDelta !== null"
-                  class="delta-badge"
-                  :class="deltaTone(cat.shareDelta)"
-                  >较前序 {{ trendDeltaPercent(cat.shareDelta) }}</span
-                >
-              </span>
-              <span class="metric-piece">
-                <template v-if="cat.medianStarsAdded !== null">
-                  中位
-                  <strong class="star-metric">
-                    <ElIcon aria-hidden="true"><StarFilled /></ElIcon>+{{
-                      trendMedianNumber(cat.medianStarsAdded)
-                    }}
-                  </strong>
-                  <span v-if="cat.maxRepoStarsAdded !== null" class="muted">
-                    最高 +{{ trendNumber(cat.maxRepoStarsAdded) }}
-                  </span>
-                </template>
-                <template v-else><span class="muted">涨星样本未知</span></template>
-              </span>
-            </div>
-            <div v-if="cat.sampleRepos.length" class="sample-repos">
-              <div class="sample-head">
-                <span class="sample-label">代表项目</span>
-                <button
-                  v-if="cat.sampleRepos.length > DEFAULT_SAMPLE_LIMIT"
-                  type="button"
-                  class="more-repos-btn"
-                  :aria-expanded="isCategoryExpanded(cat.category)"
-                  @click="toggleCategory(cat.category)"
-                >
-                  {{
-                    isCategoryExpanded(cat.category)
-                      ? '收起'
-                      : `展开全部 ${cat.sampleRepos.length} 个`
-                  }}
-                </button>
-              </div>
-              <ul class="sample-chips">
-                <li v-for="repo in visibleRepos(cat)" :key="repo.fullName" class="sample-chip">
-                  <a
-                    v-if="repo.inAnchorDay"
-                    class="repo-link"
-                    :href="resolveDetailHref(repo.fullName)"
-                    @click="emit('openProject', $event, repo.fullName)"
-                    >{{ repo.fullName }}</a
+              <div class="cat-top">
+                <div class="cat-title-wrap">
+                  <span v-if="!isSmallSample" class="cat-dot" aria-hidden="true" />
+                  <strong class="cat-name">{{ categoryLabel(cat.category) }}</strong>
+                  <span
+                    v-if="cat.staleClassifiedCount > 0"
+                    class="stale-dot"
+                    :aria-label="`含 ${cat.staleClassifiedCount} 个沿用旧解读归类`"
+                    :title="
+                      cat.oldestStaleAnalyzedAt
+                        ? `含 ${cat.staleClassifiedCount} 个沿用旧解读归类（最早 ${trendTime(cat.oldestStaleAnalyzedAt)}）`
+                        : `含 ${cat.staleClassifiedCount} 个沿用旧解读归类`
+                    "
+                    >含旧稿</span
                   >
-                  <a
-                    v-else
-                    class="repo-link"
-                    :href="repo.repoUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    >{{ repo.fullName
-                    }}<ElIcon class="ext-icon" aria-hidden="true"><TopRight /></ElIcon
-                  ></a>
-                  <span class="chip-meta">
-                    <template v-if="repo.appearanceDays >= 2">{{ repo.appearanceDays }}天</template>
-                    <template v-if="repo.appearanceDays >= 2 && repo.latestStarsAdded !== null">
-                      ·
-                    </template>
-                    <template v-if="repo.latestStarsAdded !== null"
-                      >+{{ trendNumber(repo.latestStarsAdded) }}</template
-                    >
+                </div>
+                <span class="cat-count">
+                  {{ cat.windowUniqueCount }} 个仓库
+                  <template v-if="!isSmallSample && cat.windowShare !== null">
+                    · {{ trendPercent(cat.windowShare) }}
+                  </template>
+                </span>
+              </div>
+              <div
+                v-if="!isSmallSample && cat.windowShare !== null"
+                class="share-track"
+                aria-hidden="true"
+              >
+                <div class="share-fill" :style="{ width: barWidth(cat.windowShare) }" />
+              </div>
+              <div class="cat-metrics-row">
+                <span class="metric-piece">
+                  本期 <strong>{{ cat.anchorDayCount }} 个</strong>
+                  <span
+                    v-if="!isSmallSample && cat.shareDelta !== null"
+                    class="delta-badge"
+                    :class="deltaTone(cat.shareDelta)"
+                  >
+                    <span v-if="cat.shareDelta > 0" aria-hidden="true">↑</span>
+                    <span v-else-if="cat.shareDelta < 0" aria-hidden="true">↓</span>
+                    较前序 {{ trendDeltaPercent(cat.shareDelta) }}
                   </span>
-                </li>
-              </ul>
-            </div>
-          </article>
-        </div>
+                </span>
+                <span class="metric-piece">
+                  <template v-if="cat.medianStarsAdded !== null">
+                    中位
+                    <strong class="star-metric">
+                      <ElIcon aria-hidden="true"><StarFilled /></ElIcon>+{{
+                        trendMedianNumber(cat.medianStarsAdded)
+                      }}
+                    </strong>
+                    <span v-if="cat.maxRepoStarsAdded !== null" class="muted">
+                      最高 +{{ trendNumber(cat.maxRepoStarsAdded) }}
+                    </span>
+                  </template>
+                  <template v-else><span class="muted">涨星样本未知</span></template>
+                </span>
+              </div>
+              <div v-if="cat.sampleRepos.length" class="sample-repos">
+                <div class="sample-head">
+                  <span class="sample-label">代表项目</span>
+                  <button
+                    v-if="cat.sampleRepos.length > DEFAULT_SAMPLE_LIMIT"
+                    type="button"
+                    class="more-repos-btn"
+                    :aria-expanded="isCategoryExpanded(cat.category)"
+                    @click="toggleCategory(cat.category)"
+                  >
+                    {{
+                      isCategoryExpanded(cat.category)
+                        ? '收起'
+                        : `展开全部 ${cat.sampleRepos.length} 个`
+                    }}
+                  </button>
+                </div>
+                <ul class="sample-chips">
+                  <li v-for="repo in visibleRepos(cat)" :key="repo.fullName" class="sample-chip">
+                    <a
+                      v-if="repo.inAnchorDay"
+                      class="repo-link"
+                      :href="resolveDetailHref(repo.fullName)"
+                      @click="emit('openProject', $event, repo.fullName)"
+                      >{{ repo.fullName }}</a
+                    >
+                    <a
+                      v-else
+                      class="repo-link"
+                      :href="repo.repoUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >{{ repo.fullName
+                      }}<ElIcon class="ext-icon" aria-hidden="true"><TopRight /></ElIcon
+                    ></a>
+                    <span class="chip-meta">
+                      <template v-if="repo.appearanceDays >= 2"
+                        >{{ repo.appearanceDays }}天</template
+                      >
+                      <template v-if="repo.appearanceDays >= 2 && repo.latestStarsAdded !== null">
+                        ·
+                      </template>
+                      <template v-if="repo.latestStarsAdded !== null"
+                        >+{{ trendNumber(repo.latestStarsAdded) }}</template
+                      >
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </template>
       </section>
 
       <section class="editorial-section" aria-labelledby="window-recurring-heading">
@@ -428,11 +481,6 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   border-color: #154e78;
   background: #e4eef0;
 }
-.retry-btn:focus-visible {
-  outline: none;
-  border-color: #154e78;
-  box-shadow: inset 0 0 0 1px #154e78;
-}
 .window-head {
   display: flex;
   flex-wrap: wrap;
@@ -449,13 +497,14 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 }
 .window-head h2 {
   margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.03em;
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   color: #142f46;
 }
 .status-tag {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   padding: 3px 10px;
   border-radius: 999px;
   background: #e4f0ee;
@@ -487,7 +536,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   gap: 4px;
   min-width: 0;
   padding: 16px 18px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #f3f7f9;
 }
 /* 4 张总览轻底块呼应横幅的海雾蓝、潮青、弯月暖金与暮空微紫，同时与发布台账本卡保持家族感。 */
@@ -536,9 +585,9 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .scope-disclosure {
   margin-top: 14px;
   padding: 2px 14px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #f6f9fb;
-  border: 1px solid #e2ecef;
+  border: 1px solid #e4edf0;
 }
 .scope-summary {
   display: flex;
@@ -562,7 +611,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   display: inline-block;
   margin-right: 7px;
   color: #6b8496;
-  transition: transform 0.15s ease;
+  transition: transform 0.16s ease;
 }
 .scope-disclosure[open] .scope-summary > span:first-child::before {
   transform: rotate(90deg);
@@ -576,8 +625,8 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   font-variant-numeric: tabular-nums;
 }
 .scope-notes {
-  padding: 4px 0 12px;
-  border-top: 1px solid #e2ecef;
+  padding: 6px 0 12px;
+  border-top: 1px solid #e4edf0;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -590,7 +639,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   margin: 0;
 }
 .editorial-section {
-  margin-top: 38px;
+  margin-top: 40px;
 }
 .section-bar {
   display: flex;
@@ -599,30 +648,19 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   justify-content: space-between;
   gap: 6px 14px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #cfdde2;
+  border-bottom: 1px solid #e1eaed;
 }
 .section-bar h3 {
-  position: relative;
   margin: 0;
-  padding-left: 12px;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   color: #142f46;
-}
-.section-bar h3::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 3px;
-  bottom: 3px;
-  width: 3px;
-  border-radius: 99px;
-  background: #1d5370;
 }
 .section-denom {
   font-size: 12px;
   font-weight: 600;
-  color: #556b7d;
+  color: #5b7182;
   font-variant-numeric: tabular-nums;
 }
 .empty-note {
@@ -630,24 +668,69 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   font-size: 13.5px;
   color: #4f6372;
 }
+.proportion-overview {
+  margin-top: 18px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: #f7fafb;
+  border: 1px solid #e4edf0;
+}
+.stacked-bar {
+  display: flex;
+  gap: 3px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e9f0f3;
+}
+.stacked-seg {
+  min-width: 6px;
+  border-radius: 3px;
+}
+.proportion-legend {
+  list-style: none;
+  margin: 11px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 12.5px;
+  color: #3c5365;
+  font-variant-numeric: tabular-nums;
+}
+.proportion-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.legend-name {
+  font-weight: 600;
+  color: #1c3448;
+}
+.legend-share {
+  color: #5b7182;
+}
 .category-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 20px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 .category-item {
   display: flex;
   flex-direction: column;
   padding: 18px 20px;
-  border: 1px solid #dce6e9;
-  border-radius: 13px;
+  border: 1px solid #dce6ea;
+  border-radius: 14px;
   background: #ffffff;
+  box-shadow: 0 2px 12px rgba(20, 47, 70, 0.035);
   min-width: 0;
-}
-.category-item.is-top {
-  border-color: #cbdbe2;
-  background: linear-gradient(180deg, #fafdff 0%, #ffffff 72px);
 }
 .cat-top {
   display: flex;
@@ -662,8 +745,16 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   gap: 8px;
   min-width: 0;
 }
+.cat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cat-accent, #1e5575);
+  flex: none;
+}
 .cat-name {
   font-size: 15.5px;
+  font-weight: 650;
   color: #142f46;
 }
 .stale-dot {
@@ -690,10 +781,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .share-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #1b4f6e 0%, #3e8299 100%);
-}
-.category-item.is-top .share-fill {
-  background: linear-gradient(90deg, #154566 0%, #2f7b94 78%, #d49a3a 100%);
+  background: var(--cat-accent, #1e5575);
 }
 .cat-metrics-row {
   margin: 12px 0;
@@ -714,7 +802,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 }
 .metric-piece strong {
   color: #142f46;
-  font-weight: 700;
+  font-weight: 650;
 }
 .star-metric {
   display: inline-flex;
@@ -729,7 +817,8 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .delta-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  gap: 2px;
+  padding: 1px 8px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 600;
@@ -753,7 +842,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .sample-repos {
   margin-top: auto;
   padding-top: 12px;
-  border-top: 1px dashed #dce6e9;
+  border-top: 1px dashed #e0e9ec;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -763,7 +852,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 4px 10px;
+  gap: 6px 10px;
 }
 .sample-label {
   font-size: 12px;
@@ -773,29 +862,27 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .more-repos-btn {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 10px;
-  margin: -12px -10px -12px 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #dce6ea;
+  border-radius: 999px;
+  background: #f6fafb;
   color: #1d4e6b;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
 }
 .more-repos-btn:hover {
-  background: #edf4f6;
+  background: #eaf2f5;
+  border-color: #b7ccd5;
 }
 .more-repos-btn:active {
   border-color: #154e78;
   background: #e1ecef;
-}
-.more-repos-btn:focus-visible {
-  outline: none;
-  border-color: #154e78;
-  box-shadow: inset 0 0 0 1px #154e78;
 }
 .sample-chips {
   list-style: none;
@@ -803,7 +890,7 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
 }
 .sample-chip {
   display: inline-flex;
@@ -811,15 +898,15 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  padding: 5px 10px;
+  padding: 5px 11px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: #f2f6f8;
   font-size: 12.5px;
   line-height: 1.4;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+    background-color 0.16s ease,
+    border-color 0.16s ease;
 }
 .sample-chip:hover {
   background: #e8f1f4;
@@ -849,16 +936,25 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   margin-left: 3px;
   vertical-align: -2px;
 }
+/* 多日上榜仓库收进同款 Soft Bento 圆角白卡，与上方简报卡、分类卡保持一致的收口节奏。 */
 .recurring-list {
-  margin-top: 6px;
+  margin-top: 18px;
+  padding: 4px 22px;
+  border: 1px solid #dce6ea;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(20, 47, 70, 0.04);
 }
 .recurring-row {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr) auto;
   align-items: start;
   gap: 18px;
-  padding: 20px 0;
-  border-bottom: 1px solid #e1eaed;
+  padding: 18px 0;
+  border-bottom: 1px solid #e6eef1;
+}
+.recurring-row:last-child {
+  border-bottom: 0;
 }
 .rec-days {
   display: flex;
@@ -900,9 +996,10 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 }
 .rec-title-line h4 {
   margin: 0;
-  font-size: clamp(17px, 2.2vw, 21px);
-  line-height: 1.32;
-  letter-spacing: -0.02em;
+  font-size: clamp(17px, 2.2vw, 20px);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
 }
 .org {
   color: #546a7d;
@@ -911,8 +1008,8 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
 .cat-pill,
 .off-anchor {
   font-size: 11.5px;
-  font-weight: 650;
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 2px 9px;
   border-radius: 999px;
 }
 .cat-pill {
@@ -980,8 +1077,14 @@ function visibleRepos(cat: TrendWindowCategoryStat): TrendWindowSampleRepo[] {
   .editorial-section {
     margin-top: 30px;
   }
+  .proportion-overview {
+    padding: 12px 14px;
+  }
   .category-item {
     padding: 16px;
+  }
+  .recurring-list {
+    padding: 2px 14px;
   }
   .recurring-row {
     grid-template-columns: 64px minmax(0, 1fr) auto;

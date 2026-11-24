@@ -468,9 +468,10 @@ watch(
   gap: 4px 16px;
   color: #142f46;
   font:
-    700 clamp(36px, 5vw, 62px)/1.1 Georgia,
-    'Songti SC',
-    SimSun,
+    700 clamp(36px, 5vw, 62px)/1.1 'Songti SC',
+    'STSong',
+    'Noto Serif SC',
+    Georgia,
     serif;
 }
 .cover h1 em {
@@ -551,11 +552,11 @@ select {
   min-height: 44px;
   max-width: 100%;
   min-width: 0;
-  padding: 6px 9px;
-  border: 1px solid #9daeb8;
+  padding: 6px 10px;
+  border: 1px solid #cad8de;
   background: white;
   color: #213951;
-  border-radius: 9px;
+  border-radius: 10px;
 }
 select:focus-visible {
   outline: none;
@@ -615,7 +616,7 @@ select:focus-visible {
   margin: 6px 0 12px;
 }
 .columns {
-  border-bottom: 2px solid #273b50;
+  border-bottom: 1px solid #cfdde2;
   padding: 8px 0;
   font-weight: 650;
 }

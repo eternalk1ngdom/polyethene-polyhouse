@@ -55,9 +55,9 @@ function themeNumber(index: number): string {
           </svg>
           AI 跨日综合 · 基于 {{ briefing.coveredDays }} 天样本
         </span>
-        <span class="sample-pill" :class="briefing.sampleStatus.toLowerCase()">{{
-          sampleTag
-        }}</span>
+        <span class="sample-note" :class="briefing.sampleStatus.toLowerCase()">
+          · {{ sampleTag }}
+        </span>
       </div>
       <span v-if="briefing.generatedAt" class="generated-at">
         生成于 {{ trendTime(briefing.generatedAt) }}（北京时间）
@@ -73,7 +73,7 @@ function themeNumber(index: number): string {
       <p class="overview">{{ briefing.overview }}</p>
     </div>
 
-    <!-- 3 条主题采用「1 条通栏主风口 + 2 条并列宽卡」报刊头条结构，2 条时自然双列舒展。 -->
+    <!-- 3 条主题采用「1 条通栏主风口 + 2 条并列宽卡」Soft Bento 结构，2 条时自然双列舒展。 -->
     <div class="theme-grid" :class="{ 'is-trio': isTrio }">
       <article
         v-for="(theme, index) in briefing.themes"
@@ -119,7 +119,7 @@ function themeNumber(index: number): string {
       </article>
     </div>
 
-    <!-- 冷静边界提醒默认折叠在简报底部，保持主阅读流清爽，需要核对局限时一键展开。 -->
+    <!-- 冷静边界提醒默认折叠在简报底部，带明确展开指示箭头，保持主阅读流清爽。 -->
     <details v-if="briefing.watchouts.length" class="watchouts">
       <summary class="watchout-summary">边界提醒（{{ briefing.watchouts.length }} 条）</summary>
       <ul>
@@ -131,12 +131,13 @@ function themeNumber(index: number): string {
 
 <style scoped>
 .briefing-card {
-  margin: 0 0 32px;
-  padding: clamp(20px, 2.8vw, 30px);
-  background: linear-gradient(180deg, #fafcfd 0%, #ffffff 130px);
-  border: 1px solid #cddbe0;
-  border-top: 3px solid var(--st-accent);
+  margin: 0 0 34px;
+  padding: clamp(22px, 2.8vw, 30px);
+  background: #ffffff;
+  /* 四边一致细边框搭配极轻弥散阴影，取代单边粗框在圆角处的视觉突兀感。 */
+  border: 1px solid #dce6ea;
   border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(20, 47, 70, 0.04);
 }
 
 .briefing-meta {
@@ -158,14 +159,14 @@ function themeNumber(index: number): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
+  padding: 4px 12px;
   border-radius: 999px;
-  /* 暖金轻底直接呼应横幅弯月与星光，作为整页最克制的提亮点缀。 */
+  /* 暖金轻底呼应横幅弯月与星光，作为首屏唯一暖色焦点。 */
   background: #fdf6e4;
-  border: 1px solid #eed79f;
+  border: 1px solid #eed9a6;
   color: #7a5210;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -174,32 +175,23 @@ function themeNumber(index: number): string {
   flex: none;
 }
 
-.sample-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+.sample-note {
+  font-size: 12.5px;
   font-weight: 600;
-  border: 1px solid var(--st-line-strong);
-  color: var(--st-muted);
+  color: #4f6678;
 }
 
-.sample-pill.limited {
-  background: #fdf6e7;
-  border-color: #e6cfa0;
-  color: #7c5617;
+.sample-note.sufficient {
+  color: #2f6b4f;
 }
 
-.sample-pill.sufficient {
-  background: #eef6f1;
-  border-color: #c2decb;
-  color: #1f5c3e;
+.sample-note.limited {
+  color: #8b5d16;
 }
 
 .generated-at {
   font-size: 12px;
-  color: var(--st-muted);
+  color: #5b7182;
   font-variant-numeric: tabular-nums;
 }
 
@@ -215,16 +207,17 @@ function themeNumber(index: number): string {
 }
 
 .briefing-lead {
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .headline {
   margin: 0 0 10px;
-  font:
-    700 clamp(21px, 2.5vw, 26px)/1.34 Georgia,
-    'Songti SC',
-    SimSun,
-    serif;
+  /* 统一采用柔和现代无衬线字体与 600 字重，避免 Windows 回退锋利宋体导致割裂感。 */
+  font-family: var(--ph-font);
+  font-size: clamp(20px, 2.2vw, 24px);
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: -0.015em;
   color: var(--st-ink-deep);
   text-wrap: balance;
   overflow-wrap: anywhere;
@@ -232,9 +225,9 @@ function themeNumber(index: number): string {
 
 .overview {
   margin: 0;
-  max-width: 76ch;
-  color: #2f4657;
-  font-size: 15px;
+  max-width: 82ch;
+  color: #364e60;
+  font-size: 14.5px;
   line-height: 1.76;
   overflow-wrap: anywhere;
 }
@@ -251,18 +244,18 @@ function themeNumber(index: number): string {
   flex-direction: column;
   gap: 12px;
   padding: 18px 20px;
-  border: 1px solid #dce6e9;
-  border-radius: 12px;
-  background: #f9fcfd;
+  border: 1px solid #e4eef2;
+  border-radius: 14px;
+  background: #f6fafc;
   min-width: 0;
 }
 
 .theme-item.is-lead {
   grid-column: 1 / -1;
   padding: 20px 22px;
-  border-color: #d7e2e6;
-  border-left: 3px solid #d59a38;
-  background: linear-gradient(135deg, #fffdf8 0%, #f8fbfd 68%);
+  /* 通过极淡暖象牙色面与细边自然标示主风口，不再叠加单边粗竖线。 */
+  border: 1px solid #efe4ca;
+  background: #fdfaf2;
 }
 
 .theme-head {
@@ -275,44 +268,50 @@ function themeNumber(index: number): string {
 
 .theme-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 9px;
   min-width: 0;
 }
 
 .theme-index {
-  font:
-    700 13px/1 Georgia,
-    serif;
-  letter-spacing: 0.04em;
-  color: #637f92;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6eff3;
+  color: #456072;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   flex: none;
 }
 
 .theme-item.is-lead .theme-index {
-  color: #b7791f;
+  background: #f6e7c6;
+  color: #8f5e11;
 }
 
 .theme-title {
   margin: 0;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--st-ink-deep);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .theme-item.is-lead .theme-title {
-  font-size: 17px;
+  font-size: 16.5px;
 }
 
 .signal-tag {
   flex: none;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11.5px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .signal-tag.concentration {
@@ -332,47 +331,45 @@ function themeNumber(index: number): string {
 
 .theme-summary {
   margin: 0;
-  color: #253b4d;
+  color: #2b4153;
   font-size: 14px;
-  line-height: 1.72;
+  line-height: 1.74;
   overflow-wrap: anywhere;
-}
-
-.theme-item.is-lead .theme-summary {
-  max-width: 78ch;
 }
 
 .evidence-row {
   margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px dashed #d7e3e7;
+  padding-top: 12px;
+  border-top: 1px dashed #d9e5e9;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-item.is-lead .evidence-row {
+  border-top-color: #eadec0;
 }
 
 .evidence-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--st-muted);
-  flex: none;
+  color: #5b7182;
 }
 
 .evidence-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 8px;
 }
 
 .repo-link {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #eaf3f6;
+  background: #e9f2f5;
   color: #194c69;
   font-size: 12.5px;
   font-weight: 600;
@@ -380,13 +377,24 @@ function themeNumber(index: number): string {
   text-decoration: none;
   overflow-wrap: anywhere;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.theme-item.is-lead .repo-link {
+  background: #f4efe0;
+  color: #3f4b56;
+}
+
+.theme-item.is-lead .repo-link:hover {
+  background: #ece3cc;
+  border-color: #d6c397;
+  color: var(--st-ink-deep);
 }
 
 .repo-link:hover {
-  background: #dfeef3;
-  border-color: #9cbccf;
+  background: #dfecf1;
+  border-color: #a9c5d4;
   color: var(--st-ink-deep);
 }
 
@@ -394,15 +402,10 @@ function themeNumber(index: number): string {
   border-color: var(--st-ink-deep);
 }
 
-.repo-link:focus-visible {
-  outline: 2px solid var(--st-accent);
-  outline-offset: 2px;
-}
-
 .watchouts {
   margin-top: 18px;
-  padding-top: 8px;
-  border-top: 1px solid #e3ecef;
+  padding-top: 10px;
+  border-top: 1px solid #e7eff2;
   font-size: 13px;
   color: var(--st-muted);
 }
@@ -413,22 +416,44 @@ function themeNumber(index: number): string {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  padding: 6px 2px;
+  padding: 6px 10px 6px 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12.5px;
   font-weight: 650;
   color: #4f6678;
   font-variant-numeric: tabular-nums;
+  list-style: none;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.watchout-summary::-webkit-details-marker {
+  display: none;
+}
+
+.watchout-summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 7px;
+  color: #6b8496;
+  transition: transform 0.16s ease;
+}
+
+.watchouts[open] .watchout-summary::before {
+  transform: rotate(90deg);
 }
 
 .watchout-summary:hover {
+  background: #f4f8fa;
   color: var(--st-ink-deep);
 }
 
 .watchouts ul {
-  margin: 4px 0 6px;
-  padding-left: 18px;
-  line-height: 1.65;
+  margin: 6px 0 4px;
+  padding-left: 20px;
+  line-height: 1.68;
 }
 
 .watchouts li + li {
@@ -453,7 +478,7 @@ function themeNumber(index: number): string {
 
   .theme-item,
   .theme-item.is-lead {
-    padding: 15px 14px;
+    padding: 16px 14px;
   }
 }
 </style>
