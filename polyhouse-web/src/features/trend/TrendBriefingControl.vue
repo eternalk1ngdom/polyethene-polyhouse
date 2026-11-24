@@ -121,9 +121,11 @@ const thresholdHint = computed(() => {
 
 <style scoped>
 .briefing-panel {
-  margin: 22px 0;
-  border-top: 2px solid #254554;
-  padding-top: 17px;
+  margin: 20px 0;
+  border: 1px solid #c9d8d9;
+  border-radius: 14px;
+  background: #fff;
+  padding: clamp(18px, 2.4vw, 26px);
 }
 
 .panel-head {
@@ -144,15 +146,17 @@ const thresholdHint = computed(() => {
 h2 {
   margin: 0;
   font-size: 22px;
+  line-height: 1.3;
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 650;
+  line-height: 1.4;
 }
 
 .status-pill.absent {

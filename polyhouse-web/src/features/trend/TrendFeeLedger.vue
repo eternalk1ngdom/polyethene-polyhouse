@@ -32,9 +32,12 @@ function yuan(micros: number): string {
 
 <template>
   <section class="ledger" aria-labelledby="fees-title">
-    <header>
+    <header class="panel-head">
       <div>
-        <h2 id="fees-title">本月 AI 费用</h2>
+        <div class="title-row">
+          <h2 id="fees-title">本月 AI 费用</h2>
+          <span v-if="fees?.suspended" class="status-pill warn">已暂停</span>
+        </div>
         <p>
           <template v-if="fees">{{ fees.month }} · </template>应用估算，人民币（CNY）
         </p>
@@ -84,19 +87,42 @@ function yuan(micros: number): string {
 
 <style scoped>
 .ledger {
-  border-top: 2px solid #254554;
-  padding-top: 17px;
+  margin: 20px 0;
+  border: 1px solid #c9d8d9;
+  border-radius: 14px;
+  background: #fff;
+  padding: clamp(18px, 2.4vw, 26px);
 }
-header {
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+.title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 8px 10px;
 }
 h2 {
   margin: 0;
   font-size: 22px;
+  line-height: 1.3;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.status-pill.warn {
+  background: #faebcf;
+  color: #815619;
 }
 p {
   margin: 5px 0;
@@ -139,6 +165,10 @@ dd {
 details {
   padding: 0 3px 4px;
   border-bottom: 1px solid #c8d6d7;
+}
+details:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 summary {
   width: fit-content;
