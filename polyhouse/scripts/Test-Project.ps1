@@ -29,10 +29,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '后端编译失败，后续阶段未执行。' }
 
     Write-Host '[2/5] 后端普通测试（实例开关显式关闭）'
-    # 不继承偶然打开的实例测试开关；同时明确要求执行普通测试，避免环境中的 skip 标志造成假成功。
+    # 不继承偶然打开的实例、浏览器或真实采集开关；同时明确要求执行普通测试，避免环境中的 skip 标志造成假成功。
     & mvn -q '-DskipTests=false' '-Dmaven.test.skip=false' '-Dpolyhouse.mysql.integration=false' `
         '-Dpolyhouse.redis.integration=false' '-Dpolyhouse.auth.integration=false' '-Dpolyhouse.jwt.runtime=false' `
-        '-Dpolyhouse.capacity.integration=false' '-Dpolyhouse.security.integration=false' '-Dpolyhouse.provisioning.integration=false' '-Dpolyhouse.management.integration=false' '-Dpolyhouse.profile.integration=false' test
+        '-Dpolyhouse.capacity.integration=false' '-Dpolyhouse.security.integration=false' '-Dpolyhouse.provisioning.integration=false' `
+        '-Dpolyhouse.management.integration=false' '-Dpolyhouse.profile.integration=false' '-Dpolyhouse.workspace.browser=false' `
+        '-Dpolyhouse.trend.integration=false' '-Dpolyhouse.trend.redis=false' '-Dpolyhouse.trend.http=false' `
+        '-Dpolyhouse.trend.browser=false' '-Dpolyhouse.trend.live=false' '-Dpolyhouse.trend.live.acceptance=false' test
     if ($LASTEXITCODE -ne 0) { throw '后端普通测试失败，后续阶段未执行。' }
 } finally {
     Pop-Location

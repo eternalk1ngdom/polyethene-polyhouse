@@ -10,7 +10,7 @@
 .\polyhouse\scripts\Test-Project.ps1
 ```
 
-按顺序执行后端编译、普通测试、前端只检查不修复的 ESLint、`npm test`、类型检查及生产构建；任何阶段失败立即停止，并恢复终端工作目录。不读取 IDEA 私有凭据、不自动安装/迁移/授权/部署，也不自动打开真实实例测试。真实 MySQL/Redis 验收只通过明确的隔离专项执行（安全 `-AccountSecurityOnly`、开户 `-AccountProvisioningOnly`、管理 `-AccountManagementOnly`、审核 `-ProfileModerationOnly`，均配合 `-Action Verify`）；默认普通验收中被关闭的实例测试会报告跳过，不能把它当作真实连接验收成功。
+按顺序执行后端编译、普通测试、前端只检查不修复的 Oxlint 与 ESLint、`npm test`、类型检查及生产构建；任何阶段失败立即停止，并恢复终端工作目录。不读取 IDEA 私有凭据、不自动安装/迁移/授权/部署，也不自动打开真实实例、浏览器或星潮专项测试。真实 MySQL/Redis 验收只通过明确的隔离专项执行（安全 `-AccountSecurityOnly`、开户 `-AccountProvisioningOnly`、管理 `-AccountManagementOnly`、审核 `-ProfileModerationOnly`，均配合 `-Action Verify`）；默认普通验收中被关闭的实例测试会报告跳过，不能把它当作真实连接验收成功。
 
 测试目录按业务组织，归类约束见 [AGENTS.md](../../AGENTS.md)：
 
