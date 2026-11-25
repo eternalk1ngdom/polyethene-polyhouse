@@ -4,6 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
+| [仓库维护待办](repository-maintenance-backlog.md) | 选图、批量处理、分页和验收脚本缺陷，以及重复实现；已审查，待实施 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
 | [本地自定义卡面](local-profile-cover.md) | 静态卡面及选图异常修复已合入 dev。短循环动态卡面列为 P3 待办；访客主页待后续 | [dev.20](../dev-log/v1.0-dev.20.md) |
 | [个人空间卡面与硬币解锁](profile-card-backgrounds.md) | 默认 A「窗边初晴」已恢复，G「黄铜星盘」与暂定 S3「末班信号」已保存双端素材并通过九档宽度检查。购买、等级及身份开放、佩戴均已在隔离环境联调。 | [dev.20](../dev-log/v1.0-dev.20.md) |

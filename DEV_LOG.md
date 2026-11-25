@@ -2,7 +2,7 @@
 
 更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.21.md](docs/dev-log/v1.0-dev.21.md)。
 
-- 已完成仓库冗余初查，前端测试与验收工具的 JavaScript 语言统计规则已在本地分支验证。
+- [仓库维护待办](docs/plans/repository-maintenance-backlog.md)已登记 5 项缺陷或风险与 4 项重复实现。语言统计规则已在本地分支验证。
 
 - [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
