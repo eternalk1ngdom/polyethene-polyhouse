@@ -75,9 +75,15 @@ export function readLocalCover(id: string): Promise<LocalProfileCover | null> {
 async function writeCover(operation: (store: IDBObjectStore) => void): Promise<void> {
   await transact<void>('readwrite', (store) => operation(store))
   if (typeof BroadcastChannel !== 'undefined') {
-    const channel = new BroadcastChannel(localCoverChannel)
-    channel.postMessage('changed')
-    channel.close()
+    let channel: BroadcastChannel | undefined
+    try {
+      channel = new BroadcastChannel(localCoverChannel)
+      channel.postMessage('changed')
+    } catch {
+      // 存储事务已提交；跨标签通知仅作即时同步，其他标签页聚焦时仍会重新读取。
+    } finally {
+      channel?.close()
+    }
   }
 }
 
