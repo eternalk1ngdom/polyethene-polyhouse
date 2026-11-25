@@ -72,6 +72,25 @@
 - **证据**：[材料构造器](../../polyhouse/src/main/java/com/polyethene/polyhouse/service/trend/TrendBriefingInputBuilder.java)每试加一个候选，就把基础摘要和当前全部候选序列化，再对结果做 JSON 字符串转义以计算 UTF-8 字节数。若 45 个候选全部容纳，仅候选对象在这些前缀中就累计出现 1,035 次。这段逻辑也会被简报读取调用。45 条和 16 KiB 的现有上限限制了实际规模。
 - **决策条件**：先测第 12 项共享窗口后的材料构造占比。仍明显时，再试验按候选累计准确的转义字节开销、最后统一生成材料。用中文、引号、反斜杠、空数组和恰好越过 16 KiB 的样例比较最终材料、候选顺序、指纹及复用判断，要求逐字节一致。若测不到可辨别收益，保留现状。
 
+## 静态检查与发布安全
+
+### 15. Docker 构建漏带星潮缓存脚本（发布前优先）
+
+- 根目录的 [Docker 白名单](../../.dockerignore)先排除全部文件，Redis 目录只放行认证脚本。[日报缓存](../../polyhouse/src/main/java/com/polyethene/polyhouse/service/TrendReportCache.java)另从 classpath 读取 `trend_read_view.lua` 与 `trend_write_view.lua`。仓库有这两份文件，按当前规则它们不会随 [Dockerfile](../../Dockerfile) 的 COPY 进入编译上下文。
+- 开启缓存时，执行脚本失败会让缓存暂停 30 秒，日报仍可回源数据库，普通页面冒烟检查可能看不出问题。这是源码与打包规则的差异；尚未构建当前镜像实测。
+- **验收**：精确放行这两个资源。检查最终镜像内 jar 的资源清单，再用隔离 Redis 验证首次写入、再次命中，以及 Redis 停用时的回退。继续排除本机配置和凭据。
+
+### 16. 缩小 GitHub Pages 发布权限与依赖变动范围（发布安全加固）
+
+- [Pages 工作流](../../.github/workflows/deploy.yml)在单一作业中安装依赖、构建和部署，共用 Pages 写入及 OIDC 令牌权限。五个 Action 以大版本标签引用。本次只确认权限范围和引用方式，未观察到令牌滥用或供应链事件。
+- 建议拆成构建和部署两项作业，仅部署产物的作业取得发布权限。按官方来源核实后固定 Action 完整提交号；checkout 参考[既有唤醒工作流](../../.github/workflows/trend-wake.yml)关闭凭据持久化。保留 main 触发条件、部署环境和并发策略。[GitHub Actions 安全使用指南](https://docs.github.com/en/actions/reference/security/secure-use)
+- 同一工作流使用 Node 20 和 `npm install`，与项目声明的 Node 范围有差异，已在[启动说明](../operations/getting-started.md)记录。改用项目已验证且符合声明的运行环境与 `npm ci`，验收锁文件不一致时安装失败、构建无发布权限且产物能由部署作业读取。发布验证需另行安排。
+
+### 17. 普通前端验收未直接运行 Oxlint（检查覆盖）
+
+- `lint:check` 仅运行 ESLint，而[配置](../../polyhouse-web/eslint.config.ts)通过 eslint-plugin-oxlint 协调重叠规则。本次独立对 src、tests、scripts、benchmarks 执行不带修复参数的 Oxlint，得到 8 条诊断，源代码 2 条、测试 6 条。源代码涉及妙替文件名控制字符检查和卡面编辑器回调 prop 与本地处理函数同名。控制字符检查承担文件名校验，不能因清零告警删去。上述诊断均未证实为可利用漏洞。
+- 建议增加只读 Oxlint 入口，明确检查目录。逐项确认测试是否故意构造边界数据；有意使用控制字符的规则可用有理由的局部说明。验收要求检查命令返回可用于 CI 的退出码且不改文件。
+
 ## 审查边界
 
 复查了头像和个人卡面、妙压批量、妙替文件与导出、星潮历史分页与费用查询前后端、窗口统计及简报身份逻辑、集成测试与普通验收入口。组件样例使用替身文件、网络或 Worker。未执行生产数据操作、付费请求、全量真实浏览器和真机流程。本清单不构成对其余路径无缺陷的保证。
