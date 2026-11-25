@@ -390,7 +390,16 @@ async function runBatch(target: TargetKbTarget, dpi: number | null, id: number):
       if (!isCurrentTask(id)) return
       entry.status = 'running'
       progress.value = null
-      const bytes = await entry.file.arrayBuffer()
+      let bytes: ArrayBuffer
+      try {
+        bytes = await entry.file.arrayBuffer()
+      } catch {
+        // 单张原图读取失败（如文件已移动或权限失效）只标记当前行，不中断其余图片的压缩与打包。
+        if (!isCurrentTask(id)) return
+        entry.status = 'failed'
+        entry.message = '读取图片失败，请确认文件仍在原位置。'
+        continue
+      }
       if (!isCurrentTask(id)) return
       const reply = await sendEncode(bytes, target, dpi, id)
       if (!isCurrentTask(id) || reply.reason === 'cancelled') return

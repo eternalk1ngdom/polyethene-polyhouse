@@ -427,3 +427,90 @@ test('卸载会结束等待回复，迟到读取不创建新线程', async () =>
   assert.equal(w.stopped, true)
   assert.equal(g.page.result.value, null)
 })
+
+test('批量单张读取失败只标记该项并继续完成其余项打包，全失败不生成 ZIP', async (t) => {
+  const f = await mount()
+  t.after(f.close)
+  f.page.entries.value = [
+    entry(1, file('first.png')),
+    entry(
+      2,
+      file('broken.png', async () => {
+        throw Error('disk read error')
+      }),
+    ),
+    entry(3, file('third.png')),
+  ]
+  const job = f.page.run()
+  await settle()
+  const worker = Worker.instances[0]
+  complete(worker)
+  await settle()
+  complete(worker)
+  await settle()
+  assert.equal(zipCallbacks.length, 1)
+  const packedNames = Object.keys(zipCallbacks[0].entries)
+  assert.equal(packedNames.length, 2)
+  assert.match(packedNames[0], /^01-first-/)
+  assert.match(packedNames[1], /^02-third-/)
+  zipCallbacks[0].callback(null, new Uint8Array([9, 8, 7]))
+  await job
+  assert.deepEqual(
+    f.page.entries.value.map((item) => item.status),
+    ['done', 'failed', 'done'],
+  )
+  assert.match(f.page.entries.value[1].message, /读取图片失败/)
+  assert.ok(f.page.zipUrl.value)
+
+  // 全部读取失败时，不进入 ZIP 打包并给出明确提示。
+  const g = await mount()
+  t.after(g.close)
+  g.page.entries.value = [
+    entry(
+      1,
+      file('a.png', async () => {
+        throw Error('read a')
+      }),
+    ),
+    entry(
+      2,
+      file('b.png', async () => {
+        throw Error('read b')
+      }),
+    ),
+  ]
+  await g.page.run()
+  assert.deepEqual(
+    g.page.entries.value.map((item) => item.status),
+    ['failed', 'failed'],
+  )
+  assert.equal(zipCallbacks.length, 0)
+  assert.equal(g.page.zipUrl.value, '')
+  assert.match(g.page.message.value, /未生成 ZIP/)
+})
+
+test('批量读取挂起期间取消，迟到读取失败不污染状态也不触发打包', async (t) => {
+  const f = await mount()
+  t.after(f.close)
+  const readSecond = deferred()
+  f.page.entries.value = [
+    entry(1, file('first.png')),
+    entry(
+      2,
+      file('second.png', () => readSecond.promise),
+    ),
+  ]
+  const job = f.page.run()
+  await settle()
+  complete(Worker.instances[0])
+  await settle()
+  f.page.cancel()
+  readSecond.reject(Error('late read fail'))
+  await job
+  assert.deepEqual(
+    f.page.entries.value.map((item) => item.status),
+    ['pending', 'pending'],
+  )
+  assert.equal(zipCallbacks.length, 0)
+  assert.equal(f.page.zipUrl.value, '')
+})
