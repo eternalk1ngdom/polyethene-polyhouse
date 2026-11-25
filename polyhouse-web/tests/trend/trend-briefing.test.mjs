@@ -1,20 +1,15 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { createRenderer, h, nextTick } from 'vue'
-import { compileScript, compileTemplate, parse } from 'vue/compiler-sfc'
-import ts from 'typescript'
-
-const dataUrl = (code) => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
-
-async function transpileTs(relativePath, replacements = {}) {
-  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
-  let code = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  for (const [from, to] of Object.entries(replacements)) code = code.replaceAll(from, to)
-  return dataUrl(code)
-}
+import { nextTick } from 'vue'
+import {
+  collectText,
+  compileSfcComponent,
+  dataUrl,
+  findAll,
+  mountHeadless,
+  patchGlobal,
+  typeScriptModuleUrl,
+} from '../helpers/test-runtime.mjs'
 
 function makeBriefingPayload(patch = {}) {
   return {
@@ -82,100 +77,8 @@ function makeBriefingPayload(patch = {}) {
   }
 }
 
-function createFakeDom() {
-  const makeNode = (type, tag = '') => ({
-    type,
-    tag,
-    text: '',
-    props: {},
-    children: [],
-    parent: null,
-  })
-  const renderer = createRenderer({
-    patchProp(el, key, _prev, next) {
-      el.props[key] = next
-    },
-    insert(child, parent, anchor) {
-      child.parent = parent
-      const idx = anchor ? parent.children.indexOf(anchor) : -1
-      if (idx >= 0) parent.children.splice(idx, 0, child)
-      else parent.children.push(child)
-    },
-    remove(child) {
-      if (!child.parent) return
-      const idx = child.parent.children.indexOf(child)
-      if (idx >= 0) child.parent.children.splice(idx, 1)
-    },
-    createElement: (tag) => makeNode('el', tag),
-    createText: (text) => {
-      const node = makeNode('text')
-      node.text = text
-      return node
-    },
-    createComment: (text) => {
-      const node = makeNode('comment')
-      node.text = text
-      return node
-    },
-    setText: (node, text) => {
-      node.text = text
-    },
-    setElementText: (el, text) => {
-      el.children = [{ type: 'text', tag: '', text, props: {}, children: [], parent: el }]
-    },
-    parentNode: (node) => node.parent,
-    nextSibling: (node) => {
-      if (!node.parent) return null
-      const idx = node.parent.children.indexOf(node)
-      return idx >= 0 ? (node.parent.children[idx + 1] ?? null) : null
-    },
-  })
-  return { root: makeNode('root', 'div'), renderer }
-}
-
-function collectText(node) {
-  if (node.type === 'text') return node.text
-  if (node.type === 'comment') return ''
-  return node.children.map(collectText).join('')
-}
-
-function findAll(node, predicate, out = []) {
-  if (predicate(node)) out.push(node)
-  for (const child of node.children) findAll(child, predicate, out)
-  return out
-}
-
-async function compileSfc(relativePath, id, replacements = {}) {
-  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
-  const { descriptor } = parse(source, { filename: relativePath })
-  const script = compileScript(descriptor, { id })
-  const vueUrl = import.meta.resolve('vue')
-  let scriptCode = ts
-    .transpileModule(script.content, {
-      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-    })
-    .outputText.replaceAll("from 'vue'", `from '${vueUrl}'`)
-    .replaceAll('from "vue"', `from '${vueUrl}'`)
-  for (const [from, to] of Object.entries(replacements))
-    scriptCode = scriptCode.replaceAll(from, to)
-
-  const templateCode = compileTemplate({
-    source: descriptor.template.content,
-    filename: relativePath,
-    id,
-    compilerOptions: { bindingMetadata: script.bindings },
-  })
-    .code.replaceAll('from "vue"', `from '${vueUrl}'`)
-    .replaceAll("from 'vue'", `from '${vueUrl}'`)
-
-  const { default: component } = await import(dataUrl(scriptCode))
-  const { render } = await import(dataUrl(templateCode))
-  return { ...component, render }
-}
-
-test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 chargeKind', async () => {
+test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 chargeKind', async (t) => {
   const calls = []
-  let nextResponse = makeBriefingPayload()
   const fakeIndexUrl = dataUrl(`
     export class ApiError extends Error {
       constructor(message, status = 0) { super(message); this.status = status }
@@ -186,11 +89,13 @@ test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 c
       return decode(globalThis.__briefingResp)
     }
   `)
-  globalThis.__briefingCalls = calls
-  globalThis.__briefingResp = nextResponse
+  patchGlobal(t, '__briefingCalls', calls)
+  patchGlobal(t, '__briefingResp', makeBriefingPayload())
 
   const trendMod = await import(
-    await transpileTs('../../src/api/trend.ts', { "'./index'": `'${fakeIndexUrl}'` })
+    await typeScriptModuleUrl(new URL('../../src/api/trend.ts', import.meta.url), {
+      "'./index'": `'${fakeIndexUrl}'`,
+    })
   )
 
   const ready = await trendMod.getTrendBriefing('2026-11-23')
@@ -214,27 +119,34 @@ test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 c
   assert.equal(absent.status, 'ABSENT')
 
   // READY 缺少正文或证据仓携带非法非 GitHub 链接时必须拒绝。
-  globalThis.__briefingResp = makeBriefingPayload({ headline: '' })
-  await assert.rejects(() => trendMod.getTrendBriefing('2026-11-23'))
-
-  globalThis.__briefingResp = makeBriefingPayload({
-    themes: [
-      {
-        ...makeBriefingPayload().themes[0],
-        evidenceRepos: [
+  for (const [label, payload] of [
+    ['空 headline', makeBriefingPayload({ headline: '' })],
+    [
+      '非法 javascript 证据链接',
+      makeBriefingPayload({
+        themes: [
           {
-            fullName: 'acme/alpha',
-            repositoryId: '101',
-            repoUrl: 'javascript:alert(1)',
-            inAnchorDay: true,
+            ...makeBriefingPayload().themes[0],
+            evidenceRepos: [
+              {
+                fullName: 'acme/alpha',
+                repositoryId: '101',
+                repoUrl: 'javascript:alert(1)',
+                inAnchorDay: true,
+              },
+              makeBriefingPayload().themes[0].evidenceRepos[1],
+            ],
           },
-          makeBriefingPayload().themes[0].evidenceRepos[1],
+          makeBriefingPayload().themes[1],
         ],
-      },
-      makeBriefingPayload().themes[1],
+      }),
     ],
-  })
-  await assert.rejects(() => trendMod.getTrendBriefing('2026-11-23'))
+  ]) {
+    await t.test(`拒绝${label}`, async () => {
+      globalThis.__briefingResp = payload
+      await assert.rejects(() => trendMod.getTrendBriefing('2026-11-23'))
+    })
+  }
 
   // 屋主触发接口带 token 且设置 65s 超时。
   globalThis.__briefingResp = {
@@ -284,12 +196,12 @@ test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 c
   assert.equal(fees.pending[1].chargeKind, 'BRIEFING')
 })
 
-test('TrendWindowBriefing.vue 在 ABSENT 时零占位渲染，在 READY 时渲染导读、证据链接与 stale 提示', async () => {
+test('TrendWindowBriefing.vue 在 ABSENT 时零占位渲染，在 READY 时渲染导读、证据链接与 stale 提示', async (t) => {
   const fakeEl = dataUrl(`export const ElIcon = { render() { return null } }`)
   const fakeIcons = dataUrl(`export const TopRight = { render() { return null } }`)
-  const fakePres = dataUrl(`export function trendTime(v) { return '2026/11/23 10:10' }`)
-  const Comp = await compileSfc(
-    '../../src/features/trend/TrendWindowBriefing.vue',
+  const fakePres = dataUrl(`export function trendTime() { return '2026/11/23 10:10' }`)
+  const Comp = await compileSfcComponent(
+    new URL('../../src/features/trend/TrendWindowBriefing.vue', import.meta.url),
     'briefing-reader',
     {
       "'element-plus'": `'${fakeEl}'`,
@@ -298,49 +210,43 @@ test('TrendWindowBriefing.vue 在 ABSENT 时零占位渲染，在 READY 时渲�
     },
   )
 
-  // ABSENT 时完全不输出空态卡片噪音。
-  const absentDom = createFakeDom()
-  absentDom.renderer.render(
-    h(Comp, {
+  await t.test('ABSENT 时完全不输出空态卡片噪音', async (st) => {
+    const { root } = mountHeadless(st, Comp, {
       briefing: makeBriefingPayload({ status: 'ABSENT', themes: [], watchouts: [] }),
       resolveDetailHref: (name) => `#/trend/2026-11-23/${name}`,
-    }),
-    absentDom.root,
-  )
-  await nextTick()
-  assert.equal(collectText(absentDom.root).trim(), '')
+    })
+    await nextTick()
+    assert.equal(collectText(root).trim(), '')
+  })
 
-  // READY + stale=true 渲染标题、导语、双仓链接（站内/外链区分）、边界提醒与较早快照提示。
-  const readyDom = createFakeDom()
-  const opened = []
-  readyDom.renderer.render(
-    h(Comp, {
+  await t.test('READY + stale 渲染标题、导语、双仓链接与较早快照提示', async (st) => {
+    const opened = []
+    const { root } = mountHeadless(st, Comp, {
       briefing: makeBriefingPayload({ stale: true, sampleStatus: 'LIMITED', coveredDays: 4 }),
       resolveDetailHref: (name) => `#/trend/2026-11-23/${name}`,
       onOpenProject: (_e, name) => opened.push(name),
-    }),
-    readyDom.root,
-  )
-  await nextTick()
-  const text = collectText(readyDom.root)
-  assert.match(text, /AI 风口速览/)
-  assert.match(text, /有限样本/)
-  assert.match(text, /基于较早日报快照生成/)
-  assert.match(text, /本地代理编排与离线配置校验成为本周集中方向/)
-  assert.match(text, /多仓聚集/)
-  assert.match(text, /持续霸榜/)
-  assert.match(text, /边界提醒/)
+    })
+    await nextTick()
+    const text = collectText(root)
+    assert.match(text, /AI 风口速览/)
+    assert.match(text, /有限样本/)
+    assert.match(text, /基于较早日报快照生成/)
+    assert.match(text, /本地代理编排与离线配置校验成为本周集中方向/)
+    assert.match(text, /多仓聚集/)
+    assert.match(text, /持续霸榜/)
+    assert.match(text, /边界提醒/)
 
-  const links = findAll(readyDom.root, (n) => n.tag === 'a')
-  assert.equal(links.length, 4)
-  assert.equal(links[0].props.href, '#/trend/2026-11-23/acme/alpha')
-  assert.equal(links[1].props.href, 'https://github.com/acme/beta')
-  assert.equal(links[1].props.target, '_blank')
-  links[0].props.onClick({})
-  assert.deepEqual(opened, ['acme/alpha'])
+    const links = findAll(root, (n) => n.tag === 'a')
+    assert.equal(links.length, 4)
+    assert.equal(links[0].props.href, '#/trend/2026-11-23/acme/alpha')
+    assert.equal(links[1].props.href, 'https://github.com/acme/beta')
+    assert.equal(links[1].props.target, '_blank')
+    links[0].props.onClick({})
+    assert.deepEqual(opened, ['acme/alpha'])
+  })
 })
 
-test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', async () => {
+test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', async (t) => {
   const fakeEl = dataUrl(`
     import { h } from '${import.meta.resolve('vue')}'
     export const ElButton = {
@@ -351,9 +257,9 @@ test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', a
       }
     }
   `)
-  const fakePres = dataUrl(`export function trendTime(v) { return '2026/11/23 10:10' }`)
-  const Comp = await compileSfc(
-    '../../src/features/trend/TrendBriefingControl.vue',
+  const fakePres = dataUrl(`export function trendTime() { return '2026/11/23 10:10' }`)
+  const Comp = await compileSfcComponent(
+    new URL('../../src/features/trend/TrendBriefingControl.vue', import.meta.url),
     'briefing-owner',
     {
       "'element-plus'": `'${fakeEl}'`,
@@ -361,10 +267,9 @@ test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', a
     },
   )
 
-  // 未达门槛：生成按钮禁用，展示明确原因。
-  const dom1 = createFakeDom()
-  dom1.renderer.render(
-    h(Comp, {
+  const cases = [
+    {
+      name: '未达门槛时禁用生成按钮并展示明确原因',
       briefing: makeBriefingPayload({
         status: 'ABSENT',
         eligible: false,
@@ -374,24 +279,13 @@ test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', a
         themes: [],
         watchouts: [],
       }),
-      busy: false,
-      generating: false,
-      waiting: false,
-      error: '',
-      note: '',
-    }),
-    dom1.root,
-  )
-  await nextTick()
-  assert.match(collectText(dom1.root), /需至少覆盖 3 天已发布日报/)
-  const buttons1 = findAll(dom1.root, (n) => n.tag === 'button')
-  assert.equal(buttons1[1].props.disabled, true)
-
-  // 达门槛且未生成：生成按钮可用并可触发。
-  const dom2 = createFakeDom()
-  let triggered = 0
-  dom2.renderer.render(
-    h(Comp, {
+      buttonLabel: '生成本期风口简报',
+      expectedDisabled: true,
+      expectedText: /需至少覆盖 3 天已发布日报/,
+      clickTriggers: false,
+    },
+    {
+      name: '达门槛且未生成时启用按钮并可触发 generate',
       briefing: makeBriefingPayload({
         status: 'ABSENT',
         eligible: true,
@@ -400,38 +294,47 @@ test('TrendBriefingControl.vue 按门槛与最新状态控制按钮可用性', a
         themes: [],
         watchouts: [],
       }),
-      busy: false,
-      generating: false,
-      waiting: false,
-      error: '',
-      note: '',
-      onGenerate: () => {
-        triggered++
-      },
-    }),
-    dom2.root,
-  )
-  await nextTick()
-  const buttons2 = findAll(dom2.root, (n) => n.tag === 'button')
-  assert.equal(buttons2[1].props.disabled, false)
-  buttons2[1].props.onClick()
-  assert.equal(triggered, 1)
-
-  // 已是最新：禁用重复触发（防误点）。
-  const dom3 = createFakeDom()
-  dom3.renderer.render(
-    h(Comp, {
+      buttonLabel: '生成本期风口简报',
+      expectedDisabled: false,
+      expectedText: /已达门槛/,
+      clickTriggers: true,
+    },
+    {
+      name: '已是最新时禁用重复触发并提示本期已是最新',
       briefing: makeBriefingPayload({ status: 'READY', stale: false }),
-      busy: false,
-      generating: false,
-      waiting: false,
-      error: '',
-      note: '',
-    }),
-    dom3.root,
-  )
-  await nextTick()
-  const buttons3 = findAll(dom3.root, (n) => n.tag === 'button')
-  assert.equal(buttons3[1].props.disabled, true)
-  assert.match(collectText(dom3.root), /本期已是最新/)
+      buttonLabel: '本期已是最新',
+      expectedDisabled: true,
+      expectedText: /本期已是最新/,
+      clickTriggers: false,
+    },
+  ]
+
+  for (const item of cases) {
+    await t.test(item.name, async (st) => {
+      let triggered = 0
+      const { root } = mountHeadless(st, Comp, {
+        briefing: item.briefing,
+        busy: false,
+        generating: false,
+        waiting: false,
+        error: '',
+        note: '',
+        onGenerate: () => {
+          triggered++
+        },
+      })
+      await nextTick()
+      assert.match(collectText(root), item.expectedText)
+      const actionBtn = findAll(
+        root,
+        (n) => n.tag === 'button' && collectText(n).trim() === item.buttonLabel,
+      )[0]
+      assert.ok(actionBtn, `未找到文案为「${item.buttonLabel}」的操作按钮`)
+      assert.equal(actionBtn.props.disabled, item.expectedDisabled)
+      if (item.clickTriggers) {
+        actionBtn.props.onClick()
+        assert.equal(triggered, 1)
+      }
+    })
+  }
 })

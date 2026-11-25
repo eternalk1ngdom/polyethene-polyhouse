@@ -1,22 +1,20 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import test, { afterEach, beforeEach } from 'node:test'
+import test, { after, afterEach, beforeEach } from 'node:test'
 import { AxiosError } from 'axios'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
-import ts from 'typescript'
+import { typeScriptModuleUrl } from '../helpers/test-runtime.mjs'
 
-// 沿用项目已有的内存编译方式，只替换导入地址，测试执行真实请求和状态模块。
+// 沿用共享内存编译夹具，只替换导入地址，测试执行真实请求和状态模块。
 async function moduleUrl(path, replacements = {}) {
-  const source = await readFile(new URL(path, import.meta.url), 'utf8')
-  let output = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  for (const dependency of ['axios', 'vue', 'pinia'])
-    output = output.replaceAll(`from '${dependency}'`, `from '${import.meta.resolve(dependency)}'`)
-  for (const [dependency, url] of Object.entries(replacements))
-    output = output.replaceAll(`from '${dependency}'`, `from '${url}'`)
-  return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
+  const mapped = {}
+  for (const dependency of ['axios', 'vue', 'pinia']) {
+    mapped[`from '${dependency}'`] = `from '${import.meta.resolve(dependency)}'`
+  }
+  for (const [dependency, url] of Object.entries(replacements)) {
+    mapped[`from '${dependency}'`] = `from '${url}'`
+  }
+  return typeScriptModuleUrl(new URL(path, import.meta.url), mapped)
 }
 
 const apiUrl = await moduleUrl('../../src/api/index.ts')
@@ -86,14 +84,24 @@ function growthStore() {
   return store
 }
 
+const hadOwnLocalStorage = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage')
+const previousLocalStorage = hadOwnLocalStorage
+  ? Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  : undefined
+
 beforeEach(() => {
   setActivePinia(createPinia())
   storage.clear()
-  globalThis.localStorage = {
-    getItem: (key) => storage.get(key) ?? null,
-    setItem: (key, value) => storage.set(key, value),
-    removeItem: (key) => storage.delete(key),
-  }
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+    configurable: true,
+    writable: true,
+    enumerable: true,
+  })
   apiClient.defaults.adapter = async (config) => response(config)
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
 })
@@ -101,6 +109,14 @@ beforeEach(() => {
 afterEach(() => {
   for (const store of ownedStores.splice(0)) store.$dispose()
   delete globalThis.document
+})
+
+after(() => {
+  if (hadOwnLocalStorage && previousLocalStorage) {
+    Object.defineProperty(globalThis, 'localStorage', previousLocalStorage)
+  } else {
+    delete globalThis.localStorage
+  }
 })
 
 test('未确认身份不请求成长数据，也不读取本地伪造的奖励状态', async () => {
@@ -241,38 +257,45 @@ test('成长响应必须属于当前用户', async () => {
   assert.equal(user.isLoggedIn, true)
 })
 
-for (const failOld of [false, true]) {
-  test(`换号后旧成长${failOld ? '401' : '成功'}响应不能影响新账号`, async () => {
-    const user = useUserStore()
-    user.setSession('old-credential', profile)
-    let finishOld
-    apiClient.defaults.adapter = (config) => {
-      if (config.headers.get('Authorization') === 'Bearer new-credential')
-        return Promise.resolve(response(config, { ...summary, userId: '99' }))
-      return new Promise((resolve, reject) => {
-        finishOld = () =>
-          failOld
-            ? reject(
-                new AxiosError('private-failure', 'ERR_BAD_REQUEST', config, null, {
-                  ...response(config),
-                  status: 401,
-                }),
-              )
-            : resolve(response(config))
-      })
-    }
-    const store = growthStore()
-    const old = store.refresh()
-    user.setSession('new-credential', { ...profile, id: '99', username: 'new_user' })
-    assert.equal(store.summary, null)
-    await nextTick()
-    await store.refresh()
-    finishOld()
-    await old
-    assert.equal(user.token, 'new-credential')
-    assert.equal(store.summary.userId, '99')
-  })
-}
+test('换号后旧成长响应不能影响新账号', async (t) => {
+  for (const [label, failOld] of [
+    ['旧成长成功响应', false],
+    ['旧成长 401 响应', true],
+  ]) {
+    await t.test(label, async () => {
+      setActivePinia(createPinia())
+      storage.clear()
+      const user = useUserStore()
+      user.setSession('old-credential', profile)
+      let finishOld
+      apiClient.defaults.adapter = (config) => {
+        if (config.headers.get('Authorization') === 'Bearer new-credential')
+          return Promise.resolve(response(config, { ...summary, userId: '99' }))
+        return new Promise((resolve, reject) => {
+          finishOld = () =>
+            failOld
+              ? reject(
+                  new AxiosError('private-failure', 'ERR_BAD_REQUEST', config, null, {
+                    ...response(config),
+                    status: 401,
+                  }),
+                )
+              : resolve(response(config))
+        })
+      }
+      const store = growthStore()
+      const old = store.refresh()
+      user.setSession('new-credential', { ...profile, id: '99', username: 'new_user' })
+      assert.equal(store.summary, null)
+      await nextTick()
+      await store.refresh()
+      finishOld()
+      await old
+      assert.equal(user.token, 'new-credential')
+      assert.equal(store.summary.userId, '99')
+    })
+  }
+})
 
 test('成长401清理身份；403只展示查询失败', async () => {
   const user = useUserStore()

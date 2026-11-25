@@ -1,23 +1,19 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import test, { beforeEach } from 'node:test'
+import test, { after, beforeEach } from 'node:test'
 import { AxiosError } from 'axios'
 import { createPinia, setActivePinia } from 'pinia'
-import ts from 'typescript'
+import { typeScriptModuleUrl } from '../helpers/test-runtime.mjs'
 
-// 复用现有 TypeScript 依赖在内存编译真实模块；仅替换导入地址，不需要新增测试框架或构建配置。
+// 复用跨模块共享的内存编译夹具；仅替换导入地址，不新增测试框架或构建配置。
 async function moduleUrl(path, replacements = {}) {
-  const source = await readFile(new URL(path, import.meta.url), 'utf8')
-  let output = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
+  const mapped = {}
   for (const dependency of ['axios', 'vue', 'pinia']) {
-    output = output.replaceAll(`from '${dependency}'`, `from '${import.meta.resolve(dependency)}'`)
+    mapped[`from '${dependency}'`] = `from '${import.meta.resolve(dependency)}'`
   }
   for (const [dependency, url] of Object.entries(replacements)) {
-    output = output.replaceAll(`from '${dependency}'`, `from '${url}'`)
+    mapped[`from '${dependency}'`] = `from '${url}'`
   }
-  return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
+  return typeScriptModuleUrl(new URL(path, import.meta.url), mapped)
 }
 
 const apiUrl = await moduleUrl('../../src/api/index.ts')
@@ -81,18 +77,36 @@ function loginResult(accessToken = 'new-credential', user = profile) {
   return { accessToken, tokenType: 'Bearer', expiresAt: '2027-01-01T00:00:00Z', user }
 }
 
+const hadOwnLocalStorage = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage')
+const previousLocalStorage = hadOwnLocalStorage
+  ? Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  : undefined
+
 beforeEach(() => {
   setActivePinia(createPinia())
   storage.clear()
-  globalThis.localStorage = {
-    getItem: (key) => storage.get(key) ?? null,
-    setItem: (key, value) => storage.set(key, value),
-    removeItem: (key) => storage.delete(key),
-  }
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+    configurable: true,
+    writable: true,
+    enumerable: true,
+  })
   apiClient.defaults.adapter = async (config) => success(config)
   apiClient.defaults.baseURL = '/api'
   setUnauthorizedHandler((token) => useUserStore().expireSession(token))
   setPasswordChangeRequiredHandler((token) => useUserStore().requirePasswordChange(token))
+})
+
+after(() => {
+  if (hadOwnLocalStorage && previousLocalStorage) {
+    Object.defineProperty(globalThis, 'localStorage', previousLocalStorage)
+  } else {
+    delete globalThis.localStorage
+  }
 })
 
 test('仅外部 API 启用登录探测，登录有独立超时且网络结果未知时只提交一次', async () => {
@@ -578,25 +592,32 @@ test('相同版本的并发恢复只发送一个请求', async () => {
   assert.equal(store.isLoggedIn, true)
 })
 
-for (const failure of [false, true]) {
-  test(`旧恢复${failure ? '401' : '成功'}响应不能覆盖新登录`, async () => {
-    storage.set('polyhouse_token', 'old-credential')
-    const store = useUserStore()
-    let finish
-    apiClient.defaults.adapter = (config) =>
-      new Promise((resolve, reject) => {
-        finish = () =>
-          failure ? reject(statusFailure(config, 401)) : resolve(success(config, profile))
-      })
-    const pending = store.restoreSession()
-    store.setSession('new-credential', { ...profile, nickname: '新资料' })
-    finish()
-    await pending
-    assert.equal(store.token, 'new-credential')
-    assert.equal(store.user.nickname, '新资料')
-    assert.equal(store.isLoggedIn, true)
-  })
-}
+test('旧恢复响应不能覆盖新登录', async (t) => {
+  for (const [label, failure] of [
+    ['旧恢复成功响应', false],
+    ['旧恢复 401 响应', true],
+  ]) {
+    await t.test(label, async () => {
+      setActivePinia(createPinia())
+      storage.clear()
+      storage.set('polyhouse_token', 'old-credential')
+      const store = useUserStore()
+      let finish
+      apiClient.defaults.adapter = (config) =>
+        new Promise((resolve, reject) => {
+          finish = () =>
+            failure ? reject(statusFailure(config, 401)) : resolve(success(config, profile))
+        })
+      const pending = store.restoreSession()
+      store.setSession('new-credential', { ...profile, nickname: '新资料' })
+      finish()
+      await pending
+      assert.equal(store.token, 'new-credential')
+      assert.equal(store.user.nickname, '新资料')
+      assert.equal(store.isLoggedIn, true)
+    })
+  }
+})
 
 test('两个登录乱序返回时只保留最后一次意图', async () => {
   const store = useUserStore()
@@ -924,28 +945,35 @@ test('注销返回401只显示身份失效，不把注销命令冒充成功', as
   assert.match(store.sessionMessage, /失效/)
 })
 
-for (const failure of [false, true]) {
-  test(`注销${failure ? '失败' : '成功'}旧响应不影响等待期间建立的新身份`, async () => {
-    const store = useUserStore()
-    store.setSession('old-credential', profile)
-    const ui = useAccountUiStore()
-    ui.openCancellation()
-    let finish
-    apiClient.defaults.adapter = (config) =>
-      new Promise((resolve, reject) => {
-        finish = () => (failure ? reject(statusFailure(config, 401)) : resolve(success(config)))
-      })
-    const pending = ui.deregister('注销账号', true)
-    store.setSession('new-credential', { ...profile, id: '99', username: 'another' })
-    finish()
-    assert.equal(await pending, false)
-    assert.equal(store.user.id, '99')
-    assert.equal(store.isLoggedIn, true)
-    assert.equal(ui.notice, '')
-    assert.equal(ui.actionError, '')
-    assert.equal(ui.cancellationVisible, false)
-  })
-}
+test('注销旧响应不影响等待期间建立的新身份', async (t) => {
+  for (const [label, failure] of [
+    ['注销成功旧响应', false],
+    ['注销失败旧响应', true],
+  ]) {
+    await t.test(label, async () => {
+      setActivePinia(createPinia())
+      storage.clear()
+      const store = useUserStore()
+      store.setSession('old-credential', profile)
+      const ui = useAccountUiStore()
+      ui.openCancellation()
+      let finish
+      apiClient.defaults.adapter = (config) =>
+        new Promise((resolve, reject) => {
+          finish = () => (failure ? reject(statusFailure(config, 401)) : resolve(success(config)))
+        })
+      const pending = ui.deregister('注销账号', true)
+      store.setSession('new-credential', { ...profile, id: '99', username: 'another' })
+      finish()
+      assert.equal(await pending, false)
+      assert.equal(store.user.id, '99')
+      assert.equal(store.isLoggedIn, true)
+      assert.equal(ui.notice, '')
+      assert.equal(ui.actionError, '')
+      assert.equal(ui.cancellationVisible, false)
+    })
+  }
+})
 
 test('退出成功反馈可收起，新登录自动清除旧反馈', async () => {
   const store = useUserStore()
