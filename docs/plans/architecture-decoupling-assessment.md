@@ -1,6 +1,6 @@
 # 项目架构解耦与可维护性专项评估计划（只读诊断）
 
-创建时间：2026-11-25（Asia/Shanghai）。状态：**待启动（新会话执行，只读评估，严禁修改任何业务源码）**。
+创建时间：2026-11-25（Asia/Shanghai）。状态：**已完成（2026-11-25，基线 `dev` @ `5118cfc`，只读诊断未改业务/测试代码）**。诊断报告已归档至[架构解耦与 AI 协作友好度专项诊断报告](../design/architecture-decoupling-assessment.md)；高 ROI 止血与降噪后续候选计划见[架构解耦止血与 AI 协作降噪计划](architecture-decoupling-optimization.md)（待批准）。
 
 ## 一、目标与适用范围
 

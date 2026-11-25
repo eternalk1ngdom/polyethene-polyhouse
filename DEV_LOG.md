@@ -2,7 +2,7 @@
 
 更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.22.md](docs/dev-log/v1.0-dev.22.md)。
 
-- 下一阶段计划已就绪：[项目架构解耦与可维护性专项评估计划](docs/plans/architecture-decoupling-assessment.md)（待新会话只读诊断，严禁改代码）。
+- 架构解耦只读评估已完成，报告见[架构解耦诊断报告](docs/design/architecture-decoupling-assessment.md)（基线 `5118cfc`，整体健康，仅 2 项 P0 止血 + 2 项低风险降噪）；后续候选[轻量优化计划](docs/plans/architecture-decoupling-optimization.md)已起草，待确认批准。
 - [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项与[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)（阶段 A～D、测试红线并入 `AGENTS.md`、范式沉淀至 `verification.md`）已完整收口并快进合入本地 `dev`，详见 [dev.21](docs/dev-log/v1.0-dev.21.md)；远端推送、合入 `main` 及 `#16` Pages 双作业首轮发布验收待另行确认。语言统计规则已合入本地 `dev`（`f2241cc`）。
 
 - [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
