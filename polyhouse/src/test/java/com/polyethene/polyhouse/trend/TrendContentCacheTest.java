@@ -7,9 +7,13 @@ import com.polyethene.polyhouse.model.dto.TrendReportQueryDTO;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.dao.DataAccessResourceFailureException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.*;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.*;
@@ -72,6 +76,18 @@ class TrendContentCacheTest {
         var redis = mock(StringRedisTemplate.class); var cache = new TrendReportCache(redis, new TrendCacheProperties(true), Clock.systemUTC());
         var r = record(); cache.write(new TrendReportRecord(r.id(), r.periodDate(), r.capturedAt(), "x".repeat(256 * 1024 + 1)));
         verifyNoInteractions(redis);
+    }
+
+    @Test void cacheLuaScriptsExistAndAreWhitelistedInDockerignore() throws Exception {
+        for (String name : new String[] {"trend_read_view.lua", "trend_write_view.lua"}) {
+            assertThat(new ClassPathResource("redis/" + name).exists()).isTrue();
+        }
+        Path dockerignore = Path.of("..", ".dockerignore");
+        assertThat(Files.exists(dockerignore)).isTrue();
+        var lines = Files.readAllLines(dockerignore, StandardCharsets.UTF_8);
+        assertThat(lines).contains(
+                "!polyhouse/src/main/resources/redis/trend_read_view.lua",
+                "!polyhouse/src/main/resources/redis/trend_write_view.lua");
     }
 
     private static final TrendReportRecord SAVED = saved();

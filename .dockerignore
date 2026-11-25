@@ -5,6 +5,8 @@
 !polyhouse/src/main/resources/application.yml
 !polyhouse/src/main/resources/application-prod.yml
 !polyhouse/src/main/resources/redis/auth_remove_session.lua
+!polyhouse/src/main/resources/redis/trend_read_view.lua
+!polyhouse/src/main/resources/redis/trend_write_view.lua
 !polyhouse/src/test/java/**/*.java
 !polyhouse/src/test/resources/avatar/*.base64
 **/.*/**

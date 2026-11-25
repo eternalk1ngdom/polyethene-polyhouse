@@ -38,7 +38,7 @@ public class TrendReportCache {
     public String read(TrendReportRecord header) {
         if (!usable() || !validHeader(header)) return null;
         try { return redis.execute(READ, List.of(KEY), header.id(), STAMP.format(header.capturedAt())); }
-        catch (RuntimeException failure) { suppress(); return null; }
+        catch (RuntimeException failure) { suppress(failure); return null; }
     }
 
     /** 旧请求回源结束较晚也不能覆盖新缓存；只保存已发布JSON，限制字符及UTF8字节。 */
@@ -46,7 +46,7 @@ public class TrendReportCache {
         if (!usable() || !validHeader(record) || record.payload() == null || record.payload().isEmpty()
                 || record.payload().length() > 256 * 1024 || record.payload().getBytes(StandardCharsets.UTF_8).length > 1024 * 1024) return;
         try { redis.execute(WRITE, List.of(KEY), record.id(), STAMP.format(record.capturedAt()), record.payload()); }
-        catch (RuntimeException failure) { suppress(); }
+        catch (RuntimeException failure) { suppress(failure); }
     }
 
     private boolean usable() { return settings.enabled() && !clock.instant().isBefore(suppressedUntil.get()); }
@@ -54,9 +54,10 @@ public class TrendReportCache {
         return record != null && record.id() != null && record.id().matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                 && record.capturedAt() != null && record.periodDate() != null;
     }
-    private void suppress() {
+    private void suppress(RuntimeException failure) {
         suppressedUntil.set(clock.instant().plusSeconds(30));
-        LOGGER.warn("Trend content cache unavailable; database fallback active");
+        // 仅记录异常类名而不输出连接地址或载荷，便于排查脚本缺失与连接故障。
+        LOGGER.warn("Trend content cache unavailable ({}); database fallback active", failure.getClass().getSimpleName());
     }
     private static <T> DefaultRedisScript<T> script(String path, Class<T> type) {
         var script = new DefaultRedisScript<T>(); script.setLocation(new ClassPathResource(path)); script.setResultType(type); return script;
