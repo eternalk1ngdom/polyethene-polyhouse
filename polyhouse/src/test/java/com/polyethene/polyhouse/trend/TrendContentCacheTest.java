@@ -7,9 +7,12 @@ import com.polyethene.polyhouse.model.dto.TrendReportQueryDTO;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -25,6 +28,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 /** 缓存命中仍需权威头，旧值/损坏/断连均不会变成公开假报告。 */
+@ExtendWith(OutputCaptureExtension.class)
 class TrendContentCacheTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC);
 
@@ -34,13 +38,15 @@ class TrendContentCacheTest {
         cache.read(record()); cache.write(record()); verifyNoInteractions(redis);
     }
 
-    @Test void cacheFailureFallsBackWithoutRepeatedWriteAndRecoversAfterCooldown() {
+    @Test void cacheFailureFallsBackWithoutRepeatedWriteAndRecoversAfterCooldown(CapturedOutput output) {
         var redis = mock(StringRedisTemplate.class); var clock = mock(Clock.class);
         var now = new AtomicReference<>(TrendAiFixture.NOW); when(clock.instant()).thenAnswer(invocation -> now.get());
         var cache = new TrendReportCache(redis, new TrendCacheProperties(true), clock);
         when(redis.execute(org.mockito.ArgumentMatchers.<RedisScript<String>>any(), anyList(), anyString(), anyString()))
                 .thenThrow(new DataAccessResourceFailureException("private redis diagnostic")).thenReturn(record().payload());
         assertThat(cache.read(record())).isNull(); cache.write(record()); assertThat(cache.read(record())).isNull();
+        // 降级告警必须记录异常简单类名以区分脚本缺失与连接故障，且不能泄露连接诊断细节。
+        assertThat(output.getOut()).contains("DataAccessResourceFailureException").doesNotContain("private redis diagnostic");
         verify(redis, times(1)).execute(org.mockito.ArgumentMatchers.<RedisScript<String>>any(), anyList(), anyString(), anyString());
         verify(redis, never()).execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString(), anyString(), anyString());
         now.set(now.get().plusSeconds(31)); assertThat(cache.read(record())).isEqualTo(record().payload());
