@@ -2,7 +2,7 @@
 
 更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.21.md](docs/dev-log/v1.0-dev.21.md)。
 
-- [仓库维护待办](docs/plans/repository-maintenance-backlog.md)共 17 项，新增 Docker 缓存脚本、Pages 发布权限和 Oxlint 覆盖三项。语言统计规则已在本地分支验证。
+- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)共 17 项，按五批推进。隔离业务集成和 Redis 停机恢复已验证；最终镜像确认漏装日报缓存脚本，优先修复。语言统计规则已在本地分支验证。
 
 - [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
