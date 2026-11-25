@@ -334,20 +334,22 @@ test('ZIP 期间取消，迟到成功不复活下载；重新运行只发布新 
   assert.equal(f.page.zipBytes.value, 2)
 })
 
-test('ZIP 期间修改参数或卸载，迟到成功/失败都不发布结果或覆盖提示', async () => {
+test('ZIP 期间修改参数或卸载，迟到成功/失败都不发布结果或覆盖提示', async (t) => {
   for (const mode of ['parameters', 'unmount']) {
-    const f = await mount()
-    const pending = await reachZip(f)
-    if (mode === 'parameters') {
-      f.page.targetInput.value = '90KB'
-      await settle()
-    } else f.close()
-    const notice = f.page.message.value
-    pending.callback(mode === 'parameters' ? Error('late zip') : null, new Uint8Array([1]))
-    await pending.job
-    assert.equal(f.page.zipUrl.value, '')
-    assert.equal(f.page.message.value, notice)
-    if (mode === 'parameters') f.close()
+    await t.test(`ZIP 期间触发：${mode}`, async (sub) => {
+      const f = await mount()
+      sub.after(f.close)
+      const pending = await reachZip(f)
+      if (mode === 'parameters') {
+        f.page.targetInput.value = '90KB'
+        await settle()
+      } else f.close()
+      const notice = f.page.message.value
+      pending.callback(mode === 'parameters' ? Error('late zip') : null, new Uint8Array([1]))
+      await pending.job
+      assert.equal(f.page.zipUrl.value, '')
+      assert.equal(f.page.message.value, notice)
+    })
   }
 })
 
@@ -402,91 +404,101 @@ test('单图头部检查迟到不能清空新追加或重选文件，读取错�
   assert.match(f.page.message.value, /读取图片信息失败/)
 })
 
-test('卸载会结束等待回复，迟到读取不创建新线程', async () => {
-  const f = await mount()
-  const read = deferred()
-  f.page.entries.value = [
-    entry(
-      1,
-      file('a.png', () => read.promise),
-    ),
-  ]
-  const pending = f.page.run()
-  f.close()
-  read.resolve(new ArrayBuffer(24))
-  await pending
-  assert.equal(Worker.instances.length, 0)
-  assert.equal(f.page.result.value, null)
-  const g = await mount()
-  g.page.entries.value = [entry(1)]
-  const active = g.page.run()
-  await settle()
-  const w = Worker.instances[0]
-  g.close()
-  await active
-  assert.equal(w.stopped, true)
-  assert.equal(g.page.result.value, null)
+test('卸载会结束等待回复，迟到读取不创建新线程', async (t) => {
+  await t.test('读图挂起期间卸载，迟到读取不创建 Worker', async (sub) => {
+    const f = await mount()
+    sub.after(f.close)
+    const read = deferred()
+    f.page.entries.value = [
+      entry(
+        1,
+        file('a.png', () => read.promise),
+      ),
+    ]
+    const pending = f.page.run()
+    f.close()
+    read.resolve(new ArrayBuffer(24))
+    await pending
+    assert.equal(Worker.instances.length, 0)
+    assert.equal(f.page.result.value, null)
+  })
+
+  await t.test('Worker 编码中卸载，主动终止线程且不发布结果', async (sub) => {
+    const g = await mount()
+    sub.after(g.close)
+    g.page.entries.value = [entry(1)]
+    const active = g.page.run()
+    await settle()
+    const w = Worker.instances[0]
+    g.close()
+    await active
+    assert.equal(w.stopped, true)
+    assert.equal(g.page.result.value, null)
+  })
 })
 
 test('批量单张读取失败只标记该项并继续完成其余项打包，全失败不生成 ZIP', async (t) => {
-  const f = await mount()
-  t.after(f.close)
-  f.page.entries.value = [
-    entry(1, file('first.png')),
-    entry(
-      2,
-      file('broken.png', async () => {
-        throw Error('disk read error')
-      }),
-    ),
-    entry(3, file('third.png')),
-  ]
-  const job = f.page.run()
-  await settle()
-  const worker = Worker.instances[0]
-  complete(worker)
-  await settle()
-  complete(worker)
-  await settle()
-  assert.equal(zipCallbacks.length, 1)
-  const packedNames = Object.keys(zipCallbacks[0].entries)
-  assert.equal(packedNames.length, 2)
-  assert.match(packedNames[0], /^01-first-/)
-  assert.match(packedNames[1], /^02-third-/)
-  zipCallbacks[0].callback(null, new Uint8Array([9, 8, 7]))
-  await job
-  assert.deepEqual(
-    f.page.entries.value.map((item) => item.status),
-    ['done', 'failed', 'done'],
-  )
-  assert.match(f.page.entries.value[1].message, /读取图片失败/)
-  assert.ok(f.page.zipUrl.value)
+  await t.test('夹杂单张读取失败时仅标记该项失败并打包其余成功项', async (sub) => {
+    const f = await mount()
+    sub.after(f.close)
+    f.page.entries.value = [
+      entry(1, file('first.png')),
+      entry(
+        2,
+        file('broken.png', async () => {
+          throw Error('disk read error')
+        }),
+      ),
+      entry(3, file('third.png')),
+    ]
+    const job = f.page.run()
+    await settle()
+    const worker = Worker.instances[0]
+    complete(worker)
+    await settle()
+    complete(worker)
+    await settle()
+    assert.equal(zipCallbacks.length, 1)
+    const packedNames = Object.keys(zipCallbacks[0].entries)
+    assert.equal(packedNames.length, 2)
+    assert.match(packedNames[0], /^01-first-/)
+    assert.match(packedNames[1], /^02-third-/)
+    zipCallbacks[0].callback(null, new Uint8Array([9, 8, 7]))
+    await job
+    assert.deepEqual(
+      f.page.entries.value.map((item) => item.status),
+      ['done', 'failed', 'done'],
+    )
+    assert.match(f.page.entries.value[1].message, /读取图片失败/)
+    assert.ok(f.page.zipUrl.value)
+  })
 
-  // 全部读取失败时，不进入 ZIP 打包并给出明确提示。
-  const g = await mount()
-  t.after(g.close)
-  g.page.entries.value = [
-    entry(
-      1,
-      file('a.png', async () => {
-        throw Error('read a')
-      }),
-    ),
-    entry(
-      2,
-      file('b.png', async () => {
-        throw Error('read b')
-      }),
-    ),
-  ]
-  await g.page.run()
-  assert.deepEqual(
-    g.page.entries.value.map((item) => item.status),
-    ['failed', 'failed'],
-  )
-  assert.equal(zipCallbacks.length, 0)
-  assert.equal(g.page.zipUrl.value, '')
-  assert.match(g.page.message.value, /未生成 ZIP/)
+  await t.test('全部读取失败时不进入 ZIP 打包并给出明确提示', async (sub) => {
+    const g = await mount()
+    sub.after(g.close)
+    g.page.entries.value = [
+      entry(
+        1,
+        file('a.png', async () => {
+          throw Error('read a')
+        }),
+      ),
+      entry(
+        2,
+        file('b.png', async () => {
+          throw Error('read b')
+        }),
+      ),
+    ]
+    await g.page.run()
+    assert.deepEqual(
+      g.page.entries.value.map((item) => item.status),
+      ['failed', 'failed'],
+    )
+    assert.equal(zipCallbacks.length, 0)
+    assert.equal(g.page.zipUrl.value, '')
+    assert.match(g.page.message.value, /未生成 ZIP/)
+  })
 })
 
 test('批量读取挂起期间取消，迟到读取失败不污染状态也不触发打包', async (t) => {

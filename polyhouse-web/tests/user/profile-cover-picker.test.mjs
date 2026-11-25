@@ -28,11 +28,20 @@ const fixturesUrl = codeUrl(`
     createObjectURL: () => 'blob:cover',
     revokeObjectURL: () => {},
   }
+  export class BroadcastChannel {
+    constructor(name) { this.name = name; this.closed = false }
+    close() { this.closed = true }
+  }
   export const coverNames = { window: '窗边初晴', astrolabe: '黄铜星盘', koi: '末班信号' }
-  export const handlers = {
+  const defaultHandlers = {
     readCovers: async () => null,
     changeCover: async () => null,
     readLocalCover: async () => null,
+  }
+  export const handlers = { ...defaultHandlers }
+  export const resetFixtures = () => {
+    Object.assign(handlers, defaultHandlers)
+    listeners.clear()
   }
   export const readCovers = (...args) => handlers.readCovers(...args)
   export const changeCover = (...args) => handlers.changeCover(...args)
@@ -58,7 +67,8 @@ script = script.replace(
   /import\.meta\.glob<string>\([\s\S]*?\}\)/,
   '({})',
 )
-script = `import { window, URL } from '${fixturesUrl}';\n` + script
+// 注入无副作用的宿主替身，避免在 Node 21+ 创建真实跨上下文 BroadcastChannel 句柄。
+script = `import { window, URL, BroadcastChannel } from '${fixturesUrl}';\n` + script
 const { default: component } = await import(
   compile(script, {
     vue: import.meta.resolve('vue'),
@@ -71,7 +81,7 @@ const { default: component } = await import(
     '../utils/localProfileCover': fixturesUrl,
   })
 )
-const { handlers, installStores, listeners } = await import(fixturesUrl)
+const { handlers, installStores, listeners, resetFixtures } = await import(fixturesUrl)
 
 const renderer = createRenderer({
   createElement: () => ({}),
@@ -149,9 +159,16 @@ function mountPicker(initial = {}) {
   return { user, growth, exposed, unmount: () => app.unmount() }
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+// 用微任务冲刷代替真实 setTimeout(0)，保持组件 watch 与异步读取确定性收敛。
+async function flushMicrotasks() {
+  for (let i = 0; i < 6; i += 1) {
+    await nextTick()
+    await Promise.resolve()
+  }
+}
 
 test('同值资料替换与成长刷新加载抖动不触发多余目录请求，真实跨日与升级正常重读', async (t) => {
+  t.after(resetFixtures)
   let reads = 0
   handlers.readCovers = async () => {
     reads += 1
@@ -159,14 +176,14 @@ test('同值资料替换与成长刷新加载抖动不触发多余目录请求�
   }
   const f = mountPicker()
   t.after(f.unmount)
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 1)
+  assert.equal(f.exposed.ready.value, true)
 
   // 同值新对象替换 user 与 growth.summary 不应新增请求。
   f.user.user = { ...f.user.user }
   f.growth.summary = { ...f.growth.summary }
-  await nextTick()
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 1)
 
   // 成长刷新时经历 有值 -> loading/null -> 同值，不应新增请求。
@@ -175,23 +192,21 @@ test('同值资料替换与成长刷新加载抖动不触发多余目录请求�
   await nextTick()
   f.growth.summary = { userId: 'u-1', rewardDate: '2026-11-25', level: 2 }
   f.growth.status = 'ready'
-  await nextTick()
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 1)
 
   // 真实跨日（rewardDate 变更）与真实升级（level 变更）必须触发新目录查询。
   f.growth.summary = { userId: 'u-1', rewardDate: '2026-11-26', level: 2 }
-  await nextTick()
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 2)
 
   f.growth.summary = { userId: 'u-1', rewardDate: '2026-11-26', level: 3 }
-  await nextTick()
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 3)
 })
 
 test('回焦与打开弹窗并发复用同一在途请求，并正确选中当前佩戴卡面', async (t) => {
+  t.after(resetFixtures)
   const first = deferred()
   let reads = 0
   handlers.readCovers = () => {
@@ -209,55 +224,96 @@ test('回焦与打开弹窗并发复用同一在途请求，并正确选中当�
   assert.equal(f.exposed.picked.value, 'window')
 
   first.resolve(sampleCatalog({ equipped: 'koi' }))
-  await settle()
+  await flushMicrotasks()
   assert.equal(reads, 1)
+  assert.equal(f.exposed.ready.value, true)
   assert.equal(f.exposed.picked.value, 'koi')
 })
 
-test('购买失败后的权威重读始终发起新请求，且旧在途结果不能覆盖新余额或权益', async (t) => {
-  const stale = deferred()
-  let reads = 0
-  handlers.readCovers = () => {
-    reads += 1
-    if (reads === 1) return Promise.resolve(sampleCatalog({ equipped: 'window', coins: '20' }))
-    if (reads === 2) return stale.promise
-    return Promise.resolve(
-      sampleCatalog({
-        equipped: 'astrolabe',
-        coins: '10',
-        covers: [
-          { key: 'window', reason: 'default', price: 0, missingExperience: 0 },
-          { key: 'astrolabe', reason: 'purchased', price: 10, missingExperience: 0 },
-          { key: 'koi', reason: 'level', price: 0, missingExperience: 0 },
-        ],
-      }),
-    )
-  }
-  handlers.changeCover = async () => {
-    throw new Error('temporary failure')
-  }
+test('强制权威重读始终发起新请求且忽略迟到旧结果，购买失败自动回读最新余额与佩戴状态', async (t) => {
+  await t.test('存在在途回焦查询时，显式强制重试发起权威新请求且旧结果不得覆盖新余额', async (sub) => {
+    sub.after(resetFixtures)
+    const stale = deferred()
+    let reads = 0
+    handlers.readCovers = () => {
+      reads += 1
+      if (reads === 1) return Promise.resolve(sampleCatalog({ equipped: 'window', coins: '20' }))
+      if (reads === 2) return stale.promise
+      return Promise.resolve(
+        sampleCatalog({
+          equipped: 'astrolabe',
+          coins: '10',
+          covers: [
+            { key: 'window', reason: 'default', price: 0, missingExperience: 0 },
+            { key: 'astrolabe', reason: 'purchased', price: 10, missingExperience: 0 },
+            { key: 'koi', reason: 'level', price: 0, missingExperience: 0 },
+          ],
+        }),
+      )
+    }
 
-  const f = mountPicker()
-  t.after(f.unmount)
-  await settle()
-  assert.equal(reads, 1)
+    const f = mountPicker()
+    sub.after(f.unmount)
+    await flushMicrotasks()
+    assert.equal(reads, 1)
+    assert.equal(f.exposed.ready.value, true)
 
-  // 制造一次尚未返回的回焦在途读取，随后用户发起购买并失败回滚。
-  listeners.get('focus')?.()
-  assert.equal(reads, 2)
-  f.exposed.ready.value = true
-  f.exposed.pick('astrolabe')
-  await f.exposed.submit() // 第一次进入确认态
-  await f.exposed.submit() // 第二次确认支付，触发失败后权威重读
-  await settle()
+    // 制造尚未返回的回焦在途读取，随后显式强制重读（对应点击“重试”）。
+    listeners.get('focus')?.()
+    assert.equal(reads, 2)
+    assert.equal(f.exposed.ready.value, false)
 
-  assert.equal(reads, 3)
-  assert.equal(f.exposed.catalog.value.coins, '10')
-  assert.equal(f.exposed.catalog.value.equipped, 'astrolabe')
+    await f.exposed.load(false, true)
+    await flushMicrotasks()
+    assert.equal(reads, 3)
+    assert.equal(f.exposed.ready.value, true)
+    assert.equal(f.exposed.catalog.value.coins, '10')
+    assert.equal(f.exposed.catalog.value.equipped, 'astrolabe')
 
-  // 旧在途读迟到返回时，不得覆盖最新余额与佩戴状态。
-  stale.resolve(sampleCatalog({ equipped: 'window', coins: '20' }))
-  await settle()
-  assert.equal(f.exposed.catalog.value.coins, '10')
-  assert.equal(f.exposed.catalog.value.equipped, 'astrolabe')
+    // 旧在途读迟到返回时，不得覆盖最新余额与佩戴状态。
+    stale.resolve(sampleCatalog({ equipped: 'window', coins: '20' }))
+    await flushMicrotasks()
+    assert.equal(f.exposed.catalog.value.coins, '10')
+    assert.equal(f.exposed.catalog.value.equipped, 'astrolabe')
+  })
+
+  await t.test('购买失败后自动权威重读并同步余额与提示，不依赖手改组件内部状态', async (sub) => {
+    sub.after(resetFixtures)
+    let reads = 0
+    handlers.readCovers = () => {
+      reads += 1
+      if (reads === 1) return Promise.resolve(sampleCatalog({ equipped: 'window', coins: '20' }))
+      return Promise.resolve(
+        sampleCatalog({
+          equipped: 'astrolabe',
+          coins: '10',
+          covers: [
+            { key: 'window', reason: 'default', price: 0, missingExperience: 0 },
+            { key: 'astrolabe', reason: 'purchased', price: 10, missingExperience: 0 },
+            { key: 'koi', reason: 'level', price: 0, missingExperience: 0 },
+          ],
+        }),
+      )
+    }
+    handlers.changeCover = async () => {
+      throw new Error('temporary failure')
+    }
+
+    const f = mountPicker()
+    sub.after(f.unmount)
+    await flushMicrotasks()
+    assert.equal(reads, 1)
+    assert.equal(f.exposed.ready.value, true)
+
+    f.exposed.pick('astrolabe')
+    await f.exposed.submit() // 第一次进入确认态
+    await f.exposed.submit() // 第二次确认支付，失败后自动强制权威重读
+    await flushMicrotasks()
+
+    assert.equal(reads, 2)
+    assert.equal(f.exposed.catalog.value.coins, '10')
+    assert.equal(f.exposed.catalog.value.equipped, 'astrolabe')
+    assert.equal(f.user.user.coins, '10')
+    assert.match(f.exposed.error.value, /请核对最新卡面和余额后再操作/)
+  })
 })

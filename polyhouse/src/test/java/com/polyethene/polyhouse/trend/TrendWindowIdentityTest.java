@@ -8,6 +8,9 @@ import com.polyethene.polyhouse.service.trend.TrendBriefingInputBuilder;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
 import com.polyethene.polyhouse.service.trend.TrendWindowAggregator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -17,8 +20,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 交叉验证 2A 确定性窗口统计与 2B 简报输入构造在四类仓库身份场景下保持同一归并口径：
- * 改名同 ID、同名不同 ID、缺 ID 但可唯一回查、缺 ID 且歧义或无候选不可回查。
+ * 交叉验证 2A 确定性窗口统计与 2B 简报输入构造在仓库身份归并、7 日窗口切片与非法 ID 兜底上保持同一口径。
  */
 class TrendWindowIdentityTest {
     private static final LocalDate ANCHOR = LocalDate.of(2026, 11, 25);
@@ -88,8 +90,72 @@ class TrendWindowIdentityTest {
         assertThat(takeoverCandidate.appearanceDays()).isEqualTo(1);
     }
 
+    @ParameterizedTest(name = "窗口闭区间切片差一边界（offsetDays={0}, 纳入={1}）")
+    @CsvSource({
+            "-6, true",
+            "-7, false",
+            "1, false"
+    })
+    void slicesWindowBoundariesIdenticallyAcrossStatsAndBriefing(int offsetDays, boolean included) {
+        var anchorDay = report(ANCHOR, NOW, List.of(
+                repo(1, "4000", "acme/anchor-repo", "DEVTOOLS", 200L)
+        ));
+        var offsetDay = report(ANCHOR.plusDays(offsetDays), NOW, List.of(
+                repo(1, "4001", "acme/boundary-repo", "DEVTOOLS", 150L)
+        ));
+        var reports = List.of(anchorDay, offsetDay);
+
+        var stats = TrendWindowAggregator.aggregate(ANCHOR, reports);
+        var briefing = TrendBriefingInputBuilder.build(ANCHOR, reports);
+
+        assertThat(stats.coveredDays()).isEqualTo(included ? 2 : 1);
+        assertThat(stats.windowSummary().uniqueRepoCount()).isEqualTo(included ? 2 : 1);
+        assertThat(briefing.candidatesByLowerName().containsKey("acme/boundary-repo")).isEqualTo(included);
+    }
+
+    @Test void deduplicatesSameDayReportsByLatestCapturedAtAcrossStatsAndBriefing() {
+        var older = report(ANCHOR, NOW.minusSeconds(600), List.of(
+                repo(1, "5001", "acme/stale-snapshot", "DEVTOOLS", 100L)
+        ));
+        var newer = report(ANCHOR, NOW, List.of(
+                repo(1, "5002", "acme/fresh-snapshot", "DEVTOOLS", 200L)
+        ));
+
+        // 故意先放新快照再放旧快照，确认不是按列表顺序覆盖，而是严格按 capturedAt 最新值胜出。
+        var reports = List.of(newer, older);
+        var stats = TrendWindowAggregator.aggregate(ANCHOR, reports);
+        var briefing = TrendBriefingInputBuilder.build(ANCHOR, reports);
+
+        assertThat(stats.coveredDays()).isEqualTo(1);
+        assertThat(stats.windowSummary().uniqueRepoCount()).isEqualTo(1);
+        assertThat(briefing.candidatesByLowerName())
+                .containsKey("acme/fresh-snapshot")
+                .doesNotContainKey("acme/stale-snapshot");
+    }
+
+    @ParameterizedTest(name = "非法稳定编号统一退化为未核实身份：{0}")
+    @ValueSource(strings = {"", "0", "-1", "abc", "12345678901234567890"})
+    void treatsMalformedRepositoryIdsAsUnverifiedAcrossStatsAndBriefing(String badId) {
+        var reports = List.of(report(ANCHOR, NOW, List.of(
+                repo(1, badId, "acme/malformed-id", "BACKEND", 120L)
+        )));
+
+        var stats = TrendWindowAggregator.aggregate(ANCHOR, reports);
+        var briefing = TrendBriefingInputBuilder.build(ANCHOR, reports);
+
+        assertThat(stats.windowSummary().uniqueRepoCount()).isEqualTo(1);
+        assertThat(stats.windowSummary().unverifiedIdentityCount()).isEqualTo(1);
+        var candidate = briefing.candidatesByLowerName().get("acme/malformed-id");
+        assertThat(candidate).isNotNull();
+        assertThat(candidate.repositoryId()).isNull();
+    }
+
     private static TrendReportVO report(LocalDate day, List<TrendProjectVO> items) {
-        return new TrendReportVO(UUID.randomUUID().toString(), "DAILY", day, NOW, NOW,
+        return report(day, NOW, items);
+    }
+
+    private static TrendReportVO report(LocalDate day, Instant capturedAt, List<TrendProjectVO> items) {
+        return new TrendReportVO(UUID.randomUUID().toString(), "DAILY", day, capturedAt, capturedAt,
                 GithubTrendingParser.SOURCE, true, items);
     }
 

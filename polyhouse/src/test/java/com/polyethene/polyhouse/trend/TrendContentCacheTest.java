@@ -7,6 +7,9 @@ import com.polyethene.polyhouse.model.dto.TrendReportQueryDTO;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -16,15 +19,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 /** 缓存命中仍需权威头，旧值/损坏/断连均不会变成公开假报告。 */
 class TrendContentCacheTest {
+    private static final Clock FIXED_CLOCK = Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC);
+
     @Test void disabledCacheNeverTouchesRedis() {
         var redis = mock(StringRedisTemplate.class);
-        var cache = new TrendReportCache(redis, new TrendCacheProperties(false), Clock.systemUTC());
+        var cache = new TrendReportCache(redis, new TrendCacheProperties(false), FIXED_CLOCK);
         cache.read(record()); cache.write(record()); verifyNoInteractions(redis);
     }
 
@@ -50,15 +56,22 @@ class TrendContentCacheTest {
         verify(mapper, never()).findVersion(anyString()); verify(mapper, never()).latest();
     }
 
-    @Test void staleWrongIdentityOrMalformedPayloadIsReplacedFromImmutableDatabaseVersion() {
-        for (String value : new String[] {"{}", record().payload().replace(record().id(), "11111111-2222-4333-8444-555555555555")}) {
-            var mapper = mock(TrendMapper.class); var cache = mock(TrendReportCache.class); var record = record();
-            when(cache.enabled()).thenReturn(true); when(mapper.latestHeader()).thenReturn(header(record));
-            when(cache.read(any())).thenReturn(value); when(mapper.findVersion(record.id())).thenReturn(record);
-            var service = new TrendReportService(mapper, TrendFixture.json(), new TrendProperties(true, null), cache);
-            assertThat(service.report(new TrendReportQueryDTO(null, null)).reportId()).isEqualTo(record.id());
-            verify(cache).write(record);
-        }
+    @ParameterizedTest(name = "损坏或身份错配缓存载荷回源修复：{0}")
+    @MethodSource("corruptCachedPayloads")
+    void staleWrongIdentityOrMalformedPayloadIsReplacedFromImmutableDatabaseVersion(String label, String cachedPayload) {
+        var mapper = mock(TrendMapper.class); var cache = mock(TrendReportCache.class); var record = record();
+        when(cache.enabled()).thenReturn(true); when(mapper.latestHeader()).thenReturn(header(record));
+        when(cache.read(any())).thenReturn(cachedPayload); when(mapper.findVersion(record.id())).thenReturn(record);
+        var service = new TrendReportService(mapper, TrendFixture.json(), new TrendProperties(true, null), cache);
+        assertThat(service.report(new TrendReportQueryDTO(null, null)).reportId()).isEqualTo(record.id());
+        verify(cache).write(record);
+    }
+
+    private static Stream<Arguments> corruptCachedPayloads() {
+        return Stream.of(
+                Arguments.of("空 JSON 对象", "{}"),
+                Arguments.of("报告 ID 与权威头不一致", record().payload().replace(record().id(), "11111111-2222-4333-8444-555555555555"))
+        );
     }
 
     @Test void unavailableAuthoritativePointerCannotBeMaskedByCacheAndInvalidDatabaseIsNotCached() {
@@ -73,7 +86,7 @@ class TrendContentCacheTest {
     }
 
     @Test void payloadBoundPreventsOversizedValuesFromBeingWritten() {
-        var redis = mock(StringRedisTemplate.class); var cache = new TrendReportCache(redis, new TrendCacheProperties(true), Clock.systemUTC());
+        var redis = mock(StringRedisTemplate.class); var cache = new TrendReportCache(redis, new TrendCacheProperties(true), FIXED_CLOCK);
         var r = record(); cache.write(new TrendReportRecord(r.id(), r.periodDate(), r.capturedAt(), "x".repeat(256 * 1024 + 1)));
         verifyNoInteractions(redis);
     }

@@ -235,12 +235,13 @@ test('本机编码失败不发请求，保留图片并提示重新选择', async
   assert.equal(fixture.open.value, true)
 })
 
-test('网络故障或服务异常提示结果未确认，保留图像和当前编辑以便核对', async () => {
+test('网络故障或服务异常提示结果未确认，保留图像和当前编辑以便核对', async (t) => {
   for (const status of [0, 502, 503]) {
-    const fixture = mountEditor(async () => {
-      throw new ApiError('无法取得有效响应', status)
-    })
-    try {
+    await t.test(`异常状态码 ${status}`, async (sub) => {
+      const fixture = mountEditor(async () => {
+        throw new ApiError('无法取得有效响应', status)
+      })
+      sub.after(fixture.unmount)
       const image = fixture.image()
       await fixture.editor.save()
       assert.match(fixture.editor.error.value, /结果暂不确定.*刷新申请状态/)
@@ -249,19 +250,18 @@ test('网络故障或服务异常提示结果未确认，保留图像和当前�
       assert.equal(fixture.open.value, true)
       assert.equal(fixture.editor.saving.value, false)
       assert.deepEqual(fixture.saved, [])
-    } finally {
-      fixture.unmount()
-    }
+    })
   }
 })
 
-test('离开页面释放图片，迟到的上传失败不再产生界面提示', async () => {
+test('离开页面释放图片，迟到的上传失败不再产生界面提示', async (t) => {
   const pending = deferred()
   const started = deferred()
   const fixture = mountEditor(() => {
     started.resolve()
     return pending.promise
   })
+  t.after(fixture.unmount)
   const image = fixture.image()
   const saving = fixture.editor.save()
   await started.promise
@@ -275,10 +275,20 @@ test('离开页面释放图片，迟到的上传失败不再产生界面提示',
   assert.deepEqual(fixture.saved, [])
 })
 
-
-test('未知上传结果的显式重试沿用同一申请编号，避免多计额度',async(t)=>{
- const ids=[];const f=mountEditor(async(_blob,id)=>{ids.push(id);if(ids.length===1)throw new ApiError('offline',0);return{status:'PENDING',remainingToday:4}})
- t.after(f.unmount);f.image();await f.editor.save();await f.editor.save();assert.equal(ids.length,2);assert.equal(ids[0],ids[1]);assert.match(ids[0],/^[0-9a-f-]{36}$/)
+test('未知上传结果的显式重试沿用同一申请编号，避免多计额度', async (t) => {
+  const ids = []
+  const fixture = mountEditor(async (_blob, id) => {
+    ids.push(id)
+    if (ids.length === 1) throw new ApiError('offline', 0)
+    return { status: 'PENDING', remainingToday: 4 }
+  })
+  t.after(fixture.unmount)
+  fixture.image()
+  await fixture.editor.save()
+  await fixture.editor.save()
+  assert.equal(ids.length, 2)
+  assert.equal(ids[0], ids[1])
+  assert.match(ids[0], /^[0-9a-f-]{36}$/)
 })
 
 test('头像以 0.8 起步，超出 20 KiB 降画质，同次重试复用原始 JSON 图片', async (t) => {
@@ -307,25 +317,169 @@ test('头像以 0.8 起步，超出 20 KiB 降画质，同次重试复用原始 
   assert.equal(atob(uploads[0].payload), 'webp-fixture')
 })
 
-test('已有草稿时改选非法、超限或解码失败文件会作废旧草稿，取消选择保留旧图，改选有效图后可正常提交', async (t) => {
-  const prevInput = globalThis.HTMLInputElement
-  const prevDecode = globalThis.createImageBitmap
+function buildPngHeader(width, height) {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(8, 13)
+  view.setUint32(12, 0x49484452)
+  view.setUint32(16, width)
+  view.setUint32(20, height)
+  return bytes
+}
+
+function buildAnimatedWebpHeader() {
+  // RIFF(4) + chunkSize(4) + WEBP(4) + VP8X(4) + size=10(4) + flags(bit1=动画)(1) + 保留与宽高(9) = 30 字节
+  const bytes = new Uint8Array(30)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, 0x52494646)
+  view.setUint32(4, bytes.length - 8, true)
+  view.setUint32(8, 0x57454250)
+  view.setUint32(12, 0x56503858)
+  view.setUint32(16, 10, true)
+  view.setUint8(20, 0x02)
+  return bytes
+}
+
+function patchGlobal(t, key, value) {
+  const hadOwn = Object.prototype.hasOwnProperty.call(globalThis, key)
+  const previous = globalThis[key]
+  globalThis[key] = value
+  t.after(() => {
+    if (hadOwn) globalThis[key] = previous
+    else delete globalThis[key]
+  })
+}
+
+test('已有草稿时改选非法、超限、动图或解码失败文件会作废旧草稿，取消选择保留旧图，改选有效图后可正常提交且迟到解码不复活草稿', async (t) => {
   class FakeInput {
     constructor(files) {
       this.files = files
       this.value = 'picked'
     }
   }
-  const pngHeader = new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
-  ])
-  let decodeShouldFail = false
-  globalThis.HTMLInputElement = FakeInput
-  globalThis.createImageBitmap = async () => {
-    if (decodeShouldFail) throw new Error('decode failed')
-    return {
+  const validPng = buildPngHeader(256, 256)
+  const oversizedPng = buildPngHeader(4097, 256)
+  const animatedWebp = buildAnimatedWebpHeader()
+
+  let decodeHandler = async () => ({
+    width: 256,
+    height: 256,
+    closed: false,
+    close() {
+      this.closed = true
+    },
+  })
+  patchGlobal(t, 'HTMLInputElement', FakeInput)
+  patchGlobal(t, 'createImageBitmap', (...args) => decodeHandler(...args))
+
+  const requestIds = []
+  const fixture = mountEditor(async (_payload, requestId) => {
+    requestIds.push(requestId)
+    return { status: 'PENDING', remainingToday: 4 }
+  })
+  t.after(fixture.unmount)
+
+  await t.test('取消系统文件选择器保留已有草稿', async () => {
+    const kept = fixture.image()
+    fixture.editor.fileName.value = 'old.png'
+    await fixture.editor.choose({ target: new FakeInput([]) })
+    assert.equal(fixture.editor.image.value, kept)
+    assert.equal(kept.closed, false)
+    assert.equal(fixture.editor.fileName.value, 'old.png')
+  })
+
+  const invalidCases = [
+    {
+      name: '不支持的格式（GIF）',
+      file: { name: 'anim.gif', type: 'image/gif', size: 1024 },
+      expectedError: /JPEG、PNG 或 WebP/,
+    },
+    {
+      name: '文件体积超过 5 MiB 上限',
+      file: { name: 'huge.png', type: 'image/png', size: 5 * 1024 * 1024 + 1 },
+      expectedError: /5 MiB/,
+    },
+    {
+      name: 'PNG 像素尺寸超过 4096×4096 差一边界',
+      file: {
+        name: 'wide.png',
+        type: 'image/png',
+        size: oversizedPng.byteLength,
+        arrayBuffer: async () => oversizedPng.buffer.slice(0),
+      },
+      expectedError: /无法读取|4096/,
+    },
+    {
+      name: '动画 WebP 在浏览器解码前被拒绝',
+      file: {
+        name: 'anim.webp',
+        type: 'image/webp',
+        size: animatedWebp.byteLength,
+        arrayBuffer: async () => animatedWebp.buffer.slice(0),
+      },
+      expectedError: /无法读取|动图/,
+    },
+    {
+      name: '文件头合法但浏览器解码失败',
+      file: {
+        name: 'broken.png',
+        type: 'image/png',
+        size: validPng.byteLength,
+        arrayBuffer: async () => validPng.buffer.slice(0),
+      },
+      failDecode: true,
+      expectedError: /无法读取/,
+    },
+  ]
+
+  for (const item of invalidCases) {
+    await t.test(`改选非法文件立即作废旧草稿：${item.name}`, async () => {
+      const priorCount = requestIds.length
+      const oldDraft = fixture.image()
+      fixture.editor.fileName.value = 'previous.png'
+      decodeHandler = item.failDecode
+        ? async () => {
+            throw new Error('decode failed')
+          }
+        : async () => ({
+            width: 256,
+            height: 256,
+            closed: false,
+            close() {
+              this.closed = true
+            },
+          })
+
+      await fixture.editor.choose({ target: new FakeInput([item.file]) })
+      assert.equal(oldDraft.closed, true)
+      assert.equal(fixture.editor.image.value, undefined)
+      assert.equal(fixture.editor.fileName.value, '')
+      assert.match(fixture.editor.error.value, item.expectedError)
+      await fixture.editor.save()
+      assert.equal(requestIds.length, priorCount)
+    })
+  }
+
+  await t.test('慢解码在改选无效文件后迟到完成时自动释放且不复活草稿', async () => {
+    const slowDecode = deferred()
+    decodeHandler = () => slowDecode.promise
+    const pendingChoose = fixture.editor.choose({
+      target: new FakeInput([
+        {
+          name: 'slow.png',
+          type: 'image/png',
+          size: validPng.byteLength,
+          arrayBuffer: async () => validPng.buffer.slice(0),
+        },
+      ]),
+    })
+    await Promise.resolve()
+    // 慢解码挂起期间改选 GIF，应递增 selection 并作废前一次选择。
+    await fixture.editor.choose({
+      target: new FakeInput([{ name: 'anim.gif', type: 'image/gif', size: 128 }]),
+    })
+    const staleBitmap = {
       width: 256,
       height: 256,
       closed: false,
@@ -333,83 +487,41 @@ test('已有草稿时改选非法、超限或解码失败文件会作废旧草�
         this.closed = true
       },
     }
-  }
-  t.after(() => {
-    globalThis.HTMLInputElement = prevInput
-    globalThis.createImageBitmap = prevDecode
+    slowDecode.resolve(staleBitmap)
+    await pendingChoose
+    assert.equal(staleBitmap.closed, true)
+    assert.equal(fixture.editor.image.value, undefined)
+    assert.match(fixture.editor.error.value, /JPEG、PNG 或 WebP/)
   })
 
-  let uploads = 0
-  const fixture = mountEditor(async () => {
-    uploads += 1
-    return { status: 'PENDING', remainingToday: 4 }
-  })
-  t.after(fixture.unmount)
-
-  // 取消系统文件选择器：保留已有草稿。
-  const kept = fixture.image()
-  await fixture.editor.choose({ target: new FakeInput([]) })
-  assert.equal(fixture.editor.image.value, kept)
-  assert.equal(kept.closed, false)
-
-  // 1. 不支持的格式（GIF）
-  await fixture.editor.choose({
-    target: new FakeInput([{ name: 'anim.gif', type: 'image/gif', size: 1024 }]),
-  })
-  assert.equal(kept.closed, true)
-  assert.equal(fixture.editor.image.value, undefined)
-  assert.match(fixture.editor.error.value, /JPEG、PNG 或 WebP/)
-  await fixture.editor.save()
-  assert.equal(uploads, 0)
-
-  // 2. 超过 5 MiB
-  const second = fixture.image()
-  await fixture.editor.choose({
-    target: new FakeInput([{ name: 'huge.png', type: 'image/png', size: 5 * 1024 * 1024 + 1 }]),
-  })
-  assert.equal(second.closed, true)
-  assert.equal(fixture.editor.image.value, undefined)
-  assert.match(fixture.editor.error.value, /5 MiB/)
-  await fixture.editor.save()
-  assert.equal(uploads, 0)
-
-  // 3. 解码失败
-  const third = fixture.image()
-  decodeShouldFail = true
-  await fixture.editor.choose({
-    target: new FakeInput([
-      {
-        name: 'broken.png',
-        type: 'image/png',
-        size: pngHeader.byteLength,
-        arrayBuffer: async () => pngHeader.buffer.slice(0),
+  await t.test('重新选择有效静态 PNG 后恢复可提交并分配新申请编号', async () => {
+    decodeHandler = async () => ({
+      width: 256,
+      height: 256,
+      closed: false,
+      close() {
+        this.closed = true
       },
-    ]),
+    })
+    fixture.editor.canvas.value = {
+      getContext: () => ({ fillRect() {}, drawImage() {} }),
+      toBlob: (callback) => callback(new Blob(['valid-webp'], { type: 'image/webp' })),
+    }
+    await fixture.editor.choose({
+      target: new FakeInput([
+        {
+          name: 'valid.png',
+          type: 'image/png',
+          size: validPng.byteLength,
+          arrayBuffer: async () => validPng.buffer.slice(0),
+        },
+      ]),
+    })
+    assert.ok(fixture.editor.image.value)
+    assert.equal(fixture.editor.fileName.value, 'valid.png')
+    assert.equal(fixture.editor.error.value, '')
+    await fixture.editor.save()
+    assert.equal(requestIds.length, 1)
+    assert.match(requestIds[0], /^[0-9a-f-]{36}$/)
   })
-  assert.equal(third.closed, true)
-  assert.equal(fixture.editor.image.value, undefined)
-  assert.match(fixture.editor.error.value, /无法读取/)
-  await fixture.editor.save()
-  assert.equal(uploads, 0)
-
-  // 4. 重新选择有效静态 PNG 后恢复可提交。
-  decodeShouldFail = false
-  fixture.editor.canvas.value = {
-    getContext: () => ({ fillRect() {}, drawImage() {} }),
-    toBlob: (callback) => callback(new Blob(['valid-webp'], { type: 'image/webp' })),
-  }
-  await fixture.editor.choose({
-    target: new FakeInput([
-      {
-        name: 'valid.png',
-        type: 'image/png',
-        size: pngHeader.byteLength,
-        arrayBuffer: async () => pngHeader.buffer.slice(0),
-      },
-    ]),
-  })
-  assert.ok(fixture.editor.image.value)
-  assert.equal(fixture.editor.error.value, '')
-  await fixture.editor.save()
-  assert.equal(uploads, 1)
 })

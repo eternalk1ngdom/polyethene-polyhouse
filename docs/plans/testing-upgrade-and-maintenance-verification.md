@@ -10,19 +10,19 @@
 
 ---
 
-## 二、聚妙屋测试规范（本专项执行标准 · 草案）
+## 二、聚妙屋测试规范（本专项执行标准 · 已确认）
 
-> 说明：根目录 [AGENTS.md](../../AGENTS.md) 仍是唯一长期工程契约。以下 10 条规则作为本专项的评审与编写标准，待实际治理磨合稳定后，再按需将精简条款合并入 `AGENTS.md`，不另立第二份长期契约。
+> 说明：根目录 [AGENTS.md](../../AGENTS.md) 仍是唯一长期工程契约。以下 10 条规则经阶段 A 审计复核已拍板作为本专项的评审与编写标准；阶段 D 将仅把其中 5～8 行精简红线并入 `AGENTS.md`，详细写法与夹具范式沉淀到 [verification.md](../operations/verification.md)，不另立第二份长期契约。
 
 ### 核心六条（结合本仓技术栈落地）
 
-1. **契约优先于实现**：断言必须严格基于业务规则、HTTP/VO 契约、状态结果与对外可见副作用编写；严禁照抄内部私有步骤或用过度细碎的 `verify` 调用次序做镜像测试。
+1. **契约优先于实现**：断言必须严格基于业务规则、HTTP/VO 契约、状态结果与对外可见副作用编写；严禁照抄内部私有步骤、用过度细碎的 `verify`/`inOrder` 调用次序或正则/子串匹配 `.vue` CSS 源码做镜像测试，也严禁在组件测试中手写内部状态 ref 来跳过初始化契约。
 2. **禁止琐碎测试**：不为简单 getter/setter、纯字段容器 DTO、无分支透传封装或框架默认样板代码写单元测试；但对带 Jakarta Validation 注解、反序列化白名单或敏感字段脱敏契约的 DTO/VO，应按契约测边界而非测存取器。
-3. **默认使用表驱动测试**：同一行为的多组输入变体（正常值、边界值、非法值）必须合并为单个参数化/表驱动测试，禁止仅改入参就复制多个重复测试方法。
+3. **默认使用表驱动测试**：同一行为的多组输入变体（正常值、边界值、非法值）必须合并为单个参数化/表驱动测试，禁止仅改入参就复制多个重复测试方法，禁止在单方法内用无名 `for` 循环吞掉后置失败定位，也禁止用 `reset(mock)` 在单方法内堆叠多个独立场景。
    - **后端（JUnit 5）**：直接使用 `spring-boot-starter-test` 自带的 `@ParameterizedTest`（配合 `@ValueSource` / `@CsvSource` / `@MethodSource`）。
    - **前端（Node 内置 `node:test`）**：本仓不使用 Jest/Vitest，**`node:test` 不存在 `test.each`**；统一在单个 `test(...)` 内使用用例表配合 `for (const item of cases) { await t.test(item.name, ...) }`（或带清晰用例名的断言消息）。
 4. **严格限制 Mock 边界**：只 Mock 外部 I/O 边界（网络/HTTP、时钟 `Clock`、第三方 API、必要的持久化 Mapper 替身、Node 环境下不可用的浏览器宿主 API）；严禁 Mock 被测单元本身、纯算法内核（`polyhouse-web/src/core/`、后端无状态聚合器/编解码器）或简单值对象。
-5. **验证失败能力（红绿循环）**：新增 Bug 修复或核心业务测试时，必须实际验证「临时破坏目标逻辑 → 测试必然失败 → 恢复后通过」；严禁为强行跑通而放宽或削弱既有断言。合并或精简旧测试时同样需做红绿抽检，确保防线未变弱。
+5. **验证失败能力（红绿循环）**：新增 Bug 修复或核心业务测试时，必须实际验证「临时破坏目标逻辑 → 测试必然失败 → 恢复后通过」；严禁为强行跑通而放宽或削弱既有断言，且断言必须覆盖测试标题承诺的全部行为（防“标题写了但测试体漏测”的空壳防线）。合并或精简旧测试时同样需做红绿抽检，确保防线未变弱。
 6. **聚焦分支与边界场景**：重点覆盖空值/空集合、差一边界（off-by-one）、长度/容量上限、异常路径与状态流转，不盲目追求 100% 行覆盖率数字。
 
 ### 针对本项目特征补充的四条
@@ -34,7 +34,7 @@
    L1 通过绝不等于 L2/L3 验收通过。
 8. **确定性与强隔离（零脆弱、零污染）**：
    - 禁止依赖真实墙钟时间或用固定 `setTimeout` 赌异步时序（后端注入 `Clock`，前端用 `deferred` / 可控时钟 / 事件通知驱动）；
-   - 禁止跨用例共享可变全局状态，所有 `globalThis` 替身、临时文件、Redis 键与随机库必须在 `t.after()` / `@AfterEach` 彻底清理，绝对不触碰本机正式屋主数据。
+   - 禁止跨用例共享可变全局状态，所有 `globalThis` 替身、模块级共享 stub、临时文件、Redis 键与随机库必须在 `t.after()` / `@AfterEach` 彻底清理（原本不存在的 `globalThis` 属性须 `delete` 还原而非赋 `undefined`）；L2 数据库集成测试统一接入随机隔离库，绝对不触碰本机正式屋主数据。
 9. **并发竞态、取消隔离与失败回滚**：针对本项目高频状态机（卡面并发扣款、头像/妙压/妙替取消或卸载后迟到结果防复活、星潮 AI 预留与未知态结算、跨标签存储同步），高风险模块必须覆盖并发冲突、中断隔离与半途失败回滚，而非只测单次顺序执行。
 10. **安全与鉴权负向契约**：凡涉及登录态、角色管理、私有资源、文件导入导出或动态查询的测试，必须成对覆盖负向场景（未登录 401、角色越权 403、跨账号访问拒绝、响应不含 `passwordHash`/`credentialVersion` 等敏感字段、私有响应带 `Cache-Control: no-store`、非法路径/控制字符拦截）。
 
@@ -46,19 +46,15 @@
 
 ### 阶段 A · 规范拍板与存量测试体检（只读审计，不改代码）
 
-- [ ] **A1 · 确认测试规范口径**：确认上述 10 条规范无遗漏或冲突，明确后续是否在阶段 D 精简并入 `AGENTS.md`。
-- [ ] **A2 · 存量测试分级审计**：分域盘点后端 95 个测试类与前端 38 个测试文件（优先覆盖本次改动波及域：`trend`、`user/profile/avatar`、`target-kb`、`replace`、`common`），输出审计清单，逐类标注：
-  - 镜像实现测试（只盯内部调用细节、不验业务契约）；
-  - 琐碎/样板测试（纯 getter/setter、无分支透传）；
-  - 重复入参测试（可合并为 `@ParameterizedTest` 或 `node:test` 表驱动子测试）；
-  - 脆弱或过深 Mock 测试（依赖真实 `setTimeout`/墙钟、Mock 了被测核心对象）。
-- **完成标志**：形成按“保留 / 合并表驱动 / 改写为契约断言 / 删冗余”分类的明确改造列表，确认范围后再动手。
+- [x] **A1 · 确认测试规范口径**：已核对 10 条规范并补充 4 条实审细则，用户确认无冲突且阶段 D 仅并入精简红线到 `AGENTS.md`、细则沉淀至 `verification.md`。
+- [x] **A2 · 存量测试分级审计**：已完成全仓 134 个文件（后端 95 Java + 前端 39 `.mjs`）100% 只读审计，明确分级改造列表；用户确认全部方案，含阶段 B2 将 `user/` 6 个旧 L2 测试一并迁入随机隔离库、阶段 B3 升格前端公共测试夹具 `tests/helpers/`。
+- **完成标志**：已完成并获用户确认，进入阶段 B。
 
 ### 阶段 B · 测试体系升级与噪音治理（按模块分批，红绿兜底）
 
-- [ ] **B1 · 治理本轮新增测试中的脆弱点与表驱动化**：先自检 `chore/repository-maintenance` 新增的 10 项前端测试与 2 项后端测试（例如将 [trend-edition.test.mjs](../../polyhouse-web/tests/trend/trend-edition.test.mjs) 中的 `setTimeout(..., 65)` 冷却等待改为可控时间源，核查 [avatar-editor.test.mjs](../../polyhouse-web/tests/user/avatar-editor.test.mjs) 与 [TrendWindowIdentityTest.java](../../polyhouse/src/test/java/com/polyethene/polyhouse/trend/TrendWindowIdentityTest.java) 的表驱动结构与红绿失败能力）。
-- [ ] **B2 · 后端存量测试分批治理**：按 `common` → `user` → `trend` → `system` 分批将重复入参用例收敛为 `@ParameterizedTest`，清理镜像/琐碎用例，消除不合理 Mock；每批抽样执行红绿变异验证并跑通受影响测试。
-- [ ] **B3 · 前端存量测试分批治理**：按 `user` → `trend` → `target-kb` → `replace` → `common` 分批收敛为 `node:test` 表驱动子测试，清理时间竞态与冗余复制断言；每批执行红绿抽检及 `npm run lint:check` + `npm test`。
+- [x] **B1 · 治理本轮新增测试中的脆弱点与表驱动化**：已完成 7 个本轮新增/改动测试文件升级（[trend-edition.test.mjs](../../polyhouse-web/tests/trend/trend-edition.test.mjs) 改可控 `Date.now` 差一边界去 65ms 墙钟等待，[profile-cover-picker.test.mjs](../../polyhouse-web/tests/user/profile-cover-picker.test.mjs) 去手改 `ready.value` 与 8 处 `setTimeout(0)`，[avatar-editor.test.mjs](../../polyhouse-web/tests/user/avatar-editor.test.mjs) 坏文件分支改 `t.test()` 表驱动并补 4096/动图/慢解码竞态，[local-profile-cover.test.mjs](../../polyhouse-web/tests/user/local-profile-cover.test.mjs) 广播异常表驱动并补损坏记录/防复活/`onblocked`，[target-kb-lifecycle.test.mjs](../../polyhouse-web/tests/target-kb/target-kb-lifecycle.test.mjs) 补齐 `t.after` 隔离；[TrendContentCacheTest.java](../../polyhouse/src/test/java/com/polyethene/polyhouse/trend/TrendContentCacheTest.java) 参数化与 `Clock.fixed`，[TrendWindowIdentityTest.java](../../polyhouse/src/test/java/com/polyethene/polyhouse/trend/TrendWindowIdentityTest.java) 补 7 日切片/同日去重/非法 ID 参数化），并完成 4 处前端与 1 处后端红绿变异复核。
+- [ ] **B2 · 后端存量测试分批治理**：按 `common` → `user` → `trend` → `system` 分批将重复入参用例收敛为 `@ParameterizedTest`，清理镜像/琐碎用例，消除不合理 Mock 与默认必跑 `Thread.sleep`，并抽离共享随机隔离库夹具且将 `user/` 6 个旧 L2 测试一并迁入随机隔离库；每批抽样执行红绿变异验证并跑通受影响测试。
+- [ ] **B3 · 前端存量测试分批治理**：先升格跨模块共享 `tests/helpers/` 并修 P0 状态隔离与漏测，再按 `user` → `trend` → `target-kb` → `replace` → `common` 分批收敛为 `node:test` 表驱动子测试，清理时间竞态与冗余复制断言；每批执行红绿抽检及 `npm run lint:check` + `npm test`。
 - **完成标志**：无效/重复测试明显收敛、测试运行稳定无偶发超时、抽样破坏关键业务规则时对应测试 100% 稳定报红。
 
 ### 阶段 C · 本轮仓库维护 10 项修复的完整专项验收（当前：全部尚未执行）
