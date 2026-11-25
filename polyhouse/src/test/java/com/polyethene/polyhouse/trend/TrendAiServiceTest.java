@@ -12,11 +12,13 @@ import com.polyethene.polyhouse.service.trend.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -27,9 +29,13 @@ class TrendAiServiceTest {
     private final TrendInsightCodec codec = new TrendInsightCodec(TrendFixture.json());
 
     @Test void revokedExecutionAfterReservationCancelsUnsentFeeAndNeverCallsProvider() {
-        grant();
-        var checks = new java.util.concurrent.atomic.AtomicInteger();
-        Runnable guard = () -> { if (checks.incrementAndGet() == 3) throw new TrendExecutionLost(); };
+        var reserved = new AtomicBoolean();
+        when(ledger.reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any())).thenAnswer(invocation -> {
+            reserved.set(true);
+            return new TrendAiLedger.Decision("GRANTED", TrendAiFixture.request(invocation.getArgument(0)), null);
+        });
+        // 以“预留已发生”事件触发撤权，不再硬编码内部 guard.run() 的调用次数。
+        Runnable guard = () -> { if (reserved.get()) throw new TrendExecutionLost(); };
         assertThatThrownBy(() -> service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection(), guard))
                 .isInstanceOf(TrendExecutionLost.class);
         verify(ledger).cancelBeforeSend(anyString());
@@ -80,17 +86,17 @@ class TrendAiServiceTest {
         verify(ledger).settle(anyString(), eq(300), eq(180), notNull());
     }
 
-    @Test void expiryAtFifteenDaysOrChangedReadmeRequiresNewAnalysis() {
-        for (boolean expired : new boolean[] {true, false}) {
-            reset(ledger, gateway);
-            var old = TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofDays(expired ? 15 : 1)));
-            when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(old)));
-            grant();
-            when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 100, 20));
-            var input = new TrendCollection(TrendAiFixture.NOW, List.of(TrendAiFixture.project(1, expired ? TrendAiFixture.SHA : "b".repeat(40))));
-            assertThat(service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), input).projects().getFirst().snapshot().insightStatus()).isEqualTo("ANALYZED");
-            verify(ledger).settle(anyString(), eq(100), eq(20), notNull());
-        }
+    @ParameterizedTest(name = "{0}时重新分析")
+    @CsvSource({"过期满15天, 15, false", "README版本变化, 1, true"})
+    void expiryAtFifteenDaysOrChangedReadmeRequiresNewAnalysis(String scenario, int ageDays, boolean changedReadme) {
+        var old = TrendAiFixture.insight(TrendAiFixture.NOW.minus(Duration.ofDays(ageDays)));
+        when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(old)));
+        grant();
+        when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 100, 20));
+        String sha = changedReadme ? "b".repeat(40) : TrendAiFixture.SHA;
+        var input = new TrendCollection(TrendAiFixture.NOW, List.of(TrendAiFixture.project(1, sha)));
+        assertThat(service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), input).projects().getFirst().snapshot().insightStatus()).isEqualTo("ANALYZED");
+        verify(ledger).settle(anyString(), eq(100), eq(20), notNull());
     }
 
     @Test void budgetExhaustionKeepsOldAnalysisExplicitlyStaleWithoutCallingProvider() {
@@ -157,9 +163,8 @@ class TrendAiServiceTest {
             assertThat(item.readmeStatus()).isEqualTo("UNAVAILABLE");
             assertThat(item.insightStatus()).as(row.name()).isEqualTo(row.status());
             assertThat(item.insight()).as(row.name()).isEqualTo(previous.get(row.id()));
-            verify(ledger).repository(row.id());
         }
-        verifyNoMoreInteractions(ledger);
+        verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
         verifyNoInteractions(gateway);
     }
 
@@ -248,13 +253,15 @@ class TrendAiServiceTest {
         verify(ledger).settle(anyString(), eq(100), eq(20), isNull());
     }
 
-    @Test void unknownNetworkResultRetainsBudgetButProvenNotSentCancels() {
+    @Test void unknownNetworkResultRetainsBudget() {
         grant();
         when(gateway.complete(any())).thenThrow(new IllegalStateException("contains a fake secret"));
         assertThat(service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection()).projects().getFirst().snapshot().insightStatus()).isEqualTo("PENDING");
         verify(ledger).unknown(anyString(), eq(false));
         verify(ledger, never()).cancelBeforeSend(anyString());
-        reset(ledger, gateway);
+    }
+
+    @Test void provenNotSentCancelsBeforeSend() {
         grant();
         when(gateway.complete(any())).thenThrow(new DeepSeekGateway.NotSent());
         service(TrendAiFixture.settings()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
@@ -270,7 +277,7 @@ class TrendAiServiceTest {
         verify(ledger, never()).settle(anyString(), anyInt(), anyInt(), any());
     }
 
-    @Test void lightThinkingReservesUpToThreeThousandOutputTokensAndRejectsAboveLimit() {
+    @Test void lightThinkingReservesUpToThreeThousandOutputTokens() {
         grant();
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 1200, 2600));
         var ok = service(TrendAiFixture.settingsWithThinking()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection())
@@ -279,8 +286,9 @@ class TrendAiServiceTest {
         assertThat(ok.insight().descriptionZh()).isNotBlank();
         verify(ledger).reserve(anyString(), eq(1L), eq(TrendAiFixture.SHA), anyInt(), eq(3000), isNull());
         verify(ledger).settle(anyString(), eq(1200), eq(2600), notNull());
+    }
 
-        reset(ledger, gateway);
+    @Test void lightThinkingRejectsOutputAboveThreeThousandTokens() {
         grant();
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 1200, 3001));
         var exceeded = service(TrendAiFixture.settingsWithThinking()).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection())
@@ -301,20 +309,23 @@ class TrendAiServiceTest {
         verify(ledger, times(1)).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
     }
 
-    @Test void disabledMissingKeyAndDocumentResourcesNeverReachTheProvider() {
+    @Test void disabledAiReusesExistingInsightWithoutCallingProvider() {
         var disabled = new TrendAiProperties(false, null, null, null, null, null);
         var old = TrendAiFixture.insight(TrendAiFixture.NOW);
         when(ledger.repository(1)).thenReturn(new TrendAiRepository(1, null, codec.encode(old)));
         var basic = service(disabled).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
         assertThat(basic.projects().getFirst().snapshot().insightStatus()).isEqualTo("REUSED");
-        verify(ledger).repository(1);
-        verifyNoMoreInteractions(ledger);
+        verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
         verifyNoInteractions(gateway);
-        reset(ledger);
+    }
+
+    @Test void missingApiKeyNeverReservesOrCallsProvider() {
         service(new TrendAiProperties(true, null, null, null, null, null)).enrich(UUID.randomUUID().toString(), TrendAiFixture.collection());
         verifyNoInteractions(gateway);
         verify(ledger, never()).reserve(anyString(), anyLong(), anyString(), anyInt(), anyInt(), any());
-        reset(ledger);
+    }
+
+    @Test void documentResourcesAreMarkedNotRequiredWithoutCallingProvider() {
         var base = TrendAiFixture.project(1, TrendAiFixture.SHA).snapshot();
         var docs = new com.polyethene.polyhouse.model.vo.TrendProjectVO(1, "1", base.fullName(), base.repoUrl(), null, null,
                 1L, 1L, 1L, null, false, "DOC_LIST", "RESOURCE_NAME_AND_DOC_FILES", "AVAILABLE", "AVAILABLE", "NOT_REQUIRED");

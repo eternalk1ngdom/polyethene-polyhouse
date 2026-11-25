@@ -4,6 +4,8 @@ import com.polyethene.polyhouse.config.WebMvcConfig;
 import com.polyethene.polyhouse.controller.TrendReadinessController;
 import com.polyethene.polyhouse.service.AuthService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.availability.ApplicationAvailability;
 import org.springframework.boot.availability.ReadinessState;
@@ -13,6 +15,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.stream.Stream;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -34,19 +38,21 @@ class TrendReadinessControllerTest {
                 .andExpect(jsonPath("$.data.status").value("READY"))
                 .andExpect(jsonPath("$.data.scope").value("APPLICATION"));
         verifyNoInteractions(auth);
-        verify(availability).getReadinessState();
-        verifyNoMoreInteractions(availability);
     }
 
-    @Test void refusingOrUnknownStateNeverClaimsReady() throws Exception {
-        when(availability.getReadinessState()).thenReturn(ReadinessState.REFUSING_TRAFFIC, null);
-        for (int i = 0; i < 2; i++) {
-            mvc.perform(get("/api/trend/readiness")).andExpect(status().isServiceUnavailable())
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(header().string("Retry-After", "5"))
-                    .andExpect(jsonPath("$.code").value(50300)).andExpect(jsonPath("$.data").isEmpty());
-        }
+    @ParameterizedTest(name = "非就绪状态返回 503 与 Retry-After：{0}")
+    @MethodSource("unreadyStates")
+    void refusingOrUnknownStateNeverClaimsReady(ReadinessState state) throws Exception {
+        when(availability.getReadinessState()).thenReturn(state);
+        mvc.perform(get("/api/trend/readiness")).andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Retry-After", "5"))
+                .andExpect(jsonPath("$.code").value(50300)).andExpect(jsonPath("$.data").isEmpty());
         verifyNoInteractions(auth);
+    }
+
+    private static Stream<ReadinessState> unreadyStates() {
+        return Stream.of(ReadinessState.REFUSING_TRAFFIC, null);
     }
 
     @Test void headSharesReadyStateAndPostCannotTriggerWork() throws Exception {
@@ -56,6 +62,5 @@ class TrendReadinessControllerTest {
                 .andExpect(header().string("Cache-Control", "no-store"));
         mvc.perform(post("/api/trend/readiness")).andExpect(status().isMethodNotAllowed());
         verifyNoInteractions(auth);
-        verify(availability).getReadinessState();
     }
 }

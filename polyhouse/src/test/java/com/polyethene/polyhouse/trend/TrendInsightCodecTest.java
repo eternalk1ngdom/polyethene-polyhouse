@@ -4,7 +4,12 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec.OutputRejected;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.*;
 
 class TrendInsightCodecTest {
@@ -115,42 +120,34 @@ class TrendInsightCodecTest {
         assertThat(thinInsight.descriptionZh()).isNull();
         String lead = article.get("definition").textValue();
         assertRejected(article.put("painPoint", lead).toString(), "REPEATED_DEFINITION");
-
-        // 旧规则 radar-1/radar-2/radar-3 缓存缺少新可选字段时仍须兼容解码。
-        var historicalV1 = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
-        historicalV1.remove("trendSignal");
-        historicalV1.remove("descriptionZh");
-        historicalV1.put("ruleVersion", "radar-1").put("painPoint", lead);
-        var decodedV1 = codec.cached(historicalV1.toString());
-        assertThat(decodedV1.painPoint()).isEqualTo(lead);
-        assertThat(decodedV1.trendSignal()).isNull();
-        assertThat(decodedV1.descriptionZh()).isNull();
-
-        var historicalV2 = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
-        historicalV2.remove("trendSignal");
-        historicalV2.remove("descriptionZh");
-        historicalV2.put("ruleVersion", "radar-2").put("painPoint", "整理重复操作");
-        var decodedV2 = codec.cached(historicalV2.toString());
-        assertThat(decodedV2.ruleVersion()).isEqualTo("radar-2");
-        assertThat(decodedV2.trendSignal()).isNull();
-        assertThat(decodedV2.descriptionZh()).isNull();
-
-        var historicalV3 = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(expanded));
-        historicalV3.remove("descriptionZh");
-        historicalV3.put("ruleVersion", "radar-3");
-        var decodedV3 = codec.cached(historicalV3.toString());
-        assertThat(decodedV3.ruleVersion()).isEqualTo("radar-3");
-        assertThat(decodedV3.trendSignal()).isNotBlank();
-        assertThat(decodedV3.descriptionZh()).isNull();
     }
 
-    @Test void rejectsBlankDuplicateUnknownFieldsAndTrailingJson() {
-        for (String content : new String[] {"", "   ", "{}", TrendAiFixture.content() + "{}",
-                TrendAiFixture.content().replace("\"DEVTOOLS\"", "\"DEVTOOLS\",\"category\":\"OTHER\""),
-                TrendAiFixture.content().replace("\"category\":", "\"unexpected\":true,\"category\":"),
-                TrendAiFixture.content().replace("DEVTOOLS", "COMMUNITY_RUMOR")}) {
-            assertThatThrownBy(() -> codec.insight(content, TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW)).isInstanceOf(BusinessException.class);
+    @ParameterizedTest(name = "兼容旧规则缓存 {0}")
+    @CsvSource({
+            "radar-1, true, true, true",
+            "radar-2, false, true, true",
+            "radar-3, false, false, true"
+    })
+    void decodesHistoricalRuleVersionsWithMissingOptionalFields(
+            String ruleVersion, boolean repeatDefinitionAsPainPoint, boolean removeTrendSignal, boolean removeDescriptionZh) throws Exception {
+        var base = codec.insight(TrendAiFixture.content(), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
+        var historical = (com.fasterxml.jackson.databind.node.ObjectNode) TrendFixture.json().readTree(codec.encode(base));
+        if (removeTrendSignal) historical.remove("trendSignal");
+        if (removeDescriptionZh) historical.remove("descriptionZh");
+        historical.put("ruleVersion", ruleVersion);
+        if (repeatDefinitionAsPainPoint) historical.put("painPoint", base.definition());
+
+        var decoded = codec.cached(historical.toString());
+        assertThat(decoded.ruleVersion()).isEqualTo(ruleVersion);
+        if (repeatDefinitionAsPainPoint) {
+            assertThat(decoded.painPoint()).isEqualTo(base.definition());
         }
+        if (removeTrendSignal) {
+            assertThat(decoded.trendSignal()).isNull();
+        } else {
+            assertThat(decoded.trendSignal()).isNotBlank();
+        }
+        assertThat(decoded.descriptionZh()).isNull();
     }
 
     @Test void normalizesOnlyAbsentOptionalFieldsWithoutChangingUsefulText() {
@@ -174,19 +171,32 @@ class TrendInsightCodecTest {
         assertThatThrownBy(() -> codec.cached(damaged)).isInstanceOf(BusinessException.class);
     }
 
-    @Test void reportsSafeReasonsAndRejectsMissingCoreTextWrongTypesAndIncompleteResponses() {
-        final String content = TrendAiFixture.content();
-        String unfinished = new String(TrendAiFixture.reply(content, 100, 20).body(), StandardCharsets.UTF_8)
+    @Test void rejectsIncompleteResponseWithoutCompleteText() {
+        String unfinished = new String(TrendAiFixture.reply(TrendAiFixture.content(), 100, 20).body(), StandardCharsets.UTF_8)
                 .replace("\"finish_reason\":\"stop\"", "\"finish_reason\":\"length\"");
         assertRejected(codec.envelope(unfinished.getBytes(StandardCharsets.UTF_8)).content(), "NO_COMPLETE_TEXT");
-        assertRejected("   ", "EMPTY_CONTENT");
-        assertRejected(content + "{}", "INVALID_JSON");
-        assertRejected(content.replace("\"DEVTOOLS\"", "\"DEVTOOLS\",\"category\":\"OTHER\""), "DUPLICATE_JSON_KEY");
-        assertRejected(content.replace("\"definition\":\"本地开发辅助工具\",", ""), "MISSING_definition");
-        assertRejected(content.replace("\"category\":", "\"description\":\"raw\",\"category\":"), "UNEXPECTED_FIELD_description");
-        assertRejected(content.replace("\"category\":", "\"description_zh\":\"译文\",\"category\":"), "UNEXPECTED_FIELD_description_zh");
-        assertRejected(content.replace("\"category\":", "\"secretArbitraryKey\":true,\"category\":"), "UNEXPECTED_FIELDS");
-        assertRejected(content.replace("[\"根据项目资料提取步骤\"]", "\"根据项目资料提取步骤\""), "INVALID_LIST_highlights");
+    }
+
+    @ParameterizedTest(name = "拒绝无效内容并报告诊断码 {1}")
+    @MethodSource("rejectedInsightPayloads")
+    void rejectsInvalidInsightPayloadsWithSafeReasons(String payload, String expectedReason) {
+        assertRejected(payload, expectedReason);
+    }
+
+    private static Stream<Arguments> rejectedInsightPayloads() {
+        String content = TrendAiFixture.content();
+        return Stream.of(
+                Arguments.of("", "EMPTY_CONTENT"),
+                Arguments.of("   ", "EMPTY_CONTENT"),
+                Arguments.of("{}", "MISSING_category"),
+                Arguments.of(content + "{}", "INVALID_JSON"),
+                Arguments.of(content.replace("\"DEVTOOLS\"", "\"DEVTOOLS\",\"category\":\"OTHER\""), "DUPLICATE_JSON_KEY"),
+                Arguments.of(content.replace("DEVTOOLS", "COMMUNITY_RUMOR"), "UNKNOWN_CATEGORY"),
+                Arguments.of(content.replace("\"definition\":\"本地开发辅助工具\",", ""), "MISSING_definition"),
+                Arguments.of(content.replace("\"category\":", "\"description\":\"raw\",\"category\":"), "UNEXPECTED_FIELD_description"),
+                Arguments.of(content.replace("\"category\":", "\"description_zh\":\"译文\",\"category\":"), "UNEXPECTED_FIELD_description_zh"),
+                Arguments.of(content.replace("\"category\":", "\"secretArbitraryKey\":true,\"category\":"), "UNEXPECTED_FIELDS"),
+                Arguments.of(content.replace("[\"根据项目资料提取步骤\"]", "\"根据项目资料提取步骤\""), "INVALID_LIST_highlights"));
     }
 
     @Test void validatesUsageBeforeContentAndRejectsMissingOrInconsistentUsage() {

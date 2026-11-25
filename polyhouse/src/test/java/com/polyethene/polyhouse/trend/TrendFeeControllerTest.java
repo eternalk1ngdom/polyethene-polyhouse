@@ -7,7 +7,10 @@ import com.polyethene.polyhouse.model.vo.*;
 import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -15,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
+import java.util.stream.Stream;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -54,17 +58,38 @@ class TrendFeeControllerTest {
         verifyNoInteractions(fees);
     }
 
-    @Test void amountConfirmationReasonAndBoundedQueryAreValidatedBeforeService() throws Exception {
+    @ParameterizedTest(name = "拒绝非法费用核销请求体：{0}")
+    @MethodSource("invalidResolutionBodies")
+    void rejectsInvalidResolutionPayloadBeforeService(String scenario, String body) throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
-        for (String body : List.of("{}", BODY.replace("COUNT_RESERVED", "REFUND"), BODY.replace("2800", "0"),
-                BODY.replace("2800", "10000001"), BODY.replace(ID, "bad"), BODY.replace("RESULT_UNRECOVERABLE", "raw-private-key"))) {
-            mvc.perform(post("/api/manage/trend/fees/resolutions").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isBadRequest());
-        }
-        for (String query : List.of("month=2026-13", "month=0000-01", "limit=51", "limit=0", "after=bad")) {
-            mvc.perform(get("/api/manage/trend/fees?" + query).header("Authorization", "Bearer fixture")).andExpect(status().isBadRequest());
-        }
-        mvc.perform(get("/api/manage/trend/fees/resolution?resolutionId=bad").header("Authorization", "Bearer fixture")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/manage/trend/fees/resolutions").header("Authorization", "Bearer fixture")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(fees);
+    }
+
+    private static Stream<Arguments> invalidResolutionBodies() {
+        return Stream.of(
+                Arguments.of("空对象", "{}"),
+                Arguments.of("非法确认方式", BODY.replace("COUNT_RESERVED", "REFUND")),
+                Arguments.of("金额为零", BODY.replace("2800", "0")),
+                Arguments.of("金额超上限", BODY.replace("2800", "10000001")),
+                Arguments.of("非UUID核销编号", BODY.replace(ID, "bad")),
+                Arguments.of("非白名单原因", BODY.replace("RESULT_UNRECOVERABLE", "raw-private-key")));
+    }
+
+    @ParameterizedTest(name = "拒绝非法费用查询：{0}")
+    @ValueSource(strings = {
+            "/api/manage/trend/fees?month=2026-13",
+            "/api/manage/trend/fees?month=0000-01",
+            "/api/manage/trend/fees?limit=51",
+            "/api/manage/trend/fees?limit=0",
+            "/api/manage/trend/fees?after=bad",
+            "/api/manage/trend/fees/resolution?resolutionId=bad"
+    })
+    void rejectsInvalidFeeQueryBeforeService(String path) throws Exception {
+        when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
+        mvc.perform(get(path).header("Authorization", "Bearer fixture")).andExpect(status().isBadRequest());
         verifyNoInteractions(fees);
     }
 

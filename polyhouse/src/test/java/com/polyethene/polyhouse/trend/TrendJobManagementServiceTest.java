@@ -28,9 +28,11 @@ class TrendJobManagementServiceTest {
         var request = new TrendJobSubmitDTO(UUID.randomUUID().toString());
         when(store.submit(request.requestId(), actor)).thenReturn(new TrendJobSubmissionVO(true, false, null));
         withService(service -> assertThat(service.submit(request, "fixture").accepted()).isTrue());
-        var order = inOrder(manager, owners, store, runner);
-        order.verify(manager).getTransaction(any()); order.verify(owners).lockSession("fixture");
-        order.verify(store).submit(request.requestId(), actor); order.verify(manager).commit(any()); order.verify(runner).wake();
+        verify(store).submit(request.requestId(), actor);
+        // 只锁定对外关键顺序契约：必须先完成事务提交，随后才能唤醒后台 Worker。
+        var order = inOrder(manager, runner);
+        order.verify(manager).commit(any());
+        order.verify(runner).wake();
     }
 
     @Test void uncertainCommitNeverWakesWorkerAndDoesNotExposeStorageError() {

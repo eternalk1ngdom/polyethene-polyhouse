@@ -163,7 +163,7 @@ class TrendScheduleIntegrationTest {
             var redis = mock(StringRedisTemplate.class);
             when(redis.execute(org.mockito.ArgumentMatchers.<RedisScript<String>>any(), anyList(), anyString(), anyString()))
                     .thenThrow(new DataAccessResourceFailureException("private cache failure"));
-            var cache = new TrendReportCache(redis, new TrendCacheProperties(true), Clock.systemUTC());
+            var cache = new TrendReportCache(redis, new TrendCacheProperties(true), Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC));
             var reader = new TrendReportService(reports, TrendFixture.json(), new TrendProperties(true, null), cache);
             assertThat(reader.report(new TrendReportQueryDTO(null, null)).reportId()).isEqualTo(publishedId);
             assertThat(reader.report(new TrendReportQueryDTO(null, "2026-11-16")).insightComplete()).isTrue();

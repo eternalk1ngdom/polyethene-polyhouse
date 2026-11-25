@@ -11,6 +11,9 @@ import com.polyethene.polyhouse.service.trend.TrendBriefingCodec.OutputRejected;
 import com.polyethene.polyhouse.service.trend.TrendBriefingInputBuilder;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -19,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -84,85 +88,92 @@ class TrendBriefingCodecTest {
         assertThat(codec.cached(null)).isNull();
     }
 
-    @Test void rejectsHallucinatedReposDuplicateEvidenceAndIdenticalThemeEvidenceSets() {
+    @ParameterizedTest(name = "拒绝证据仓违规：{2}")
+    @MethodSource("invalidEvidenceCases")
+    void rejectsInvalidEvidenceRepoSets(List<String> theme1Repos, List<String> theme2Repos, String expectedReason) {
         var whitelist = Map.of(
                 "acme/alpha", "acme/alpha",
                 "acme/beta", "acme/beta",
                 "acme/gamma", "acme/gamma");
-
-        // 编造不在快照白名单中的仓库必须拒收。
-        assertRejected(validJson(List.of("acme/alpha", "acme/hallucinated"), List.of("acme/beta", "acme/gamma")),
-                whitelist, "UNLISTED_EVIDENCE_REPO");
-
-        // 单主题内重复引用同一仓库（含大小写变体）必须拒收。
-        assertRejected(validJson(List.of("acme/alpha", "ACME/ALPHA"), List.of("acme/beta", "acme/gamma")),
-                whitelist, "DUPLICATE_EVIDENCE_REPO");
-
-        // 跨主题完全复用同一组证据仓库（即使顺序颠倒）必须拒收。
-        assertRejected(validJson(List.of("acme/alpha", "acme/beta"), List.of("ACME/BETA", "acme/alpha")),
-                whitelist, "DUPLICATE_THEME_EVIDENCE_SET");
-
-        // 单主题仅引用 1 个仓库（低于双仓下限）必须拒收。
-        assertRejected(validJson(List.of("acme/alpha"), List.of("acme/beta", "acme/gamma")),
-                whitelist, "INVALID_LIST_evidenceRepos");
+        assertRejected(validJson(theme1Repos, theme2Repos), whitelist, expectedReason);
     }
 
-    @Test void rejectsMarkdownFormattingDuplicateKeysUnknownFieldsTrailingJsonAndBadLengths() throws Exception {
+    private static Stream<Arguments> invalidEvidenceCases() {
+        return Stream.of(
+                Arguments.of(List.of("acme/alpha", "acme/hallucinated"), List.of("acme/beta", "acme/gamma"), "UNLISTED_EVIDENCE_REPO"),
+                Arguments.of(List.of("acme/alpha", "ACME/ALPHA"), List.of("acme/beta", "acme/gamma"), "DUPLICATE_EVIDENCE_REPO"),
+                Arguments.of(List.of("acme/alpha", "acme/beta"), List.of("ACME/BETA", "acme/alpha"), "DUPLICATE_THEME_EVIDENCE_SET"),
+                Arguments.of(List.of("acme/alpha"), List.of("acme/beta", "acme/gamma"), "INVALID_LIST_evidenceRepos"));
+    }
+
+    @ParameterizedTest(name = "拒绝无效简报并报告 {1}")
+    @MethodSource("rejectedBriefingPayloads")
+    void rejectsInvalidBriefingPayloadWithSafeReason(String payload, String expectedReason) {
+        var whitelist = Map.of(
+                "acme/alpha", "acme/alpha",
+                "acme/beta", "acme/beta",
+                "acme/gamma", "acme/gamma",
+                "acme/delta", "acme/delta");
+        assertRejected(payload, whitelist, expectedReason);
+    }
+
+    private static Stream<Arguments> rejectedBriefingPayloads() throws Exception {
+        String base = validJson(List.of("acme/alpha", "acme/beta"), List.of("acme/gamma", "acme/delta"));
+        var mapper = TrendFixture.json();
+
+        var missingOverview = (ObjectNode) mapper.readTree(base);
+        missingOverview.remove("overview");
+
+        var backtickHeadline = (ObjectNode) mapper.readTree(base);
+        backtickHeadline.put("headline", "本地 `CLI` 代理工具本周持续升温聚集");
+
+        var boldSummary = (ObjectNode) mapper.readTree(base);
+        ((ObjectNode) boldSummary.get("themes").get(0)).put("summary",
+                "多款项目围绕 **本地代理编排** 与插件化工具协议展开，把模型调用、代码检索和文件补丁收进同一终端入口，各方案在隔离机制与上下文裁剪上路径分化，但在复杂多仓协作场景下仍缺少公开稳定性验证与长期维护记录。");
+
+        var underlineSummary = (ObjectNode) mapper.readTree(base);
+        ((ObjectNode) underlineSummary.get("themes").get(0)).put("summary",
+                "多款项目围绕 __本地代理编排__ 与插件化工具协议展开，把模型调用、代码检索和文件补丁收进同一终端入口，各方案在隔离机制与上下文裁剪上路径分化，但在复杂多仓协作场景下仍缺少公开稳定性验证与长期维护记录。");
+
+        var headingOverview = (ObjectNode) mapper.readTree(base);
+        headingOverview.put("overview", "## 本周观察\n本期覆盖 5 天日榜并缺采 2 天，开发工具与代理框架占比居前，整体仍处于早期迭代阶段，需继续观察实际工程落地反馈。");
+
+        var linkWatchout = (ObjectNode) mapper.readTree(base);
+        linkWatchout.putArray("watchouts").add("详见 [榜单](https://github.com/trending) 当日页面。");
+
+        var badSignal = (ObjectNode) mapper.readTree(base);
+        ((ObjectNode) badSignal.get("themes").get(0)).put("signalType", "EXPLODING");
+
+        var shortHeadline = (ObjectNode) mapper.readTree(base);
+        shortHeadline.put("headline", "标题过短");
+
+        var longWatchout = (ObjectNode) mapper.readTree(base);
+        longWatchout.putArray("watchouts").add("界".repeat(101));
+
+        return Stream.of(
+                Arguments.of(base.replace("\"headline\":", "\"headline\":\"这是重复键占位十二个字符以上\",\"headline\":"), "DUPLICATE_JSON_KEY"),
+                Arguments.of(base + "{}", "INVALID_JSON"),
+                Arguments.of("   ", "EMPTY_CONTENT"),
+                Arguments.of(null, "NO_COMPLETE_TEXT"),
+                Arguments.of(base.replace("\"headline\":", "\"extra\":\"x\",\"headline\":"), "UNEXPECTED_FIELDS"),
+                Arguments.of(missingOverview.toString(), "MISSING_overview"),
+                Arguments.of(backtickHeadline.toString(), "MARKDOWN_IN_headline"),
+                Arguments.of(boldSummary.toString(), "MARKDOWN_IN_summary"),
+                Arguments.of(underlineSummary.toString(), "MARKDOWN_IN_summary"),
+                Arguments.of(headingOverview.toString(), "MARKDOWN_IN_overview"),
+                Arguments.of(linkWatchout.toString(), "MARKDOWN_IN_watchouts"),
+                Arguments.of(badSignal.toString(), "UNKNOWN_SIGNAL_TYPE"),
+                Arguments.of(shortHeadline.toString(), "TOO_SHORT_headline"),
+                Arguments.of(longWatchout.toString(), "TOO_LONG_watchouts"));
+    }
+
+    @Test void rejectsDamagedCachedPayloadAndKeepsLegacyLongCachedBriefingReadable() throws Exception {
         var whitelist = Map.of(
                 "acme/alpha", "acme/alpha",
                 "acme/beta", "acme/beta",
                 "acme/gamma", "acme/gamma",
                 "acme/delta", "acme/delta");
         String base = validJson(List.of("acme/alpha", "acme/beta"), List.of("acme/gamma", "acme/delta"));
-
-        // 重复键与尾随 JSON。
-        assertRejected(base.replace("\"headline\":", "\"headline\":\"这是重复键占位十二个字符以上\",\"headline\":"),
-                whitelist, "DUPLICATE_JSON_KEY");
-        assertRejected(base + "{}", whitelist, "INVALID_JSON");
-        assertRejected("   ", whitelist, "EMPTY_CONTENT");
-        assertRejected(null, whitelist, "NO_COMPLETE_TEXT");
-
-        // 顶层多键、缺键。
-        assertRejected(base.replace("\"headline\":", "\"extra\":\"x\",\"headline\":"), whitelist, "UNEXPECTED_FIELDS");
-        var missingOverview = (ObjectNode) TrendFixture.json().readTree(base);
-        missingOverview.remove("overview");
-        assertRejected(missingOverview.toString(), whitelist, "MISSING_overview");
-
-        // Markdown 符号拒收：反引号、双星号加粗、成对双下划线、行首标题、方括号链接。
-        var backtickHeadline = (ObjectNode) TrendFixture.json().readTree(base);
-        backtickHeadline.put("headline", "本地 `CLI` 代理工具本周持续升温聚集");
-        assertRejected(backtickHeadline.toString(), whitelist, "MARKDOWN_IN_headline");
-
-        var boldSummary = (ObjectNode) TrendFixture.json().readTree(base);
-        ((ObjectNode) boldSummary.get("themes").get(0)).put("summary",
-                "多款项目围绕 **本地代理编排** 与插件化工具协议展开，把模型调用、代码检索和文件补丁收进同一终端入口，各方案在隔离机制与上下文裁剪上路径分化，但在复杂多仓协作场景下仍缺少公开稳定性验证与长期维护记录。");
-        assertRejected(boldSummary.toString(), whitelist, "MARKDOWN_IN_summary");
-
-        var underlineSummary = (ObjectNode) TrendFixture.json().readTree(base);
-        ((ObjectNode) underlineSummary.get("themes").get(0)).put("summary",
-                "多款项目围绕 __本地代理编排__ 与插件化工具协议展开，把模型调用、代码检索和文件补丁收进同一终端入口，各方案在隔离机制与上下文裁剪上路径分化，但在复杂多仓协作场景下仍缺少公开稳定性验证与长期维护记录。");
-        assertRejected(underlineSummary.toString(), whitelist, "MARKDOWN_IN_summary");
-
-        var headingOverview = (ObjectNode) TrendFixture.json().readTree(base);
-        headingOverview.put("overview", "## 本周观察\n本期覆盖 5 天日榜并缺采 2 天，开发工具与代理框架占比居前，整体仍处于早期迭代阶段，需继续观察实际工程落地反馈。");
-        assertRejected(headingOverview.toString(), whitelist, "MARKDOWN_IN_overview");
-
-        var linkWatchout = (ObjectNode) TrendFixture.json().readTree(base);
-        linkWatchout.putArray("watchouts").add("详见 [榜单](https://github.com/trending) 当日页面。");
-        assertRejected(linkWatchout.toString(), whitelist, "MARKDOWN_IN_watchouts");
-
-        // 非法 signalType、超短标题与超长 watchout。
-        var badSignal = (ObjectNode) TrendFixture.json().readTree(base);
-        ((ObjectNode) badSignal.get("themes").get(0)).put("signalType", "EXPLODING");
-        assertRejected(badSignal.toString(), whitelist, "UNKNOWN_SIGNAL_TYPE");
-
-        var shortHeadline = (ObjectNode) TrendFixture.json().readTree(base);
-        shortHeadline.put("headline", "标题过短");
-        assertRejected(shortHeadline.toString(), whitelist, "TOO_SHORT_headline");
-
-        var longWatchout = (ObjectNode) TrendFixture.json().readTree(base);
-        longWatchout.putArray("watchouts").add("界".repeat(101));
-        assertRejected(longWatchout.toString(), whitelist, "TOO_LONG_watchouts");
 
         // 损坏的持久化 JSON（非法仓库名格式）在 cached() 中必须被拒绝。
         var badCached = (ObjectNode) TrendFixture.json().readTree(base);

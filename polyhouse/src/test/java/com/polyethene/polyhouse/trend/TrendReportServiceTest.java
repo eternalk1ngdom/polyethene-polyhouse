@@ -8,6 +8,9 @@ import com.polyethene.polyhouse.model.dto.*;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.service.TrendReportService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.LocalDate;
@@ -26,10 +29,10 @@ class TrendReportServiceTest {
         assertThat(service.periods(new TrendPeriodsQueryDTO(null, null, null)).items()).isEmpty();
     }
 
-    @Test void calendarValidationDoesNotFallThroughToDatabase() {
-        for (String date : List.of("2026-02-30", "2026-13-01", "0000-01-01", "2026-1-01", "2026-01-01' OR 1=1")) {
-            assertCode(() -> service.report(new TrendReportQueryDTO("DAILY", date)), ErrorCode.INVALID_PARAMETER);
-        }
+    @ParameterizedTest(name = "拒绝非法日报日期参数：{0}")
+    @ValueSource(strings = {"2026-02-30", "2026-13-01", "0000-01-01", "2026-1-01", "2026-01-01' OR 1=1"})
+    void calendarValidationDoesNotFallThroughToDatabase(String date) {
+        assertCode(() -> service.report(new TrendReportQueryDTO("DAILY", date)), ErrorCode.INVALID_PARAMETER);
         verifyNoInteractions(mapper);
     }
 
@@ -86,9 +89,14 @@ class TrendReportServiceTest {
         assertThat(service.missingInsightIds()).isEmpty();
     }
 
-    @Test void windowStatsReadsBoundedSevenDayRangeAndRejectsInvalidInputOrDamagedArchive() throws Exception {
-        assertCode(() -> service.window(new TrendWindowQueryDTO("WEEKLY", null)), ErrorCode.INVALID_PARAMETER);
-        assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", "2026-02-30")), ErrorCode.INVALID_PARAMETER);
+    @ParameterizedTest(name = "拒绝非法窗口查询：periodType={0}, periodKey={1}")
+    @CsvSource(value = {"WEEKLY, null", "DAILY, 2026-02-30"}, nullValues = "null")
+    void rejectsInvalidWindowQueryBeforeDatabase(String periodType, String periodKey) {
+        assertCode(() -> service.window(new TrendWindowQueryDTO(periodType, periodKey)), ErrorCode.INVALID_PARAMETER);
+        verifyNoInteractions(mapper);
+    }
+
+    @Test void windowStatsReadsBoundedSevenDayRangeAndRejectsDamagedArchive() throws Exception {
         assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", null)), ErrorCode.NOT_FOUND);
 
         var view = TrendFixture.report();

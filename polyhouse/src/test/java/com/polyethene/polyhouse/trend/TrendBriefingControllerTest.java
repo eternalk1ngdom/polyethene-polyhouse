@@ -56,12 +56,15 @@ class TrendBriefingControllerTest {
         }
     }
 
-    @Test void rejectsAnonymousInitialPasswordOwnerAndMalformedPeriodKey() throws Exception {
+    @Test void rejectsAnonymousBriefingRequest() throws Exception {
         mvc.perform(post("/api/manage/trend/briefings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
+        verifyNoInteractions(service);
+    }
 
+    @Test void rejectsInitialPasswordOwnerBriefingRequest() throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, true));
         mvc.perform(post("/api/manage/trend/briefings")
                         .header("Authorization", "Bearer fixture")
@@ -69,7 +72,10 @@ class TrendBriefingControllerTest {
                         .content("{}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(40301));
+        verifyNoInteractions(service);
+    }
 
+    @Test void rejectsMalformedPeriodKeyBeforeService() throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
         mvc.perform(post("/api/manage/trend/briefings")
                         .header("Authorization", "Bearer fixture")
@@ -77,7 +83,6 @@ class TrendBriefingControllerTest {
                         .content("{\"periodKey\":\"bad-date\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(40000));
-
         verifyNoInteractions(service);
     }
 

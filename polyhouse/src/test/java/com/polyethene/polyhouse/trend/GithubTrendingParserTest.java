@@ -4,7 +4,11 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.service.trend.GithubTrendingParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -31,17 +35,18 @@ class GithubTrendingParserTest {
         assertThatThrownBy(() -> parser.parse(html)).isInstanceOf(BusinessException.class);
     }
 
-    @Test void rejectsDuplicatesForeignUrlsAndSystematicMetricLoss() {
-        for (String html : new String[] {
-                TrendFixture.html().replace("sample/awesome-books", "sample/engine"),
-                TrendFixture.html().replace("href=\"/sample/engine\"", "href=\"https://example.org/repo\""),
-                TrendFixture.html().replace("/stargazers", "/unknown-stars").replace("/forks", "/unknown-forks") }) {
-            assertThatThrownBy(() -> parser.parse(html)).isInstanceOf(BusinessException.class);
-        }
+    @ParameterizedTest(name = "拒绝无效榜单页：{0}")
+    @MethodSource("rejectedHtmlPages")
+    void rejectsDuplicatesForeignUrlsSystematicMetricLossAndOversizedHtml(String scenario, String html) {
+        assertThatThrownBy(() -> parser.parse(html)).isInstanceOf(BusinessException.class);
     }
 
-    @Test void neverParsesUnboundedHtml() {
-        assertThatThrownBy(() -> parser.parse("x".repeat(1024 * 1024 + 1))).isInstanceOf(BusinessException.class);
+    private static Stream<Arguments> rejectedHtmlPages() {
+        return Stream.of(
+                Arguments.of("重复仓库条目", TrendFixture.html().replace("sample/awesome-books", "sample/engine")),
+                Arguments.of("外域链接", TrendFixture.html().replace("href=\"/sample/engine\"", "href=\"https://example.org/repo\"")),
+                Arguments.of("星标与复刻指标系统性缺失", TrendFixture.html().replace("/stargazers", "/unknown-stars").replace("/forks", "/unknown-forks")),
+                Arguments.of("超过1MiB超大页面", "x".repeat(1024 * 1024 + 1)));
     }
 
     @Test void invalidNumberIsUnknownRatherThanAFalseZero() {

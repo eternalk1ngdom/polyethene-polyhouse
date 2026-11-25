@@ -9,6 +9,8 @@ import com.polyethene.polyhouse.service.TrendBriefingService;
 import com.polyethene.polyhouse.service.TrendReportService;
 import com.polyethene.polyhouse.service.trend.TrendWindowAggregator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -54,13 +56,19 @@ class TrendControllerTest {
         verifyNoInteractions(auth);
     }
 
-    @Test void rejectsUnsupportedCycleMalformedDateAndUnboundedPageBeforeService() throws Exception {
-        for (String path : List.of("/api/trend/report?periodType=WEEKLY", "/api/trend/report?periodKey=bad",
-                "/api/trend/window?periodType=WEEKLY", "/api/trend/window?periodKey=bad",
-                "/api/trend/briefing?periodKey=bad",
-                "/api/trend/periods?limit=31", "/api/trend/periods?limit=0", "/api/trend/periods?before=bad")) {
-            mvc.perform(get(path)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
-        }
+    @ParameterizedTest(name = "参数校验拦截非法公开查询：{0}")
+    @ValueSource(strings = {
+            "/api/trend/report?periodType=WEEKLY",
+            "/api/trend/report?periodKey=bad",
+            "/api/trend/window?periodType=WEEKLY",
+            "/api/trend/window?periodKey=bad",
+            "/api/trend/briefing?periodKey=bad",
+            "/api/trend/periods?limit=31",
+            "/api/trend/periods?limit=0",
+            "/api/trend/periods?before=bad"
+    })
+    void rejectsUnsupportedCycleMalformedDateAndUnboundedPageBeforeService(String path) throws Exception {
+        mvc.perform(get(path)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
         verifyNoInteractions(reports, briefings, auth);
     }
 }

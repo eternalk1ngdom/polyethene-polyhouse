@@ -2,7 +2,7 @@
 
 更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.21.md](docs/dev-log/v1.0-dev.21.md)。
 
-- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项已在 `chore/repository-maintenance` 完成编码与普通验收（#14 不实施，其余 6 项延后）；[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)已完成阶段 A、B1、B2-1 及 B2-2（`user/` 全域治理与 10 个 L2 迁入共享随机隔离库），下一步进入 B2-3 `trend/` 域；**阶段 C1～C5 真实验收尚未执行**，暂不合入/推送。语言统计规则已合入本地 `dev`（`f2241cc`）。
+- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项已在 `chore/repository-maintenance` 完成编码与普通验收（#14 不实施，其余 6 项延后）；[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)已完成阶段 A、B1 与全部 B2（后端 `common/system/ops`、`user/` 含 10 个 L2 隔离库迁移、`trend/` 全域治理），下一步进入阶段 B3 前端测试治理；**阶段 C1～C5 真实验收尚未执行**，暂不合入/推送。语言统计规则已合入本地 `dev`（`f2241cc`）。
 
 - [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。

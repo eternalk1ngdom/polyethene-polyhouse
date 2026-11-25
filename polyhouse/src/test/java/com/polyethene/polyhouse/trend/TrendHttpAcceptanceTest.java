@@ -60,7 +60,9 @@ class TrendHttpAcceptanceTest extends TrendHttpAcceptanceSupport {
             if (!release.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("隔离来源等待超时");
             guard.run();
             if (fail.get()) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
-            return new TrendCollection(Instant.now(), List.of(TrendAiFixture.project(1, TrendAiFixture.SHA)));
+            // 使用随采集次数递增的固定基准时间，避免跨 UTC 零点导致同测例两次发布落到不同日期。
+            return new TrendCollection(TrendAiFixture.NOW.plusSeconds(collected.get() * 60L),
+                    List.of(TrendAiFixture.project(1, TrendAiFixture.SHA)));
         });
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(TrendAiFixture.content(), 1000, 300));
     }

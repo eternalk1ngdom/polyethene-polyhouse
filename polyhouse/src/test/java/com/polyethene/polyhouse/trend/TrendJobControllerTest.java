@@ -9,6 +9,7 @@ import com.polyethene.polyhouse.service.trend.TrendJobThrottle;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -50,14 +51,25 @@ class TrendJobControllerTest {
         verifyNoInteractions(jobs);
     }
 
-    @Test void malformedInputsFailAndAcceptedResponseDoesNotExposeAuthority() throws Exception {
+    @ParameterizedTest(name = "拒绝非法任务提交体：{0}")
+    @ValueSource(strings = {"{}", "{\"requestId\":\"bad\"}"})
+    void malformedSubmissionBodyFailsBeforeService(String body) throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
-        for (String body : new String[]{"{}", "{\"requestId\":\"bad\"}"}) {
-            mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isBadRequest());
-        }
-        mvc.perform(get("/api/manage/trend/jobs").param("jobId", "bad").header("Authorization", "Bearer fixture")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
         verifyNoInteractions(jobs);
+    }
+
+    @Test void malformedJobIdQueryFailsBeforeService() throws Exception {
+        when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
+        mvc.perform(get("/api/manage/trend/jobs").param("jobId", "bad").header("Authorization", "Bearer fixture"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(jobs);
+    }
+
+    @Test void acceptedSubmissionDoesNotExposeAuthority() throws Exception {
+        when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
         when(jobs.submit(any(), any())).thenReturn(new TrendJobSubmissionVO(true, false, job()));
         mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isAccepted()).andExpect(header().string("Cache-Control", "no-store"))

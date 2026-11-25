@@ -46,17 +46,30 @@ class TrendManagementLimitHttpTest {
             var large = client.send(request("/api/manage/trend/fees/resolutions", 4).header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString("x".repeat(384 * 1024 + 1))).build(), HttpResponse.BodyHandlers.ofString());
             assertThat(large.statusCode()).isEqualTo(413); verifyNoInteractions(auth, jobs, fees);
-            boolean rejected = false;
+            HttpResponse<String> rateLimited = null;
             for (int i = 0; i < 12; i++) {
                 String path = i % 2 == 0 ? "/api/manage/trend/jobs?jobId=" + ID : "/api/manage/trend/fees";
                 var response = client.send(request(path, i + 5).GET().build(), HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() == 429) { limited(response); rejected = true; break; }
+                if (response.statusCode() == 429) { limited(response); rateLimited = response; break; }
                 assertThat(response.statusCode()).isEqualTo(200);
             }
-            assertThat(rejected).isTrue();
-            Thread.sleep(2200);
-            assertThat(client.send(request("/api/manage/trend/fees", 20).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+            assertThat(rateLimited).isNotNull();
+            // 按 429 响应携带的 Retry-After 有界轮询恢复，避免单次固定 sleep 在调度抖动时误红。
+            int retryAfter = Integer.parseInt(rateLimited.headers().firstValue("Retry-After").orElseThrow());
+            assertThat(awaitRecovery(client, "/api/manage/trend/fees", 20, retryAfter)).isEqualTo(200);
         }
+    }
+
+    private int awaitRecovery(HttpClient client, String path, int address, int retryAfterSeconds) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(retryAfterSeconds + 4L).toNanos();
+        int lastStatus = 429;
+        while (System.nanoTime() < deadline) {
+            lastStatus = client.send(request(path, address).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode();
+            if (lastStatus == 200) return lastStatus;
+            assertThat(lastStatus).isEqualTo(429);
+            Thread.sleep(100);
+        }
+        return lastStatus;
     }
     private HttpRequest.Builder request(String path, int address) {
         return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(12))

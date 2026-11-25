@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.*;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -45,6 +46,7 @@ class TrendBriefingServiceTest {
     private DeepSeekGateway gateway;
     private TrendOwnerAuthorization owners;
     private PlatformTransactionManager manager;
+    private AtomicReference<Instant> clockNow;
     private TrendBriefingService service;
 
     @BeforeEach void setUp() {
@@ -54,11 +56,12 @@ class TrendBriefingServiceTest {
         gateway = mock(DeepSeekGateway.class);
         owners = mock(TrendOwnerAuthorization.class);
         manager = mock(PlatformTransactionManager.class);
+        clockNow = new AtomicReference<>(NOW);
         when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         when(owners.lockSession("owner-token")).thenReturn(TrendFixture.owner());
         service = new TrendBriefingService(reports, ledger, codec, gateway, owners,
                 new TrendProperties(true, null), TrendAiFixture.settings(),
-                Clock.fixed(NOW, ZoneOffset.UTC), manager);
+                mutableClock(clockNow), manager);
     }
 
     @Test void queryReturnsAbsentReadyAndStaleWithoutCallingGateway() {
@@ -121,18 +124,13 @@ class TrendBriefingServiceTest {
         verify(ledger, never()).reserve(any(), any(), any(), anyInt(), anyInt(), any());
     }
 
-    @Test void generateSucceedsSettlesUsageAndEnforcesCooldownOnNextPaidAttempt() throws Exception {
+    @Test void generateSucceedsSettlesUsageAndRecoversAfterCooldownWindow() throws Exception {
         var snapshot = eligibleSnapshot();
         var input = TrendBriefingInputBuilder.build(ANCHOR, snapshot.reports());
         when(reports.windowSnapshot(null)).thenReturn(snapshot);
         var savedAfter = record(input.sourceFingerprint(), validBriefingJson());
         when(ledger.briefing(ANCHOR)).thenReturn(null, savedAfter);
-        when(ledger.reserve(anyString(), eq(ANCHOR), eq(input.sourceFingerprint()), anyInt(), anyInt(), isNull()))
-                .thenAnswer(inv -> new TrendBriefingLedger.Decision("GRANTED",
-                        new TrendBriefingRequest(inv.getArgument(0), "2026-11", ANCHOR, input.sourceFingerprint(),
-                                "deepseek-flash", TrendBriefingCodec.RULE, "RESERVED", 20_000L, null,
-                                inv.getArgument(3), inv.getArgument(4), new BigDecimal("2"), new BigDecimal("8")),
-                        null));
+        grantReservation(input);
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(validBriefingJson(), 1200, 420));
 
         var result = service.generate(new TrendBriefingGenerateDTO(null), "owner-token");
@@ -141,52 +139,79 @@ class TrendBriefingServiceTest {
         assertThat(result.briefing().status()).isEqualTo("READY");
         verify(ledger).settle(anyString(), eq(1200), eq(420), argThat(p -> p != null && p.coveredDays() == 3));
 
-        // 紧接着在 15 秒冷却内再次发起新指纹付费请求，必须返回 429 冷却异常且不触碰网关。
+        // 15 秒冷却窗内（+14s）再次发起新指纹付费请求，必须返回 429 冷却异常且不触碰网关。
+        clockNow.set(NOW.plusSeconds(14));
         when(ledger.briefing(ANCHOR)).thenReturn(null);
         assertThatThrownBy(() -> service.generate(new TrendBriefingGenerateDTO(null), "owner-token"))
                 .isInstanceOfSatisfying(TrendJobThrottle.class, throttle -> assertThat(throttle.retryAfter()).isBetween(1L, 15L));
         verify(gateway, times(1)).complete(any());
+
+        // 冷却期满（+15s）后允许重新发起付费生成。
+        clockNow.set(NOW.plusSeconds(15));
+        when(ledger.briefing(ANCHOR)).thenReturn(null, savedAfter);
+        var recovered = service.generate(new TrendBriefingGenerateDTO(null), "owner-token");
+        assertThat(recovered.outcome()).isEqualTo("GENERATED");
+        verify(gateway, times(2)).complete(any());
     }
 
-    @Test void generateHandlesInvalidOutputNotSentAndUsageViolationSafely() throws Exception {
+    @Test void generateSettlesWithoutPublishingOnInvalidOutput() throws Exception {
         var snapshot = eligibleSnapshot();
         var input = TrendBriefingInputBuilder.build(ANCHOR, snapshot.reports());
         when(reports.windowSnapshot(null)).thenReturn(snapshot);
         when(ledger.briefing(ANCHOR)).thenReturn(null);
-        when(ledger.reserve(anyString(), eq(ANCHOR), eq(input.sourceFingerprint()), anyInt(), anyInt(), isNull()))
-                .thenAnswer(inv -> new TrendBriefingLedger.Decision("GRANTED",
-                        new TrendBriefingRequest(inv.getArgument(0), "2026-11", ANCHOR, input.sourceFingerprint(),
-                                "deepseek-flash", TrendBriefingCodec.RULE, "RESERVED", 20_000L, null,
-                                inv.getArgument(3), inv.getArgument(4), new BigDecimal("2"), new BigDecimal("8")),
-                        null));
+        grantReservation(input);
 
-        // 1) 模型编造非法仓库 -> 照实结算但 payload=null，返回 INVALID_OUTPUT。
         String hallucinated = validBriefingJson().replace("acme/beta", "acme/fake-repo");
         when(gateway.complete(any())).thenReturn(TrendAiFixture.reply(hallucinated, 900, 300));
         var invalidRes = service.generate(new TrendBriefingGenerateDTO(null), "owner-token");
         assertThat(invalidRes.outcome()).isEqualTo("INVALID_OUTPUT");
         assertThat(invalidRes.charged()).isTrue();
         verify(ledger).settle(anyString(), eq(900), eq(300), isNull());
+    }
 
-        // 2) 发送前网络未发出 -> 退回预留，返回 UNAVAILABLE + charged=false。
-        var svc2 = new TrendBriefingService(reports, ledger, codec, gateway, owners,
-                new TrendProperties(true, null), TrendAiFixture.settings(),
-                Clock.fixed(NOW, ZoneOffset.UTC), manager);
+    @Test void generateCancelsReservationBeforeSendOnNotSent() throws Exception {
+        var snapshot = eligibleSnapshot();
+        var input = TrendBriefingInputBuilder.build(ANCHOR, snapshot.reports());
+        when(reports.windowSnapshot(null)).thenReturn(snapshot);
+        when(ledger.briefing(ANCHOR)).thenReturn(null);
+        grantReservation(input);
+
         doThrow(new DeepSeekGateway.NotSent()).when(gateway).complete(any());
-        var notSentRes = svc2.generate(new TrendBriefingGenerateDTO(null), "owner-token");
+        var notSentRes = service.generate(new TrendBriefingGenerateDTO(null), "owner-token");
         assertThat(notSentRes.outcome()).isEqualTo("UNAVAILABLE");
         assertThat(notSentRes.charged()).isFalse();
         verify(ledger).cancelBeforeSend(anyString());
+    }
 
-        // 3) 用量超出预留上界 -> unknown(usageExceeded=true) 熔断当月，返回 PENDING + charged=true。
-        var svc3 = new TrendBriefingService(reports, ledger, codec, gateway, owners,
-                new TrendProperties(true, null), TrendAiFixture.settings(),
-                Clock.fixed(NOW, ZoneOffset.UTC), manager);
+    @Test void generateMarksUnknownAndTripsBreakerOnUsageViolation() throws Exception {
+        var snapshot = eligibleSnapshot();
+        var input = TrendBriefingInputBuilder.build(ANCHOR, snapshot.reports());
+        when(reports.windowSnapshot(null)).thenReturn(snapshot);
+        when(ledger.briefing(ANCHOR)).thenReturn(null);
+        grantReservation(input);
+
         doReturn(TrendAiFixture.reply(validBriefingJson(), 1000, 5000)).when(gateway).complete(any());
-        var exceededRes = svc3.generate(new TrendBriefingGenerateDTO(null), "owner-token");
+        var exceededRes = service.generate(new TrendBriefingGenerateDTO(null), "owner-token");
         assertThat(exceededRes.outcome()).isEqualTo("PENDING");
         assertThat(exceededRes.charged()).isTrue();
         verify(ledger).unknown(anyString(), eq(true));
+    }
+
+    private void grantReservation(TrendBriefingInputBuilder.BriefingInput input) {
+        when(ledger.reserve(anyString(), eq(ANCHOR), eq(input.sourceFingerprint()), anyInt(), anyInt(), isNull()))
+                .thenAnswer(inv -> new TrendBriefingLedger.Decision("GRANTED",
+                        new TrendBriefingRequest(inv.getArgument(0), "2026-11", ANCHOR, input.sourceFingerprint(),
+                                "deepseek-flash", TrendBriefingCodec.RULE, "RESERVED", 20_000L, null,
+                                inv.getArgument(3), inv.getArgument(4), new BigDecimal("2"), new BigDecimal("8")),
+                        null));
+    }
+
+    private static Clock mutableClock(AtomicReference<Instant> ref) {
+        return new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return this; }
+            @Override public Instant instant() { return ref.get(); }
+        };
     }
 
     private static TrendBriefingRecord record(String fingerprint, String payload) {

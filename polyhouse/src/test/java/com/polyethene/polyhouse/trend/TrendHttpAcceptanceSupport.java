@@ -65,7 +65,7 @@ abstract class TrendHttpAcceptanceSupport {
             // 多个真实角色共用生产限额，不篡改过滤器；只按服务端短限流提示等待，业务冷却不重试。
             String retry = response.headers().firstValue("Retry-After").orElse("");
             if (response.statusCode() != 429 || !retry.matches("[1-5]") || attempt >= 5) return response;
-            Thread.sleep(Long.parseLong(retry) * 1000 + 100);
+            Thread.sleep(Long.parseLong(retry) * 1000 + 250);
         }
     }
 
