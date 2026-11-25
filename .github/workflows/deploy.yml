@@ -7,51 +7,61 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
-    # 核心调整：指定所有 run 命令默认在前端子目录下执行
+    permissions:
+      contents: read
+    # 指定所有 run 命令默认在前端子目录下执行，安装与构建阶段不持有 Pages 发布和 OIDC 写入权限。
     defaults:
       run:
         working-directory: ./polyhouse-web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          # 与 polyhouse-web/package.json 的 engines 范围及本机已验证环境保持一致。
+          node-version: 24
           cache: "npm"
           cache-dependency-path: "./polyhouse-web/package-lock.json"
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Project
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
         run: npm run build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
       - name: Upload Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
-          # 核心调整：打包产物在前端子目录的 dist 下
+          # 打包产物位于前端子目录的 dist 下，供下游独立部署作业消费。
           path: "./polyhouse-web/dist"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
