@@ -7,3 +7,8 @@
 
 # Exclude the pinned third-party design skill from GitHub language statistics.
 .agents/skills/ui-ux-pro-max/** linguist-vendored
+
+# GitHub 语言统计忽略前端测试、性能基准和验收脚本中的 JavaScript。
+polyhouse-web/tests/**/*.mjs linguist-detectable=false
+polyhouse-web/benchmarks/*.mjs linguist-detectable=false
+polyhouse-web/scripts/*.[cm]js linguist-detectable=false
