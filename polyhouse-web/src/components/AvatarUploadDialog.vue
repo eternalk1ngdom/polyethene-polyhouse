@@ -44,8 +44,8 @@ let submissionRequestId = ''
 let submittedAvatar = ''
 let drag: { id: number; x: number; y: number; cropX: number; cropY: number } | undefined
 
-function releaseImage(): void {
-  // 作废整个编辑过程，包括尚未结束的编码和上传；旧回调不能再修改新弹窗。
+function clearDraft(): void {
+  // 作废当前草稿与尚未结束的读取，避免新文件校验失败后界面仍允许提交旧图。
   selection += 1
   submissionRequestId = ''
   submittedAvatar = ''
@@ -54,8 +54,13 @@ function releaseImage(): void {
   drag = undefined
   fileName.value = ''
   loading.value = false
-  saving.value = false
   error.value = ''
+}
+
+function releaseImage(): void {
+  // 作废整个编辑过程，包括尚未结束的编码和上传；旧回调不能再修改新弹窗。
+  clearDraft()
+  saving.value = false
 }
 
 function draw(): void {
@@ -78,7 +83,8 @@ async function choose(event: Event): Promise<void> {
   const file = event.target.files?.[0]
   event.target.value = ''
   if (!file) return
-  error.value = ''
+  // 只有用户实际选了新文件才作废旧草稿；取消系统文件选择器时保留原图。
+  clearDraft()
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     error.value = '请选择 JPEG、PNG 或 WebP 静态图片。'
     return
@@ -87,7 +93,6 @@ async function choose(event: Event): Promise<void> {
     error.value = '原图不能超过 5 MiB，请选择较小的图片。'
     return
   }
-  submissionRequestId = ''
   const current = ++selection
   loading.value = true
   try {

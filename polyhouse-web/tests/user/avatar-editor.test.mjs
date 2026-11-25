@@ -306,3 +306,110 @@ test('头像以 0.8 起步，超出 20 KiB 降画质，同次重试复用原始 
   assert.deepEqual(uploads[0], uploads[1])
   assert.equal(atob(uploads[0].payload), 'webp-fixture')
 })
+
+test('已有草稿时改选非法、超限或解码失败文件会作废旧草稿，取消选择保留旧图，改选有效图后可正常提交', async (t) => {
+  const prevInput = globalThis.HTMLInputElement
+  const prevDecode = globalThis.createImageBitmap
+  class FakeInput {
+    constructor(files) {
+      this.files = files
+      this.value = 'picked'
+    }
+  }
+  const pngHeader = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+  ])
+  let decodeShouldFail = false
+  globalThis.HTMLInputElement = FakeInput
+  globalThis.createImageBitmap = async () => {
+    if (decodeShouldFail) throw new Error('decode failed')
+    return {
+      width: 256,
+      height: 256,
+      closed: false,
+      close() {
+        this.closed = true
+      },
+    }
+  }
+  t.after(() => {
+    globalThis.HTMLInputElement = prevInput
+    globalThis.createImageBitmap = prevDecode
+  })
+
+  let uploads = 0
+  const fixture = mountEditor(async () => {
+    uploads += 1
+    return { status: 'PENDING', remainingToday: 4 }
+  })
+  t.after(fixture.unmount)
+
+  // 取消系统文件选择器：保留已有草稿。
+  const kept = fixture.image()
+  await fixture.editor.choose({ target: new FakeInput([]) })
+  assert.equal(fixture.editor.image.value, kept)
+  assert.equal(kept.closed, false)
+
+  // 1. 不支持的格式（GIF）
+  await fixture.editor.choose({
+    target: new FakeInput([{ name: 'anim.gif', type: 'image/gif', size: 1024 }]),
+  })
+  assert.equal(kept.closed, true)
+  assert.equal(fixture.editor.image.value, undefined)
+  assert.match(fixture.editor.error.value, /JPEG、PNG 或 WebP/)
+  await fixture.editor.save()
+  assert.equal(uploads, 0)
+
+  // 2. 超过 5 MiB
+  const second = fixture.image()
+  await fixture.editor.choose({
+    target: new FakeInput([{ name: 'huge.png', type: 'image/png', size: 5 * 1024 * 1024 + 1 }]),
+  })
+  assert.equal(second.closed, true)
+  assert.equal(fixture.editor.image.value, undefined)
+  assert.match(fixture.editor.error.value, /5 MiB/)
+  await fixture.editor.save()
+  assert.equal(uploads, 0)
+
+  // 3. 解码失败
+  const third = fixture.image()
+  decodeShouldFail = true
+  await fixture.editor.choose({
+    target: new FakeInput([
+      {
+        name: 'broken.png',
+        type: 'image/png',
+        size: pngHeader.byteLength,
+        arrayBuffer: async () => pngHeader.buffer.slice(0),
+      },
+    ]),
+  })
+  assert.equal(third.closed, true)
+  assert.equal(fixture.editor.image.value, undefined)
+  assert.match(fixture.editor.error.value, /无法读取/)
+  await fixture.editor.save()
+  assert.equal(uploads, 0)
+
+  // 4. 重新选择有效静态 PNG 后恢复可提交。
+  decodeShouldFail = false
+  fixture.editor.canvas.value = {
+    getContext: () => ({ fillRect() {}, drawImage() {} }),
+    toBlob: (callback) => callback(new Blob(['valid-webp'], { type: 'image/webp' })),
+  }
+  await fixture.editor.choose({
+    target: new FakeInput([
+      {
+        name: 'valid.png',
+        type: 'image/png',
+        size: pngHeader.byteLength,
+        arrayBuffer: async () => pngHeader.buffer.slice(0),
+      },
+    ]),
+  })
+  assert.ok(fixture.editor.image.value)
+  assert.equal(fixture.editor.error.value, '')
+  await fixture.editor.save()
+  assert.equal(uploads, 1)
+})
