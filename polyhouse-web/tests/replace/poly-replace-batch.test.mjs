@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { typeScriptModuleUrl } from './helpers/typescript-module.mjs'
+import { patchGlobal, typeScriptModuleUrl } from '../helpers/test-runtime.mjs'
 
 const coreUrl = await typeScriptModuleUrl(new URL('../../src/core/acReplacer.ts', import.meta.url))
 const batchUrl = await typeScriptModuleUrl(new URL('../../src/core/polyReplaceBatch.ts', import.meta.url), {
@@ -147,73 +147,67 @@ test('按 UTF-8 字节限制单个输出，预览截断不截断导出', () => {
   assert.equal(result.content.length, 11000)
   assert.equal(result.truncated, true)
 })
-test('Worker 生成实际 ZIP 且出错不发成功包', async () => {
+test('Worker 生成实际 ZIP 且出错不发成功包', async (t) => {
   const replies = []
-  const oldSelf = globalThis.self
-  globalThis.self = { postMessage: (value) => replies.push(value) }
-  try {
-    const workerUrl = await typeScriptModuleUrl(new URL('../../src/workers/polyReplace.worker.ts', import.meta.url), {
-      "'fflate'": JSON.stringify(import.meta.resolve('fflate')),
-      "'../core/polyReplaceBatch'": JSON.stringify(batchUrl),
-    })
-    await import(workerUrl)
-    self.onmessage({ data: { files: [file('a.txt', 'A'), file('b.txt', 'B')], rules } })
-    assert.deepEqual(
-      replies[0].result.files.map((item) => item.previewHits),
-      [[{ start: 0, end: 1, ruleIndex: 0 }], [{ start: 0, end: 1, ruleIndex: 1 }]],
-    )
-    const { unzipSync } = await import('fflate')
-    assert.equal(replies[0].ok, true)
-    assert.deepEqual(
-      replies[0].result.files.map((item) => item.ruleCounts),
-      [
-        [1, 0],
-        [0, 1],
+  patchGlobal(t, 'self', { postMessage: (value) => replies.push(value) })
+  const workerUrl = await typeScriptModuleUrl(new URL('../../src/workers/polyReplace.worker.ts', import.meta.url), {
+    "'fflate'": JSON.stringify(import.meta.resolve('fflate')),
+    "'../core/polyReplaceBatch'": JSON.stringify(batchUrl),
+  })
+  await import(workerUrl)
+  self.onmessage({ data: { files: [file('a.txt', 'A'), file('b.txt', 'B')], rules } })
+  assert.deepEqual(
+    replies[0].result.files.map((item) => item.previewHits),
+    [[{ start: 0, end: 1, ruleIndex: 0 }], [{ start: 0, end: 1, ruleIndex: 1 }]],
+  )
+  const { unzipSync } = await import('fflate')
+  assert.equal(replies[0].ok, true)
+  assert.deepEqual(
+    replies[0].result.files.map((item) => item.ruleCounts),
+    [
+      [1, 0],
+      [0, 1],
+    ],
+  )
+  assert.deepEqual(
+    Object.values(unzipSync(new Uint8Array(replies[0].result.bytes))).map((bytes) =>
+      new TextDecoder().decode(bytes),
+    ),
+    ['B', 'C'],
+  )
+  self.onmessage({ data: { files: [file('a.txt', 'A'), file('../bad', 'A')], rules } })
+  assert.equal(replies[1].ok, false)
+  assert.equal(replies[1].result, undefined)
+  self.onmessage({ data: { mode: 'directory', files: [file('资料/子目录/a.txt', 'A')], rules } })
+  assert.equal(replies[2].result.mime, 'application/zip')
+  const directoryZip = unzipSync(new Uint8Array(replies[2].result.bytes))
+  assert.deepEqual(Object.keys(directoryZip), ['资料/子目录/a.txt'])
+  assert.equal(new TextDecoder().decode(directoryZip['资料/子目录/a.txt']), 'B')
+  self.onmessage({
+    data: {
+      mode: 'directory',
+      files: [
+        file('资料/ok.txt', 'A'),
+        { relativePath: '资料/bad', content: Uint8Array.of(255).buffer },
       ],
-    )
-    assert.deepEqual(
-      Object.values(unzipSync(new Uint8Array(replies[0].result.bytes))).map((bytes) =>
-        new TextDecoder().decode(bytes),
-      ),
-      ['B', 'C'],
-    )
-    self.onmessage({ data: { files: [file('a.txt', 'A'), file('../bad', 'A')], rules } })
-    assert.equal(replies[1].ok, false)
-    assert.equal(replies[1].result, undefined)
-    self.onmessage({ data: { mode: 'directory', files: [file('资料/子目录/a.txt', 'A')], rules } })
-    assert.equal(replies[2].result.mime, 'application/zip')
-    const directoryZip = unzipSync(new Uint8Array(replies[2].result.bytes))
-    assert.deepEqual(Object.keys(directoryZip), ['资料/子目录/a.txt'])
-    assert.equal(new TextDecoder().decode(directoryZip['资料/子目录/a.txt']), 'B')
-    self.onmessage({
-      data: {
-        mode: 'directory',
-        files: [
-          file('资料/ok.txt', 'A'),
-          { relativePath: '资料/bad', content: Uint8Array.of(255).buffer },
-        ],
-        rules,
-      },
-    })
-    assert.equal(replies[3].ok, false)
-    assert.equal(replies[3].result, undefined)
-    self.onmessage({
-      data: {
-        mode: 'files',
-        inputEncoding: 'gb18030',
-        files: [
-          { relativePath: 'old.txt', content: Uint8Array.from([0xd6, 0xd0, 0xce, 0xc4]).buffer },
-        ],
-        rules: [{ search: '中文', replace: '测试' }],
-      },
-    })
-    assert.equal(replies[4].ok, true)
-    assert.deepEqual(replies[4].result.files[0].ruleCounts, [1])
-    assert.equal(new TextDecoder().decode(replies[4].result.bytes), '测试')
-  } finally {
-    if (oldSelf === undefined) delete globalThis.self
-    else globalThis.self = oldSelf
-  }
+      rules,
+    },
+  })
+  assert.equal(replies[3].ok, false)
+  assert.equal(replies[3].result, undefined)
+  self.onmessage({
+    data: {
+      mode: 'files',
+      inputEncoding: 'gb18030',
+      files: [
+        { relativePath: 'old.txt', content: Uint8Array.from([0xd6, 0xd0, 0xce, 0xc4]).buffer },
+      ],
+      rules: [{ search: '中文', replace: '测试' }],
+    },
+  })
+  assert.equal(replies[4].ok, true)
+  assert.deepEqual(replies[4].result.files[0].ruleCounts, [1])
+  assert.equal(new TextDecoder().decode(replies[4].result.bytes), '测试')
 })
 
 test('逐条统计不跨文件累积，包含空文件及预览窗口外的真实替换', () => {

@@ -234,29 +234,33 @@ test('取消 Worker 后的旧成功和旧错误不能污染新任务或解除新
   assert.equal(current.stopped, true)
 })
 
-test('规则或编码变化作废快照，跳过文件和离开页面均终止 Worker', async () => {
+test('规则或编码变化作废快照，跳过文件和离开页面均终止 Worker', async (t) => {
   const fixture = mount()
-  try {
-    fixture.page.candidateFiles.value = [file(), { ...file(), name: 'second.txt' }]
-    await fixture.page.runReplace()
-    const rulesWorker = Worker.instances[0]
-    fixture.page.rules.value[0].replace = 'C'
-    assert.equal(rulesWorker.stopped, true)
-    assert.equal(rulesWorker.data.rules[0].replace, 'B')
-    await fixture.page.runReplace()
-    const encodingWorker = Worker.instances[1]
-    fixture.page.inputEncoding.value = 'gb18030'
-    assert.equal(encodingWorker.stopped, true)
-    await fixture.page.runReplace()
-    const removedWorker = Worker.instances[2]
-    fixture.page.setFileParticipation(0, false)
-    assert.equal(removedWorker.stopped, true)
-    assert.equal(fixture.page.selectedFiles.value.length, 1)
-    await fixture.page.runReplace()
-    assert.equal(fixture.page.busy.value, true)
-  } finally {
+  let unmounted = false
+  const unmount = () => {
+    if (unmounted) return
+    unmounted = true
     fixture.unmount()
   }
+  t.after(unmount)
+  fixture.page.candidateFiles.value = [file(), { ...file(), name: 'second.txt' }]
+  await fixture.page.runReplace()
+  const rulesWorker = Worker.instances[0]
+  fixture.page.rules.value[0].replace = 'C'
+  assert.equal(rulesWorker.stopped, true)
+  assert.equal(rulesWorker.data.rules[0].replace, 'B')
+  await fixture.page.runReplace()
+  const encodingWorker = Worker.instances[1]
+  fixture.page.inputEncoding.value = 'gb18030'
+  assert.equal(encodingWorker.stopped, true)
+  await fixture.page.runReplace()
+  const removedWorker = Worker.instances[2]
+  fixture.page.setFileParticipation(0, false)
+  assert.equal(removedWorker.stopped, true)
+  assert.equal(fixture.page.selectedFiles.value.length, 1)
+  await fixture.page.runReplace()
+  assert.equal(fixture.page.busy.value, true)
+  unmount()
   assert.equal(Worker.instances.at(-1).stopped, true)
 })
 
@@ -445,44 +449,55 @@ test('21 到 500 个候选可先筛选；501 整次拒绝且不截断、不覆�
 })
 
 test('参与集合保留大小与路径校验，跳过问题项即可修正，不把候选限制当处理扩容', async (t) => {
-  const fixture = mount()
-  t.after(fixture.unmount)
-  choose(
-    fixture.page,
-    [
-      namedFile('huge.txt', 'root/huge.txt', 2 * 1024 * 1024 + 1),
-      namedFile('ok.txt', 'root/ok.txt'),
-    ],
-    'directory',
-  )
-  assert.match(fixture.page.selectionIssue.value, /2 MiB/)
-  await fixture.page.runReplace()
-  assert.equal(Worker.instances.length, 0)
-  fixture.page.setFileParticipation(0, false)
-  assert.equal(fixture.page.selectionIssue.value, '')
-  choose(
-    fixture.page,
-    Array.from({ length: 3 }, (_, i) => namedFile(`${i}.txt`, '', 2 * 1024 * 1024)),
-  )
-  assert.match(fixture.page.selectionIssue.value, /5 MiB/)
-  fixture.page.setFileParticipation(2, false)
-  assert.equal(fixture.page.selectionIssue.value, '')
-  choose(
-    fixture.page,
-    [namedFile('A.txt', 'root/A.txt'), namedFile('a.txt', 'root/a.txt')],
-    'directory',
-  )
-  assert.match(fixture.page.selectionIssue.value, /冲突/)
-  fixture.page.setFileParticipation(1, false)
-  assert.equal(fixture.page.selectionIssue.value, '')
-  choose(
-    fixture.page,
-    [namedFile('a.txt', 'root/../a.txt'), namedFile('ok.txt', 'root/ok.txt')],
-    'directory',
-  )
-  assert.match(fixture.page.selectionIssue.value, /名称/)
-  fixture.page.setFileParticipation(0, false)
-  assert.equal(fixture.page.selectionIssue.value, '')
+  const cases = [
+    {
+      name: '单文件超 2 MiB 拦截，取消勾选问题项后恢复可运行',
+      files: [
+        namedFile('huge.txt', 'root/huge.txt', 2 * 1024 * 1024 + 1),
+        namedFile('ok.txt', 'root/ok.txt'),
+      ],
+      mode: 'directory',
+      expectedIssue: /2 MiB/,
+      skipIndex: 0,
+      checkWorkerNotStarted: true,
+    },
+    {
+      name: '总输入超 5 MiB 拦截，取消勾选第 3 个文件后恢复',
+      files: Array.from({ length: 3 }, (_, i) => namedFile(`${i}.txt`, '', 2 * 1024 * 1024)),
+      mode: undefined,
+      expectedIssue: /5 MiB/,
+      skipIndex: 2,
+    },
+    {
+      name: '跨平台大小写重名路径冲突拦截，取消勾选冲突项后恢复',
+      files: [namedFile('A.txt', 'root/A.txt'), namedFile('a.txt', 'root/a.txt')],
+      mode: 'directory',
+      expectedIssue: /冲突/,
+      skipIndex: 1,
+    },
+    {
+      name: '路径穿越名称非法拦截，取消勾选问题项后恢复',
+      files: [namedFile('a.txt', 'root/../a.txt'), namedFile('ok.txt', 'root/ok.txt')],
+      mode: 'directory',
+      expectedIssue: /名称/,
+      skipIndex: 0,
+    },
+  ]
+
+  for (const item of cases) {
+    await t.test(item.name, async (st) => {
+      const fixture = mount()
+      st.after(fixture.unmount)
+      choose(fixture.page, item.files, item.mode)
+      assert.match(fixture.page.selectionIssue.value, item.expectedIssue)
+      if (item.checkWorkerNotStarted) {
+        await fixture.page.runReplace()
+        assert.equal(Worker.instances.length, 0)
+      }
+      fixture.page.setFileParticipation(item.skipIndex, false)
+      assert.equal(fixture.page.selectionIssue.value, '')
+    })
+  }
 })
 
 test('普通多选与目录共用勾选，只读取参与正文，保留浏览器顺序和原相对路径', async (t) => {

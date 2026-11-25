@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import ts from 'typescript'
+import { patchGlobal, typeScriptModuleUrl } from '../helpers/test-runtime.mjs'
 
-// 与现有测试一致：内存编译并执行真实模块，只替换模块地址，不替换被测逻辑。
+// 复用跨模块共享的内存编译夹具，只替换模块地址，不替换被测逻辑。
 async function moduleUrl(path, replacements = {}) {
-  const source = await readFile(new URL(path, import.meta.url), 'utf8')
-  let output = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  for (const [dependency, url] of Object.entries(replacements))
-    output = output.replaceAll(`from '${dependency}'`, `from '${url}'`)
-  return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
+  const mapped = {}
+  for (const [dependency, url] of Object.entries(replacements)) {
+    mapped[`from '${dependency}'`] = `from '${url}'`
+  }
+  return typeScriptModuleUrl(new URL(path, import.meta.url), mapped)
 }
 
 const libraryUrl = await moduleUrl('../../src/utils/ruleLibrary.ts')
@@ -539,36 +536,24 @@ test('清空以受锁保护的空库保存，旧页面不能恢复已清空的�
   assert.equal(f.client().load().data.sets.length, 0)
 })
 
-test('浏览器包装延迟读取存储，并使用固定同名 exclusive 锁', async () => {
-  const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+test('浏览器包装延迟读取存储，并使用固定同名 exclusive 锁', async (t) => {
   const f = fixture()
   const calls = []
-  try {
-    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get: () => f.storage })
-    Object.defineProperty(globalThis, 'navigator', {
-      configurable: true,
-      value: {
-        locks: {
-          request: async (name, options, action) => {
-            calls.push({ name, options })
-            return action()
-          },
-        },
+  patchGlobal(t, 'localStorage', f.storage)
+  patchGlobal(t, 'navigator', {
+    locks: {
+      request: async (name, options, action) => {
+        calls.push({ name, options })
+        return action()
       },
-    })
-    const client = createBrowserRuleLibraryStorage()
-    assert.equal(f.reads(), 0)
-    client.load()
-    assert.equal((await client.save(library())).status, 'saved')
-    assert.deepEqual(calls, [{ name: RULE_LIBRARY_STORAGE_KEY, options: { mode: 'exclusive' } }])
-    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} })
-    assert.equal((await client.save(library(group('next', '下一组')))).status, 'memory-only')
-    assert.equal(f.writes(), 1)
-  } finally {
-    if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
-    else delete globalThis.localStorage
-    if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor)
-    else delete globalThis.navigator
-  }
+    },
+  })
+  const client = createBrowserRuleLibraryStorage()
+  assert.equal(f.reads(), 0)
+  client.load()
+  assert.equal((await client.save(library())).status, 'saved')
+  assert.deepEqual(calls, [{ name: RULE_LIBRARY_STORAGE_KEY, options: { mode: 'exclusive' } }])
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} })
+  assert.equal((await client.save(library(group('next', '下一组')))).status, 'memory-only')
+  assert.equal(f.writes(), 1)
 })

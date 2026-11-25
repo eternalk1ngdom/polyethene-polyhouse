@@ -611,9 +611,19 @@ test('读取期间取消后可选择新文件，旧读取迟到不能替换新�
   assert.equal(f.writes(), 0)
 })
 
-test('卸载使未完成的文件读取失效，不准备导入或写存储', async () => {
+test('卸载使未完成的文件读取失效，不准备导入或写存储', async (t) => {
   const f = fixture()
   const view = mount(f.manager())
+  let unmounted = false
+  const unmount = () => {
+    if (unmounted) return
+    unmounted = true
+    view.unmount()
+  }
+  t.after(() => {
+    unmount()
+    hook.setCurrent(null)
+  })
   let resolve
   const reading = view.page.readImportFile({
     name: 'pending.json',
@@ -623,7 +633,7 @@ test('卸载使未完成的文件读取失效，不准备导入或写存储', as
         resolve = done
       }),
   })
-  view.unmount()
+  unmount()
   resolve(importBytes(importData()).buffer)
   await reading
   assert.equal(view.page.importPreview.value, undefined)

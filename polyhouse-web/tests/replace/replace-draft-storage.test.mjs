@@ -604,7 +604,7 @@ const renderer = createRenderer({
   parentNode: () => null,
   nextSibling: () => null,
 })
-async function mountPanel(f, initial = blank) {
+async function mountPanel(t, f, initial = blank) {
   const item = f.controller(null, initial),
     props = reactive({ rules: initial.map((rule) => ({ ...rule })) })
   hosts.inject(() => item.manager)
@@ -626,6 +626,19 @@ async function mountPanel(f, initial = blank) {
         },
       }),
   })
+  let unmounted = false
+  const unmount = () => {
+    if (unmounted) return
+    unmounted = true
+    app.unmount()
+  }
+  // 注册 t.after 兜底，防止任一断言失败导致共享 hosts 监听器或隐藏态污染后续用例。
+  t.after(() => {
+    unmount()
+    hosts.document.visibilityState = 'visible'
+    hosts.window.listeners.clear()
+    hosts.document.listeners.clear()
+  })
   app.mount({})
   await item.manager.initialize()
   await nextTick()
@@ -635,12 +648,12 @@ async function mountPanel(f, initial = blank) {
     get page() {
       return page
     },
-    unmount: () => app.unmount(),
+    unmount,
   }
 }
-test('关闭先确认，取消保留开启状态；重建开关修复原生 checked，迟到确认被拦截', async () => {
+test('关闭先确认，取消保留开启状态；重建开关修复原生 checked，迟到确认被拦截', async (t) => {
   const f = fixture(),
-    panel = await mountPanel(f)
+    panel = await mountPanel(t, f)
   await panel.page.toggle(true)
   const writes = f.writes
   await panel.page.toggle(false)
@@ -654,14 +667,13 @@ test('关闭先确认，取消保留开启状态；重建开关修复原生 chec
   assert.equal(f.writes, writes)
   panel.page.closed()
   assert.equal(panel.manager.enabled.value, true)
-  panel.unmount()
 })
-test('真实面板恢复不同编辑先确认，取消不更改，确认后父页面接收半成品', async () => {
+test('真实面板恢复不同编辑先确认，取消不更改，确认后父页面接收半成品', async (t) => {
   const f = fixture(),
     old = await enabled(f)
   await old.repo.save(draft('已关闭来源'), old.generation, () => true)
   old.repo.close()
-  const panel = await mountPanel(f, rules('当前编辑'))
+  const panel = await mountPanel(t, f, rules('当前编辑'))
   await panel.page.requestRestore()
   assert.equal(panel.page.action.value, 'restore')
   assert.equal(panel.props.rules[0].replace, '当前编辑')
@@ -672,14 +684,13 @@ test('真实面板恢复不同编辑先确认，取消不更改，确认后父�
   await nextTick()
   assert.equal(panel.props.rules[0].replace, '已关闭来源')
   assert.equal(panel.manager.dirty.value, false)
-  panel.unmount()
 })
-test('链接来源选择走真实面板：载入保留旧历史，待决定时原草稿动作被阻止', async () => {
+test('链接来源选择走真实面板：载入保留旧历史，待决定时原草稿动作被阻止', async (t) => {
   const f = fixture(),
     old = await enabled(f)
   await old.repo.save(draft('旧草稿不可丢'), old.generation, () => true)
   old.repo.close()
-  const panel = await mountPanel(f, [{ search: '当前', replace: '编辑' }])
+  const panel = await mountPanel(t, f, [{ search: '当前', replace: '编辑' }])
   panel.page.sharePending.value = true
   await panel.page.requestRestore()
   assert.equal(panel.page.dialogOpen.value, false)
@@ -704,14 +715,13 @@ test('链接来源选择走真实面板：载入保留旧历史，待决定时�
     stored.some((item) => item.id === panel.repo.id && item.draft.rules[0].search === '链接'),
   )
   assert.deepEqual(panel.props.rules, [{ search: '链接', replace: '新规则' }])
-  panel.unmount()
 })
-test('统一来源选择的暂不载入保留编辑和旧历史；恢复只接受仍待决的草稿 ID', async () => {
+test('统一来源选择的暂不载入保留编辑和旧历史；恢复只接受仍待决的草稿 ID', async (t) => {
   const f = fixture(),
     old = await enabled(f)
   await old.repo.save(draft('待恢复'), old.generation, () => true)
   old.repo.close()
-  const panel = await mountPanel(f, [{ search: '当前', replace: '保留' }])
+  const panel = await mountPanel(t, f, [{ search: '当前', replace: '保留' }])
   assert.equal(panel.page.restoreSharedDraft('missing'), false)
   assert.deepEqual(panel.props.rules, [{ search: '当前', replace: '保留' }])
   assert.equal(panel.page.keepSharedEditing(), true)
@@ -721,17 +731,16 @@ test('统一来源选择的暂不载入保留编辑和旧历史；恢复只接�
   assert.deepEqual(panel.props.rules, [{ search: '当前', replace: '保留' }])
   assert.equal(panel.page.restoreSharedDraft(old.repo.id), false)
   panel.unmount()
-  const other = await mountPanel(f)
+  const other = await mountPanel(t, f)
   // 新面板默认定位最新历史；本断言明确选择原来的待恢复来源。
   other.manager.selectedId.value = old.repo.id
   assert.equal(other.page.restoreSharedDraft(old.repo.id), true)
   await nextTick()
   assert.equal(other.props.rules[0].replace, '待恢复')
-  other.unmount()
 })
-test('导航保存失败可返回或明确离开，关闭确认不会留下未决 Promise', async () => {
+test('导航保存失败可返回或明确离开，关闭确认不会留下未决 Promise', async (t) => {
   const f = fixture(),
-    panel = await mountPanel(f)
+    panel = await mountPanel(t, f)
   await panel.manager.enable()
   panel.manager.edit(rules('尚未保存'))
   f.faults.write = true
@@ -746,11 +755,10 @@ test('导航保存失败可返回或明确离开，关闭确认不会留下未�
   await new Promise(setImmediate)
   await panel.page.confirm()
   assert.equal(await allowed, true)
-  panel.unmount()
 })
-test('真实面板隐藏和 pagehide 补存，卸载移除事件与页面锁', async () => {
+test('真实面板隐藏和 pagehide 补存，卸载移除事件与页面锁', async (t) => {
   const f = fixture(),
-    panel = await mountPanel(f)
+    panel = await mountPanel(t, f)
   await panel.manager.enable()
   panel.manager.edit(rules('隐藏末次'))
   hosts.document.visibilityState = 'hidden'
@@ -766,5 +774,4 @@ test('真实面板隐藏和 pagehide 补存，卸载移除事件与页面锁', a
   assert.equal(hosts.window.listeners.size, 0)
   assert.equal(hosts.document.listeners.size, 0)
   assert.equal(f.active.has(panel.repo.id), false)
-  hosts.document.visibilityState = 'visible'
 })

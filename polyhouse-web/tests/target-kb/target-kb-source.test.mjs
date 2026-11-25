@@ -1,34 +1,18 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import ts from 'typescript'
+import { typeScriptModuleUrl } from '../helpers/test-runtime.mjs'
 
-// 与现有测试一致：内存编译并执行真实模块，只替换模块地址，不替换被测逻辑。
-function toModuleUrl(source, replacements = {}) {
-  let output = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  for (const [specifier, url] of Object.entries(replacements)) {
-    const quoted = JSON.stringify(url)
-    output = output.replaceAll(`"${specifier}"`, quoted).replaceAll(`'${specifier}'`, quoted)
-  }
-  return `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`
-}
+const avatarCropUrl = await typeScriptModuleUrl(
+  new URL('../../src/core/avatarCrop.ts', import.meta.url),
+)
+const { inspectSource, inspectSourceSize, checkDecodedPixels, fitWithinLongEdge } = await import(
+  await typeScriptModuleUrl(new URL('../../src/core/targetKbSource.ts', import.meta.url), {
+    "'./avatarCrop'": `'${avatarCropUrl}'`,
+    '"./avatarCrop"': `"${avatarCropUrl}"`,
+  })
+)
 
-async function loadSource() {
-  const crop = await readFile(new URL('../../src/core/avatarCrop.ts', import.meta.url), 'utf8')
-  const source = await readFile(new URL('../../src/core/targetKbSource.ts', import.meta.url), 'utf8')
-  return import(toModuleUrl(source, { './avatarCrop': toModuleUrl(crop) }))
-}
-
-const {
-  MAX_SOURCE_BYTES,
-  MAX_SOURCE_PIXELS,
-  inspectSource,
-  inspectSourceSize,
-  checkDecodedPixels,
-  fitWithinLongEdge,
-} = await loadSource()
+const MAX_BYTES = 20 * 1024 * 1024
 
 /** 构造头部可解析的最小 JPEG：只写 SOF0 尺寸，后面不接真实熵编码数据。 */
 function buildJpeg(width, height) {
@@ -70,50 +54,51 @@ function padTo(bytes, size) {
   return output
 }
 
-test('文件体积：正好 20 MiB 放行，多 1 字节拒绝', () => {
-  const base = buildJpeg(800, 600)
-  assert.equal(inspectSource(padTo(base, MAX_SOURCE_BYTES)).ok, true)
-
-  const over = inspectSource(padTo(base, MAX_SOURCE_BYTES + 1))
-  assert.equal(over.ok, false)
-  assert.equal(over.reason, 'file-too-large')
-  assert.match(over.message, /超过 20 MiB/)
-})
-
-test('像素上限：正好 40 MP 放行，多一个像素拒绝', () => {
-  // 8000×5000 正好 40,000,000 像素，与"40MP 上限"字面对齐。
-  const exact = inspectSource(buildJpeg(8000, 5000))
-  assert.equal(exact.ok, true)
-  assert.equal(exact.width, 8000)
-  assert.equal(exact.height, 5000)
-
-  const over = inspectSource(buildJpeg(8001, 5000))
-  assert.equal(over.ok, false)
-  assert.equal(over.reason, 'pixels-too-large')
-  assert.match(over.message, /40MP/)
-})
-
-test('PNG 走 IHDR 分支，同样受像素上限约束', () => {
-  assert.equal(inspectSource(buildPng(4000, 3000)).ok, true)
-  assert.equal(inspectSource(buildPng(9000, 5000)).reason, 'pixels-too-large')
-})
-
-test('超限提示按 10^6 报百万像素，不把 43.2MP 说成 41.2MP', () => {
-  // 8000×5400 = 43,200,000 像素；若按 1024² 换算会显示 41.2，用户一乘就能看出不对。
-  const over = inspectSource(buildJpeg(8000, 5400))
-  assert.equal(over.ok, false)
-  assert.match(over.message, /8000×5400（43\.2MP）/)
-})
-
-test('解析不出尺寸的格式不拒绝，交给解码后补检', () => {
-  // WebP 头部：RIFF....WEBP，avatarSourceSize 只认 PNG/JPEG，因此返回 null。
+function buildWebpHeader() {
   const webp = new Uint8Array(32)
   webp.set([0x52, 0x49, 0x46, 0x46], 0)
   webp.set([0x57, 0x45, 0x42, 0x50], 8)
-  const result = inspectSource(webp)
-  assert.equal(result.ok, true)
-  assert.equal(result.width, null)
-  assert.equal(result.height, null)
+  return webp
+}
+
+test('inspectSource 校验 20 MiB 体积上限、40MP 像素上限（十进制）与多格式分支', async (t) => {
+  await t.test('文件体积正好 20 MiB 放行，多 1 字节拒绝', () => {
+    const base = buildJpeg(800, 600)
+    assert.equal(inspectSource(padTo(base, MAX_BYTES)).ok, true)
+    const over = inspectSource(padTo(base, MAX_BYTES + 1))
+    assert.equal(over.ok, false)
+    assert.equal(over.reason, 'file-too-large')
+    assert.match(over.message, /超过 20 MiB/)
+  })
+
+  await t.test('JPEG 像素正好 40MP（8000×5000）放行，多 1 像素拒绝', () => {
+    const exact = inspectSource(buildJpeg(8000, 5000))
+    assert.equal(exact.ok, true)
+    assert.equal(exact.width, 8000)
+    assert.equal(exact.height, 5000)
+    const over = inspectSource(buildJpeg(8001, 5000))
+    assert.equal(over.ok, false)
+    assert.equal(over.reason, 'pixels-too-large')
+    assert.match(over.message, /40MP/)
+  })
+
+  await t.test('PNG 走 IHDR 分支同样受 40MP 像素上限约束', () => {
+    assert.equal(inspectSource(buildPng(4000, 3000)).ok, true)
+    assert.equal(inspectSource(buildPng(9000, 5000)).reason, 'pixels-too-large')
+  })
+
+  await t.test('超限提示按 10^6 报百万像素（43.2MP 而非 41.2MP）', () => {
+    const over = inspectSource(buildJpeg(8000, 5400))
+    assert.equal(over.ok, false)
+    assert.match(over.message, /8000×5400（43\.2MP）/)
+  })
+
+  await t.test('解析不出尺寸的 WebP 不拒绝，留给解码后补检', () => {
+    const result = inspectSource(buildWebpHeader())
+    assert.equal(result.ok, true)
+    assert.equal(result.width, null)
+    assert.equal(result.height, null)
+  })
 })
 
 test('解码后补检只挡像素超限，非法尺寸一并拒绝', () => {
@@ -131,17 +116,10 @@ test('最长边缩放：不超限时原样返回，超限时等比且不小于 1
   assert.deepEqual(fitWithinLongEdge(1, 10000, 1), { width: 1, height: 1 })
 })
 
-test('上限常量与计划 D5 一致', () => {
-  assert.equal(MAX_SOURCE_BYTES, 20 * 1024 * 1024)
-  // MP 是十进制单位：40 MP 就是 40,000,000 像素，不是 40×1024²。
-  assert.equal(MAX_SOURCE_PIXELS, 40 * 1000000)
-})
-
 test('只校验体积时不必读整张图，也不判断像素', () => {
-  // 页面选图时先用它拦一次，所以它必须在不看文件头的情况下也能给出结论。
   assert.equal(inspectSourceSize(1024).ok, true)
-  assert.equal(inspectSourceSize(MAX_SOURCE_BYTES).ok, true)
-  const over = inspectSourceSize(MAX_SOURCE_BYTES + 1)
+  assert.equal(inspectSourceSize(MAX_BYTES).ok, true)
+  const over = inspectSourceSize(MAX_BYTES + 1)
   assert.equal(over.ok, false)
   assert.equal(over.reason, 'file-too-large')
   assert.equal(inspectSourceSize(1).width, null)
