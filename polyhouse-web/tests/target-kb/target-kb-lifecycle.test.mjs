@@ -31,7 +31,7 @@ async function compileModule(sourceUrl) {
   let code = ts.transpileModule(await readFile(sourceUrl, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText
-  for (const match of [...code.matchAll(/from ['"](\.[^'"]+)['"]/g)]) {
+  for (const match of code.matchAll(/from ['"](\.[^'"]+)['"]/g)) {
     code = code.replaceAll(
       match[0],
       `from '${await compileModule(new URL(match[1] + '.ts', sourceUrl))}'`,
@@ -51,7 +51,7 @@ source = `import {Worker,OffscreenCanvas,createImageBitmap,URL} from '${fixtures
 let code = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText
-for (const match of [...code.matchAll(/from ['"]([^'"]+)['"]/g)]) {
+for (const match of code.matchAll(/from ['"]([^'"]+)['"]/g)) {
   const name = match[1]
   const target =
     name === fixtures

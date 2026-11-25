@@ -29,7 +29,7 @@ let code = ts.transpileModule(
     compileScript(descriptor, { id: 'draft-disclosure' }).content,
   { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
 ).outputText
-for (const match of [...code.matchAll(/from ['"]([^'"]+)['"]/g)])
+for (const match of code.matchAll(/from ['"]([^'"]+)['"]/g))
   code = code.replaceAll(
     match[0],
     `from '${match[1] === 'vue' ? import.meta.resolve('vue') : fixtures}'`,

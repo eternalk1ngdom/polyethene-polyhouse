@@ -196,7 +196,7 @@ async function encode(image: ImageBitmap, key: CoverFrame): Promise<Blob> {
   throw new Error('裁剪后的图片文件仍然太大，请换一张图片。')
 }
 
-async function save() {
+async function submit() {
   const image = bitmap.value
   if (!image || saving.value || loading.value) return
   saving.value = true
@@ -217,7 +217,7 @@ async function save() {
 </script>
 
 <template>
-  <form class="cover-editor" @submit.prevent="save">
+  <form class="cover-editor" @submit.prevent="submit">
     <label for="local-cover-file">选择本地图片</label>
     <input
       id="local-cover-file"

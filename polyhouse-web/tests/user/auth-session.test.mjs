@@ -683,7 +683,8 @@ test('拒绝丢失精度的资料与畸形响应，不清除仍待确认的 Toke
   storage.set('polyhouse_token', 'cached-credential')
   const store = useUserStore()
   for (const invalid of [
-    { ...profile, experience: 9223372036854775807 },
+    // 有意构造超出安全整数范围的经验值，验证客户端拒绝丢失精度的响应。
+    { ...profile, experience: Number('9223372036854775807') },
     { ...profile, role: 'UNKNOWN_ROLE' },
     { ...profile, coins: '-1' },
     null,

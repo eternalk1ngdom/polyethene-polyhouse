@@ -50,6 +50,7 @@ export function validateBatch(
         (part) =>
           !part ||
           part.length > 200 ||
+          // oxlint-disable-next-line no-control-regex -- 有意拦截 ASCII 控制字符，防止跨平台非法文件名
           /[\\\x00-\x1f<>:"|?*]/u.test(part) ||
           /^\.+$/u.test(part) ||
           /[. ]$/u.test(part) ||

@@ -39,7 +39,7 @@ function directPositions(input, rules) {
 }
 function checkPositions(result, input, rules) {
   assert.deepEqual(result.previewHits, directPositions(input, rules))
-  const { previewHits, ...unchanged } = result
+  const { previewHits: _previewHits, ...unchanged } = result
   return unchanged
 }
 function replaceText(input, rules) {
