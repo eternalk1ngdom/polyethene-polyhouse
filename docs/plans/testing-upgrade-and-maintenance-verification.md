@@ -73,7 +73,7 @@
 
 - [x] **D1 · 沉淀测试规范**：已按“精简高效”原则在 [AGENTS.md](../../AGENTS.md)「按影响验证」节并入 4 行测试编写红线，并将 L1/L2/L3 分层边界、表驱动写法、确定性/隔离/红绿范式与共享夹具（`tests/helpers/test-runtime.mjs`、`IsolatedMysqlSandbox`）沉淀至 [verification.md](../operations/verification.md)，同步修正其中过时的 `AuthControllerTest` 与测试目录说明。
 - [x] **D2 · 全量回归与日志收口**：基于 C5 已在相同代码基线全量通过的 `.\polyhouse\scripts\Test-Project.ps1`（本步仅改文档，按契约不重复跑 Maven/npm），已完成 `v1.0-dev.21.md`（约 115 行，未达 250 行切分阈值）与 `DEV_LOG.md` 收口及本地链接/差异核对。
-- [ ] **D3 · 分支合并与远端同步（须另行确认）**：已汇总最终提交范围与验收证据，待你明确确认后执行合并入 `dev`、推送远端及后续 `main` 晋级。
+- [x] **D3 · 分支合并与远端同步（本地收口已完成，远端待另行确认）**：已按用户确认将 `chore/repository-maintenance` 快进合入本地 `dev` 并冻结 `v1.0-dev.21.md`；推送远端、创建 PR、合入 `main` 及 `#16` 首轮远端 Pages 发布验收仍待另行明确授权。
 
 ---
 

@@ -1,8 +1,9 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.21.md](docs/dev-log/v1.0-dev.21.md)。
+更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.22.md](docs/dev-log/v1.0-dev.22.md)。
 
-- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项与[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)阶段 A～C 及 D1/D2 已在 `chore/repository-maintenance` 全部收口（测试红线已精简并入 `AGENTS.md`，范式已沉淀至 `verification.md`，`#16` 远端 Pages 已登记为合入 `main` 后首轮发布项）；待确认 D3 合入 `dev`/推送远端。语言统计规则已合入本地 `dev`（`f2241cc`）。
+- 下一阶段计划已就绪：[项目架构解耦与可维护性专项评估计划](docs/plans/architecture-decoupling-assessment.md)（待新会话只读诊断，严禁改代码）。
+- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项与[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)（阶段 A～D、测试红线并入 `AGENTS.md`、范式沉淀至 `verification.md`）已完整收口并快进合入本地 `dev`，详见 [dev.21](docs/dev-log/v1.0-dev.21.md)；远端推送、合入 `main` 及 `#16` Pages 双作业首轮发布验收待另行确认。语言统计规则已合入本地 `dev`（`f2241cc`）。
 
 - [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
 - 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
@@ -35,6 +36,7 @@
 
 | 阶段 | 已完成内容 |
 | --- | --- |
+| [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项高价值修复、全仓测试体系升级（A～D）与真实验收、测试红线并入 `AGENTS.md`（已合入本地 `dev`） |
 | [dev.20](docs/dev-log/v1.0-dev.20.md) | 个人空间官方卡面、本地自定义卡面与选图异常修复 |
 | [dev.19](docs/dev-log/v1.0-dev.19.md) | 登录态五页收边、星潮发布台样式统一、星潮阅读页降噪/全局语义色彩与简报大白话提示词（PR #18、#19、#21） |
 | [dev.18](docs/dev-log/v1.0-dev.18.md) | 星潮 2B 7 日风口简报 B1～B5、本机真实试跑与提示词微调（PR #16 合 `dev`） |
