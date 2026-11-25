@@ -108,10 +108,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void shouldRejectMalformedJsonWithoutEchoingInput() throws Exception {
-        mvc.perform(post("/__test/common/body").contentType(MediaType.APPLICATION_JSON).content(PRIVATE_DETAIL))
+    void shouldRejectMalformedJsonWithoutEchoingInput(CapturedOutput output) throws Exception {
+        String responseBody = mvc.perform(post("/__test/common/body")
+                        .contentType(MediaType.APPLICATION_JSON).content(PRIVATE_DETAIL))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(ErrorCode.INVALID_PARAMETER.getMessage()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_PARAMETER.getCode()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.INVALID_PARAMETER.getMessage()))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(responseBody).doesNotContain(PRIVATE_DETAIL);
+        assertThat(output.getAll()).doesNotContain(PRIVATE_DETAIL);
     }
 
     @Test

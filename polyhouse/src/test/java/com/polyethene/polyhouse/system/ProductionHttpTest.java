@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.system;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -49,18 +50,18 @@ class ProductionHttpTest {
         assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).isEmpty();
     }
 
-    @Test
-    void shouldRejectUnlistedOriginMethodAndHeader() throws Exception {
-        for (var response : new HttpResponse<?>[]{
-                preflight("https://eternalk1ngdom.github.io.example.org", "GET", "Accept"),
-                preflight("http://127.0.0.1:5173", "GET", "Accept"),
-                preflight("chrome-extension://fixture-extension", "GET", "Accept"),
-                preflight(PAGES, "PATCH", "Accept"),
-                preflight(PAGES, "GET", "X-Unknown")
-        }) {
-            assertThat(response.statusCode()).isEqualTo(403);
-            assertThat(response.body().toString()).contains("\"code\":40300");
-        }
+    @ParameterizedTest(name = "拒绝未白名单预检：origin={0}, method={1}, headers={2}")
+    @CsvSource({
+            "https://eternalk1ngdom.github.io.example.org, GET, Accept",
+            "http://127.0.0.1:5173, GET, Accept",
+            "chrome-extension://fixture-extension, GET, Accept",
+            "https://eternalk1ngdom.github.io, PATCH, Accept",
+            "https://eternalk1ngdom.github.io, GET, X-Unknown"
+    })
+    void shouldRejectUnlistedOriginMethodAndHeader(String origin, String method, String headers) throws Exception {
+        var response = preflight(origin, method, headers);
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.body()).contains("\"code\":40300");
     }
 
     @Test

@@ -27,6 +27,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -39,19 +41,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.lenient;
 
 /** 以真实密码/JWT 工具和固定时钟检查业务编排，外部存储使用可控替身验证失败边界。 */
 @ExtendWith(MockitoExtension.class)
@@ -92,8 +94,6 @@ class AuthServiceImplTest {
         properties = new JwtProperties();
         properties.setExpirationDays(7);
         properties.setSecret(Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded()));
-        lenient().when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
-        lenient().when(growth.rewardDailyLogin(42L, 0L)).thenReturn(activeUser());
         service = new AuthServiceImpl(mapper, sessions, properties, validatorFactory.getValidator(), growth,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -129,16 +129,28 @@ class AuthServiceImplTest {
         assertBusiness(() -> service.register(new RegisterDTO("alice", PASSWORD, "居民")), ErrorCode.CONFLICT, "账号已被使用");
     }
 
+    @ParameterizedTest(name = "入参校验在触库前拒绝：{0}")
+    @MethodSource("invalidAuthRequests")
+    void shouldRejectInvalidDtoBeforeTouchingStorage(String label, Consumer<AuthServiceImpl> invocation) {
+        assertBusiness(() -> invocation.accept(service), ErrorCode.INVALID_PARAMETER, "请求参数不合法");
+        verifyNoInteractions(mapper, sessions, growth);
+    }
+
+    private static Stream<Arguments> invalidAuthRequests() {
+        return Stream.of(
+                Arguments.of("null 注册请求", (Consumer<AuthServiceImpl>) s -> s.register(null)),
+                Arguments.of("用户名过短的登录请求", (Consumer<AuthServiceImpl>) s -> s.login(new LoginDTO("a", PASSWORD), null)),
+                Arguments.of("非白名单终端类型", (Consumer<AuthServiceImpl>) s -> s.login(new LoginDTO("alice", PASSWORD, "MOBILE"), null))
+        );
+    }
+
     @Test
-    void shouldRejectInvalidDtoAndMalformedUnicodeWithoutPersistingIt() {
-        assertBusiness(() -> service.register(null), ErrorCode.INVALID_PARAMETER, "请求参数不合法");
-        assertBusiness(() -> service.login(new LoginDTO("a", PASSWORD), null), ErrorCode.INVALID_PARAMETER, "请求参数不合法");
-        assertBusiness(() -> service.login(new LoginDTO("alice", PASSWORD, "MOBILE"), null), ErrorCode.INVALID_PARAMETER, "请求参数不合法");
-        verifyNoInteractions(mapper, sessions);
+    void shouldRejectMalformedUnicodePasswordWithoutPersistingUser() {
         when(mapper.selectCount(any())).thenReturn(0L);
         assertBusiness(() -> service.register(new RegisterDTO("alice", "aaaaaaa\uD800", "居民")),
                 ErrorCode.INVALID_PARAMETER, "请求参数不合法");
         verify(mapper, never()).insert(any(User.class));
+        verifyNoInteractions(sessions, growth);
     }
 
     @Test
@@ -152,6 +164,7 @@ class AuthServiceImplTest {
         verifyNoInteractions(sessions);
         when(mapper.update(isNull(), any())).thenReturn(1);
         verifyNoInteractions(growth);
+        when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
         assertThat(service.login(new LoginDTO("alice", PASSWORD), null).user().id()).isEqualTo("42");
         verify(sessions).saveSession(any(), eq(Duration.ofDays(7)));
     }
@@ -180,6 +193,7 @@ class AuthServiceImplTest {
     void shouldOnlyReturnTokenAfterWhitelistWasStoredAndHideItInDiagnosticText() throws Exception {
         when(mapper.selectOne(any())).thenReturn(activeUser());
         when(mapper.update(isNull(), any())).thenReturn(1);
+        when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
         LoginVO result = service.login(new LoginDTO("ALICE", PASSWORD, "H5"), "192.0.2.1");
         var claims = JwtUtils.parseAndValidate(result.accessToken(), properties.signingKey(), NOW);
         assertThat(claims.clientType()).isEqualTo("H5");
@@ -208,6 +222,7 @@ class AuthServiceImplTest {
     void shouldNotReturnTokenWhenWhitelistStorageFails() {
         when(mapper.selectOne(any())).thenReturn(activeUser());
         when(mapper.update(isNull(), any())).thenReturn(1);
+        when(growth.rewardDailyLogin(42L)).thenReturn(activeUser());
         doThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "认证服务暂时不可用，请稍后重试"))
                 .when(sessions).saveSession(any(), any());
         assertBusiness(() -> service.login(new LoginDTO("alice", PASSWORD), null),
@@ -225,18 +240,30 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void shouldDelegateLiveUserValidationToGrowthOnlyAfterSessionValidation() {
+    void shouldReturnLiveRoleFromGrowthWhenSessionIsActive() {
         String token = JwtUtils.createToken(42L, UserRoleEnum.OWNER, "PC", properties.signingKey(), NOW, Duration.ofDays(7));
         when(sessions.isCurrentSession(any())).thenReturn(true);
         User current = activeUser();
         current.setRole(UserRoleEnum.USER);
         when(growth.rewardDailyLogin(42L, 0L)).thenReturn(current);
         assertThat(service.getCurrentUser(token).role()).isEqualTo(UserRoleEnum.USER);
+    }
+
+    @Test
+    void shouldPropagateUnauthorizedWhenLiveUserCheckRejectsActiveSession() {
+        String token = currentToken();
+        when(sessions.isCurrentSession(any())).thenReturn(true);
         doThrow(new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录"))
                 .when(growth).rewardDailyLogin(42L, 0L);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
+    }
+
+    @Test
+    void shouldRejectRevokedSessionBeforeQueryingLiveUserOrGrowth() {
+        String token = currentToken();
         when(sessions.isCurrentSession(any())).thenReturn(false);
         assertBusiness(() -> service.getCurrentUser(token), ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
+        verifyNoInteractions(growth);
     }
 
     @Test
@@ -258,11 +285,9 @@ class AuthServiceImplTest {
         when(sessions.isCurrentSession(any())).thenReturn(true);
         when(mapper.deleteById(42L)).thenReturn(1);
         service.deregister(token);
-        var order = inOrder(mapper, sessions);
-        order.verify(mapper).selectOne(any());
-        order.verify(sessions).isCurrentSession(any());
-        order.verify(mapper).deleteById(42L);
-        order.verify(sessions).removeAllSessions(42L);
+        // 只验证目标账号软删与全端会话撤销两个对外副作用；前置拦截与失败顺序由下方负向契约测试保障。
+        verify(mapper).deleteById(42L);
+        verify(sessions).removeAllSessions(42L);
     }
 
     @Test

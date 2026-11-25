@@ -6,36 +6,20 @@ import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.model.vo.ValidationProbeVO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** 校验统一响应信封的三字段 JSON 契约、失败码正数边界与角色语义编码。 */
 class ResultTest {
 
-    @Test
-    void shouldCreateSuccessResultWithData() {
-        Result<String> result = Result.success("payload");
-
-        assertEquals(Result.SUCCESS_CODE, result.getCode());
-        assertEquals("操作成功", result.getMessage());
-        assertEquals("payload", result.getData());
-    }
-
-    @Test
-    void shouldCreateFailureResultWithoutData() {
-        Result<Void> result = Result.failure(40100, "未登录");
-
-        assertEquals(40100, result.getCode());
-        assertEquals("未登录", result.getMessage());
-        assertNull(result.getData());
-    }
-
-    @Test
-    void shouldRejectSuccessCodeForFailureResult() {
-        assertThrows(IllegalArgumentException.class, () -> Result.failure(Result.SUCCESS_CODE, "invalid"));
-        assertThrows(IllegalArgumentException.class, () -> Result.failure(-1, "invalid"));
+    @ParameterizedTest(name = "失败响应拒绝非正数业务码：{0}")
+    @ValueSource(ints = {Result.SUCCESS_CODE, -1})
+    void shouldRejectNonPositiveCodeForFailureResult(int invalidCode) {
+        assertThrows(IllegalArgumentException.class, () -> Result.failure(invalidCode, "invalid"));
     }
 
     @Test

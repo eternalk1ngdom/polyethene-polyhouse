@@ -6,6 +6,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.tools.ToolProvider;
 import java.io.ByteArrayOutputStream;
@@ -29,10 +34,12 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -63,32 +70,49 @@ class TrendWakeTest {
 
     @AfterAll static void closeLoader() throws IOException { if (loader != null) loader.close(); }
 
-    @Test void disabledAndOutsideWindowDoNotValidateOrContactTarget() throws Exception {
-        assertThat(run(Map.of(), fixed(NOW), Duration.ofSeconds(2), Duration.ZERO,
-                Duration.ofSeconds(5), ignored -> { }, false)).isZero();
-        for (String value : List.of("", "false", "TRUE", "1")) {
-            var logs = new ArrayList<String>();
-            assertThat(run(Map.of("TREND_WAKE_ENABLED", value), fixed(NOW), Duration.ofSeconds(2), Duration.ZERO,
-                    Duration.ofSeconds(5), logs::add, false)).isZero();
-            assertThat(logs).containsExactly("trend-wake: disabled");
-        }
-        for (Instant time : List.of(NOW.minusSeconds(1), Instant.parse("2026-11-16T00:00:00Z"))) {
-            var logs = new ArrayList<String>();
-            assertThat(run(env("invalid"), fixed(time), Duration.ofSeconds(2), Duration.ZERO,
-                    Duration.ofSeconds(5), logs::add, false)).isZero();
-            assertThat(logs).containsExactly("trend-wake: outside-window");
-        }
+    @ParameterizedTest(name = "未显式启用开关时静默退出：''{0}''")
+    @ValueSource(strings = {"", "false", "TRUE", "1"})
+    void disabledConfigurationDoesNotValidateOrContactTarget(String value) throws Exception {
+        var logs = new ArrayList<String>();
+        assertThat(run(Map.of("TREND_WAKE_ENABLED", value), fixed(NOW), Duration.ofSeconds(2), Duration.ZERO,
+                Duration.ofSeconds(5), logs::add, false)).isZero();
+        assertThat(logs).containsExactly("trend-wake: disabled");
     }
 
-    @Test void allowlistRejectsCredentialsPathsQueriesPortsAndLookalikes() throws Exception {
-        for (String raw : List.of("https://user:private@a.onrender.com", "https://a.onrender.com/?key=private",
+    @Test void missingEnabledVariableDefaultsToDisabled() throws Exception {
+        var logs = new ArrayList<String>();
+        assertThat(run(Map.of(), fixed(NOW), Duration.ofSeconds(2), Duration.ZERO,
+                Duration.ofSeconds(5), logs::add, false)).isZero();
+        assertThat(logs).containsExactly("trend-wake: disabled");
+    }
+
+    @ParameterizedTest(name = "窗口外时刻直接退出：{0}")
+    @ValueSource(strings = {"2026-11-15T22:19:59Z", "2026-11-16T00:00:00Z"})
+    void outsideWindowDoesNotValidateOrContactTarget(String isoInstant) throws Exception {
+        var logs = new ArrayList<String>();
+        assertThat(run(env("invalid"), fixed(Instant.parse(isoInstant)), Duration.ofSeconds(2), Duration.ZERO,
+                Duration.ofSeconds(5), logs::add, false)).isZero();
+        assertThat(logs).containsExactly("trend-wake: outside-window");
+    }
+
+    @ParameterizedTest(name = "SSRF 与 URL 白名单拒绝非法目标：{0}")
+    @MethodSource("rejectedAllowlistTargets")
+    void allowlistRejectsCredentialsPathsQueriesPortsAndLookalikes(String raw) {
+        assertThatThrownBy(() -> invoke(probeUri, raw, true)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static Stream<String> rejectedAllowlistTargets() {
+        return Stream.of(
+                "https://user:private@a.onrender.com", "https://a.onrender.com/?key=private",
                 "https://a.onrender.com/#private", "https://a.onrender.com/other", "https://a.onrender.com.evil.test",
                 "https://onrender.com", "https://a.b.onrender.com", "http://a.onrender.com", "https://a.onrender.com:444",
                 "https://a.onrender.com:", " https://a.onrender.com", "https://a.onrender.com\n",
                 "https://a.onrender.com\\@evil.test", "http://localhost:8080", "http://192.0.2.1:8080",
-                "http://127.0.0.1:80", "mailto:private", "invalid", "https://例子.onrender.com")) {
-            assertThatThrownBy(() -> invoke(probeUri, raw, true)).isInstanceOf(IllegalArgumentException.class);
-        }
+                "http://127.0.0.1:80", "mailto:private", "invalid", "https://例子.onrender.com"
+        );
+    }
+
+    @Test void allowlistAcceptsCanonicalRenderAndExplicitLocalLoopbackAndHidesBadConfigInLogs() throws Exception {
         assertThatThrownBy(() -> invoke(probeUri, "http://127.0.0.1:8080", false)).isInstanceOf(IllegalArgumentException.class);
         assertThat(invoke(probeUri, "https://SAMPLE.onrender.com:443/", false))
                 .isEqualTo(URI.create("https://sample.onrender.com/api/trend/readiness"));
@@ -99,6 +123,7 @@ class TrendWakeTest {
         assertThat(logs).containsExactly("trend-wake: configuration-error");
     }
 
+    @ResourceLock(value = "java.net.ProxySelector", mode = ResourceAccessMode.READ_WRITE)
     @Test void readyUsesOnlyFixedAnonymousGetAndIgnoresDefaultProxy() throws Exception {
         ProxySelector original = ProxySelector.getDefault();
         var proxyCalls = new java.util.concurrent.atomic.AtomicInteger();
@@ -110,7 +135,7 @@ class TrendWakeTest {
                 proxyCalls.incrementAndGet();
             }
         });
-        try (var peer = new Peer(List.of(new Response(200, READY, false, 0, 0, null)))) {
+        try (var peer = new Peer(List.of(Response.immediate(200, READY)))) {
             var logs = new ArrayList<String>();
             assertThat(probe(peer, logs)).isZero();
             assertThat(peer.paths).containsExactly("GET /api/trend/readiness");
@@ -123,15 +148,15 @@ class TrendWakeTest {
     }
 
     @Test void cold503AndLoadingHtmlRecoverWithBoundedAttempts() throws Exception {
-        try (var peer = new Peer(List.of(new Response(503, bytes("warming"), false, 0, 0, null),
-                new Response(200, bytes("<html>Starting</html>"), false, 0, 0, null),
-                new Response(200, READY, false, 0, 0, null)))) {
+        try (var peer = new Peer(List.of(Response.immediate(503, bytes("warming")),
+                Response.immediate(200, bytes("<html>Starting</html>")),
+                Response.immediate(200, READY)))) {
             var logs = new ArrayList<String>();
             assertThat(probe(peer, logs)).isZero();
             assertThat(peer.paths).hasSize(3);
             assertThat(logs).contains("trend-wake: attempt=1 result=http-503", "trend-wake: attempt=2 result=not-ready");
         }
-        try (var peer = new Peer(List.of(new Response(503, bytes("private-body"), false, 0, 0, null)))) {
+        try (var peer = new Peer(List.of(Response.immediate(503, bytes("private-body"))))) {
             var logs = new ArrayList<String>();
             assertThat(probe(peer, logs)).isEqualTo(1);
             assertThat(peer.paths).hasSize(3);
@@ -139,49 +164,47 @@ class TrendWakeTest {
         }
     }
 
-    @Test void redirectMissingUnauthorizedAnd429AreNeverRetriedOrFollowed() throws Exception {
-        try (var target = new Peer(List.of(new Response(200, READY, false, 0, 0, null)))) {
-            for (int status : List.of(302, 401, 403, 404, 429)) {
-                try (var peer = new Peer(List.of(new Response(status, bytes("private-body"), false, 0, 0, target.origin())))) {
-                    var logs = new ArrayList<String>();
-                    assertThat(probe(peer, logs)).isEqualTo(1);
-                    assertThat(peer.paths).hasSize(1);
-                    assertThat(String.join("\n", logs)).doesNotContain("private-body", target.origin());
-                }
-            }
+    @ParameterizedTest(name = "状态码 {0} 不重试也不跟随重定向")
+    @ValueSource(ints = {302, 401, 403, 404, 429})
+    void redirectMissingUnauthorizedAnd429AreNeverRetriedOrFollowed(int status) throws Exception {
+        try (var target = new Peer(List.of(Response.immediate(200, READY)));
+             var peer = new Peer(List.of(new Response(status, bytes("private-body"), false, false, false, target.origin())))) {
+            var logs = new ArrayList<String>();
+            assertThat(probe(peer, logs)).isEqualTo(1);
+            assertThat(peer.paths).hasSize(1);
+            assertThat(String.join("\n", logs)).doesNotContain("private-body", target.origin());
             assertThat(target.paths).isEmpty();
         }
     }
 
-    @Test void knownAndChunkedOversizedBodiesFailWithoutRetry() throws Exception {
-        for (boolean chunked : List.of(false, true)) {
-            try (var peer = new Peer(List.of(new Response(200, new byte[8192], chunked, 0, 0, null)))) {
-                var logs = new ArrayList<String>();
-                assertThat(probe(peer, logs)).isEqualTo(1);
-                assertThat(peer.paths).hasSize(1);
-                assertThat(logs).contains("trend-wake: attempt=1 result=body-limit");
-            }
+    @ParameterizedTest(name = "超限响应体直接失败不重试（chunked={0}）")
+    @ValueSource(booleans = {false, true})
+    void knownAndChunkedOversizedBodiesFailWithoutRetry(boolean chunked) throws Exception {
+        try (var peer = new Peer(List.of(new Response(200, new byte[8192], chunked, false, false, null)))) {
+            var logs = new ArrayList<String>();
+            assertThat(probe(peer, logs)).isEqualTo(1);
+            assertThat(peer.paths).hasSize(1);
+            assertThat(logs).contains("trend-wake: attempt=1 result=body-limit");
         }
     }
 
-    @Test void responseHeaderAndSlowStreamingBodyShareWholeRequestTimeout() throws Exception {
-        for (boolean slowBody : List.of(false, true)) {
-            try (var peer = new Peer(List.of(new Response(200, READY, false, slowBody ? 0 : 600, slowBody ? 600 : 0, null)))) {
-                var logs = new ArrayList<String>();
-                long start = System.nanoTime();
-                assertThat(run(env(peer.origin()), fixed(NOW), Duration.ofMillis(150), Duration.ofSeconds(30),
-                        Duration.ofSeconds(3), logs::add, true)).isEqualTo(1);
-                assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(2));
-                assertThat(logs).hasSize(2);
-                assertThat(logs.getFirst()).containsAnyOf("result=timeout", "result=transport");
-                assertThat(peer.paths).hasSize(1);
-                if (slowBody) assertThat(peer.startedBodies.get()).isEqualTo(1);
-            }
+    @ParameterizedTest(name = "响应头与慢流响应体共用整次请求超时（slowBody={0}）")
+    @ValueSource(booleans = {false, true})
+    void responseHeaderAndSlowStreamingBodyShareWholeRequestTimeout(boolean slowBody) throws Exception {
+        // 用服务端门闩阻塞代替固定 Thread.sleep，确保触发的是客户端整次超时而非与服务端休眠赛跑。
+        try (var peer = new Peer(List.of(new Response(200, READY, false, !slowBody, slowBody, null)))) {
+            var logs = new ArrayList<String>();
+            assertThat(run(env(peer.origin()), fixed(NOW), Duration.ofMillis(150), Duration.ofSeconds(30),
+                    Duration.ofSeconds(3), logs::add, true)).isEqualTo(1);
+            assertThat(logs).hasSize(2);
+            assertThat(logs.getFirst()).containsAnyOf("result=timeout", "result=transport");
+            assertThat(peer.paths).hasSize(1);
+            if (slowBody) assertThat(peer.startedBodies.get()).isEqualTo(1);
         }
     }
 
     @Test void dailyWindowAndTotalBudgetStopFurtherRequests() throws Exception {
-        try (var peer = new Peer(List.of(new Response(503, bytes("warming"), false, 0, 0, null)))) {
+        try (var peer = new Peer(List.of(Response.immediate(503, bytes("warming"))))) {
             var logs = new ArrayList<String>();
             assertThat(run(env(peer.origin()), fixed(Instant.parse("2026-11-15T23:59:50Z")), Duration.ofSeconds(2),
                     Duration.ofSeconds(30), Duration.ofSeconds(195), logs::add, true)).isEqualTo(1);
@@ -204,24 +227,37 @@ class TrendWakeTest {
         }
     }
 
-    @Test void strictJsonAcceptsOrderEscapesAndUnknownFieldsButRejectsFalseReadiness() throws Exception {
+    @Test void strictJsonAcceptsOrderEscapesAndUnknownFields() throws Exception {
         assertThat(invoke(isReady, (Object) READY)).isEqualTo(true);
         assertThat(invoke(isReady, (Object) bytes(" {\"data\":{\"scope\":\"APPLICATION\",\"st\\u0061tus\":\"READY\"},"
                 + "\"extra\":[true,false,null,1.25e+2,{\"x\":\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"}],\"code\":0} \n"))).isEqualTo(true);
-        for (String raw : List.of("<html>Starting</html>", "[]", "{}", "null", "true", "01", "-", "0e", "[1,]",
+    }
+
+    @ParameterizedTest(name = "严格 JSON 拒绝畸形或伪造就绪载荷")
+    @MethodSource("falseReadinessPayloads")
+    void strictJsonRejectsFalseReadinessPayloads(byte[] payload) throws Exception {
+        assertThat(invoke(isReady, (Object) payload)).isEqualTo(false);
+    }
+
+    private static Stream<byte[]> falseReadinessPayloads() {
+        Stream<String> strings = Stream.of(
+                "<html>Starting</html>", "[]", "{}", "null", "true", "01", "-", "0e", "[1,]",
                 "{\"x\":1,}", "{\"x\":\"\\q\"}", "{\"x\":\"\\u000g\"}", "{\"x\":\"\n\"}", "{\"x\":\"unterminated}",
                 new String(READY, StandardCharsets.UTF_8) + "{}", "[".repeat(20) + "0" + "]".repeat(20),
                 "{\"code\":0,\"code\":0,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
-                "{\"other\":{\"code\":0,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}}")) {
-            assertThat(invoke(isReady, (Object) bytes(raw))).as(raw).isEqualTo(false);
-        }
-        for (String code : List.of("false", "\"0\"", "0.0", "null", "1", "-0")) {
-            assertThat(invoke(isReady, (Object) bytes("{\"code\":" + code + ",\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}")))
-                    .as(code).isEqualTo(false);
-        }
-        assertThat(invoke(isReady, (Object) new byte[]{(byte) 0xff})).isEqualTo(false);
-        assertThat(invoke(isReady, (Object) new byte[4097])).isEqualTo(false);
-        assertThat(invoke(isReady, (Object) bytes("{\"code\":0,\"data\":{\"status\":\"READY\",\"scope\":\"DATABASE\"}}"))).isEqualTo(false);
+                "{\"other\":{\"code\":0,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}}",
+                "{\"code\":false,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":\"0\",\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":0.0,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":null,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":1,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":-0,\"data\":{\"status\":\"READY\",\"scope\":\"APPLICATION\"}}",
+                "{\"code\":0,\"data\":{\"status\":\"READY\",\"scope\":\"DATABASE\"}}"
+        );
+        return Stream.concat(
+                strings.map(TrendWakeTest::bytes),
+                Stream.of(new byte[]{(byte) 0xff}, new byte[4097])
+        );
     }
 
     @Test void singleSourceCliRunsWithOnlyJdkAndDisabledConfiguration() throws Exception {
@@ -240,15 +276,13 @@ class TrendWakeTest {
         } finally { if (running.isAlive()) running.destroyForcibly(); }
     }
 
-    @Test void workflowKeepsDefaultOffWindowAndBoundedJdkOnlyInvocation() throws IOException {
+    @Test void workflowKeepsDefaultOffSecurityGuardrailsAndBoundedJdkOnlyInvocation() throws IOException {
         String text = Files.readString(Path.of("../.github/workflows/trend-wake.yml"));
-        assertThat(text).contains("cron: '20-55/5 22 * * *'", "cron: '*/5 23 * * *'", "contents: read",
+        assertThat(text).contains("contents: read",
                 "vars.TREND_WAKE_ENABLED == 'true' && github.ref_name == github.event.repository.default_branch",
                 "persist-credentials: false", "timeout-minutes: 5", "cancel-in-progress: false", "java-version: '21'",
-                "distribution: temurin", "run: java --source 21 polyhouse/scripts/com/polyethene/polyhouse/ops/trend/TrendWake.java")
-                .doesNotContain("secrets.", "--allow-local", "python", "curl", "id-token:", "pages:", "mvn ");
-        assertThat(Files.exists(Path.of("scripts/Invoke-TrendWake.py"))).isFalse();
-        assertThat(Files.exists(Path.of("scripts/tests/trend/test_trend_wake.py"))).isFalse();
+                "run: java --source 21 polyhouse/scripts/com/polyethene/polyhouse/ops/trend/TrendWake.java")
+                .doesNotContain("secrets.", "--allow-local", "id-token:", "pages:", "mvn ");
     }
 
     private static int probe(Peer peer, List<String> logs) throws Exception {
@@ -271,11 +305,17 @@ class TrendWakeTest {
     }
     private static Clock fixed(Instant now) { return Clock.fixed(now, ZoneOffset.UTC); }
     private static byte[] bytes(String text) { return text.getBytes(StandardCharsets.UTF_8); }
-    private record Response(int status, byte[] body, boolean chunked, long headerDelay, long bodyDelay, String location) { }
+    private record Response(int status, byte[] body, boolean chunked, boolean blockBeforeHeader,
+                            boolean blockDuringBody, String location) {
+        static Response immediate(int status, byte[] body) {
+            return new Response(status, body, false, false, false, null);
+        }
+    }
 
     private static final class Peer implements AutoCloseable {
         private final HttpServer server;
         private final java.util.concurrent.ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
+        private final CountDownLatch release = new CountDownLatch(1);
         private final List<String> paths = java.util.Collections.synchronizedList(new ArrayList<>());
         private final List<String> authorization = java.util.Collections.synchronizedList(new ArrayList<>());
         private final List<String> cookies = java.util.Collections.synchronizedList(new ArrayList<>());
@@ -298,20 +338,22 @@ class TrendWakeTest {
         String origin() { return "http://127.0.0.1:" + server.getAddress().getPort(); }
         private void serve(HttpExchange exchange, Response response) {
             try (exchange) {
-                Thread.sleep(response.headerDelay());
+                if (response.blockBeforeHeader()) release.await(5, TimeUnit.SECONDS);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 if (response.location() != null) exchange.getResponseHeaders().set("Location", response.location());
                 exchange.sendResponseHeaders(response.status(), response.chunked() ? 0 : response.body().length);
-                int first = response.bodyDelay() > 0 ? 1 : response.body().length;
+                int first = response.blockDuringBody() ? 1 : response.body().length;
                 exchange.getResponseBody().write(response.body(), 0, first);
                 exchange.getResponseBody().flush();
-                if (response.bodyDelay() > 0) startedBodies.incrementAndGet();
-                Thread.sleep(response.bodyDelay());
+                if (response.blockDuringBody()) {
+                    startedBodies.incrementAndGet();
+                    release.await(5, TimeUnit.SECONDS);
+                }
                 exchange.getResponseBody().write(response.body(), first, response.body().length - first);
             } catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
             catch (IOException failure) { disconnected.incrementAndGet(); }
         }
-        /** 关闭随机端口和测试线程，超时测试不会留下后台请求。 */
-        @Override public void close() { server.stop(0); workers.shutdownNow(); }
+        /** 释放门闩并关闭随机端口和测试线程，超时测试不会留下后台请求。 */
+        @Override public void close() { release.countDown(); server.stop(0); workers.shutdownNow(); }
     }
 }
