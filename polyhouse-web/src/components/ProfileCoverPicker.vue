@@ -61,8 +61,27 @@ let active = true
 let localSequence = 0
 let channel: BroadcastChannel | undefined
 let imageUrls: { desktop: string; mobile: string } | null = null
+type EligibilityTuple = readonly [
+  string | undefined,
+  string | undefined,
+  number | undefined,
+  number | undefined,
+]
+let lastEligibility: EligibilityTuple | undefined
+let inFlightLoad:
+  | { token: string; selectCurrent: boolean; promise: Promise<void> }
+  | undefined
 const accountId = props.accountId
 const accountToken = user.token
+
+function sameEligibility(left: EligibilityTuple, right: EligibilityTuple): boolean {
+  return (
+    left[0] === right[0] &&
+    left[1] === right[1] &&
+    left[2] === right[2] &&
+    left[3] === right[3]
+  )
+}
 
 function isCurrentAccount() {
   return (
@@ -124,6 +143,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   active = false
   sequence++
+  inFlightLoad = undefined
   channel?.close()
   clearImageUrls()
   window.removeEventListener('focus', refreshOnFocus)
@@ -179,25 +199,61 @@ function accept(data: CoverCatalog) {
   emit('applied', data.equipped)
   ready.value = true
 }
-async function load(selectCurrent = false) {
+async function load(selectCurrent = false, force = false): Promise<void> {
   if (busy.value) return
-  const seq = ++sequence,
-    token = user.token
+  const token = user.token
+  // 同一会话下若已有进行中的目录查询（如初始化、回焦与打开弹窗重叠），复用在途请求以减少多余行锁查询。
+  if (!force && inFlightLoad && inFlightLoad.token === token) {
+    if (selectCurrent) inFlightLoad.selectCurrent = true
+    return inFlightLoad.promise
+  }
+  const seq = ++sequence
   ready.value = false
   confirm.value = false
   error.value = ''
-  try {
-    const data = await readCovers(token)
-    if (!active || seq !== sequence || token !== user.token) return
-    accept(data)
-    if (selectCurrent) picked.value = data.equipped
-  } catch {
-    if (active && seq === sequence) error.value = '卡面暂时无法读取，请重试'
-  }
+  const tracker = { token, selectCurrent, promise: Promise.resolve() }
+  const promise = (async () => {
+    try {
+      const data = await readCovers(token)
+      if (!active || seq !== sequence || token !== user.token) return
+      accept(data)
+      if (tracker.selectCurrent) picked.value = data.equipped
+    } catch {
+      if (active && seq === sequence) error.value = '卡面暂时无法读取，请重试'
+    } finally {
+      if (inFlightLoad === tracker) inFlightLoad = undefined
+    }
+  })()
+  tracker.promise = promise
+  inFlightLoad = tracker
+  return promise
 }
 watch(
-  () => [user.user?.role, growth.summary?.rewardDate, growth.summary?.level, user.user?.level],
-  () => void load(),
+  [
+    () => user.user?.role,
+    () => growth.summary?.rewardDate,
+    () => growth.summary?.level,
+    () => user.user?.level,
+  ],
+  (next) => {
+    if (!lastEligibility) {
+      lastEligibility = next
+      void load()
+      return
+    }
+    // 成长商店刷新或失败期间会短暂清空 summary；若角色与用户等级未变，不把临时空值当作资格变更重查目录。
+    if (
+      next[1] === undefined &&
+      next[2] === undefined &&
+      next[0] === lastEligibility[0] &&
+      next[3] === lastEligibility[3]
+    ) {
+      return
+    }
+    if (sameEligibility(next, lastEligibility)) return
+    lastEligibility = next
+    void load()
+  },
   { immediate: true },
 )
 function open() {
@@ -228,6 +284,7 @@ async function submit() {
   const token = user.token
   busy.value = true
   sequence++
+  inFlightLoad = undefined
   let reload = false
   try {
     const result = await changeCover(token, choice.key, purchase ? data.quoteVersion : undefined)
@@ -243,7 +300,7 @@ async function submit() {
   } finally {
     busy.value = false
     if (reload) {
-      await load()
+      await load(false, true)
       if (active && user.token === token) {
         if (ready.value && catalog.value) {
           user.applyCoverBalance(token, catalog.value.userId, catalog.value.coins)
@@ -296,7 +353,7 @@ async function submit() {
         </button>
       </div>
       <p v-if="error" role="status">
-        {{ error }} <ElButton size="small" :disabled="busy" @click="load()">重试</ElButton>
+        {{ error }} <ElButton size="small" :disabled="busy" @click="load(false, true)">重试</ElButton>
       </p>
       <template v-if="catalog && item">
         <p v-if="item.reason === 'levelRequired'">
