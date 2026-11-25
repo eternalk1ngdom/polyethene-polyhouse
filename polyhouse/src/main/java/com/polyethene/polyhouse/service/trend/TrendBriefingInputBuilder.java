@@ -44,24 +44,18 @@ public final class TrendBriefingInputBuilder {
      */
     public static BriefingInput build(LocalDate anchorDate, List<TrendReportVO> reports) {
         var stats = TrendWindowAggregator.aggregate(anchorDate, reports);
-        var orderedReports = orderedReportsInWindow(anchorDate, stats.windowStart(), reports);
+        var orderedReports = TrendWindowIdentity.orderedReportsInWindow(
+                anchorDate, stats.windowStart(), TrendWindowAggregator.WINDOW_DAYS, reports);
 
-        // 与 2A 保持完全一致的稳定 ID 归并规则，避免改名或单日缺元数据导致同一仓库在候选池重复出现。
-        Map<String, Set<String>> idsByName = new HashMap<>();
-        for (var report : orderedReports) {
-            for (var item : report.items()) {
-                if (validRepositoryId(item.repositoryId())) {
-                    idsByName.computeIfAbsent(lowerName(item.fullName()), k -> new HashSet<>()).add(item.repositoryId());
-                }
-            }
-        }
+        // 与 2A 共用同一套稳定 ID 归并规则，避免改名或单日缺元数据导致榜单统计与简报样本归属分叉。
+        Map<String, Set<String>> idsByName = TrendWindowIdentity.indexRepositoryIds(orderedReports);
 
         Map<String, CandidateAccumulator> repos = new LinkedHashMap<>();
         for (var report : orderedReports) {
             LocalDate day = report.periodKey();
             for (var item : report.items()) {
-                String resolvedId = resolveStableId(item, idsByName);
-                String key = resolvedId != null ? "id:" + resolvedId : "name:" + lowerName(item.fullName());
+                String resolvedId = TrendWindowIdentity.resolveStableId(item, idsByName);
+                String key = TrendWindowIdentity.repoKey(item, resolvedId);
                 var acc = repos.computeIfAbsent(key, k -> new CandidateAccumulator(resolvedId, item));
                 acc.record(day, anchorDate, item);
             }
@@ -83,7 +77,7 @@ public final class TrendBriefingInputBuilder {
         List<CandidateRepo> uniqueByName = new ArrayList<>();
         Set<String> seenLowerNames = new HashSet<>();
         for (var candidate : sortedAll) {
-            if (seenLowerNames.add(lowerName(candidate.fullName()))) {
+            if (seenLowerNames.add(TrendWindowIdentity.lowerName(candidate.fullName()))) {
                 uniqueByName.add(candidate);
             }
         }
@@ -110,7 +104,7 @@ public final class TrendBriefingInputBuilder {
         Map<String, String> allowedByLower = new LinkedHashMap<>();
         Map<String, CandidateRepo> candidateByLower = new LinkedHashMap<>();
         for (var candidate : selected) {
-            String key = lowerName(candidate.fullName());
+            String key = TrendWindowIdentity.lowerName(candidate.fullName());
             allowedByLower.put(key, candidate.fullName());
             candidateByLower.put(key, candidate);
         }
@@ -129,24 +123,6 @@ public final class TrendBriefingInputBuilder {
         String fingerprint = sha256Hex(FINGERPRINT_VERSION + "\n" + materialJson);
         return new BriefingInput(stats, selected, allowedByLower, candidateByLower, materialJson,
                 fingerprint, ineligibleReason == null, ineligibleReason);
-    }
-
-    private static List<TrendReportVO> orderedReportsInWindow(LocalDate anchorDate, LocalDate windowStart, List<TrendReportVO> reports) {
-        Map<LocalDate, TrendReportVO> byDate = new HashMap<>();
-        for (var report : reports) {
-            if (report == null || report.periodKey() == null) continue;
-            if (report.periodKey().isBefore(windowStart) || report.periodKey().isAfter(anchorDate)) continue;
-            var existing = byDate.get(report.periodKey());
-            if (existing == null || report.capturedAt().isAfter(existing.capturedAt())) {
-                byDate.put(report.periodKey(), report);
-            }
-        }
-        List<TrendReportVO> ordered = new ArrayList<>();
-        for (int offset = 0; offset < TrendWindowAggregator.WINDOW_DAYS; offset++) {
-            var report = byDate.get(anchorDate.minusDays(offset));
-            if (report != null) ordered.add(report);
-        }
-        return ordered;
     }
 
     private static Map<String, Object> buildBaseMaterial(TrendWindowStatsVO stats) {
@@ -238,25 +214,6 @@ public final class TrendBriefingInputBuilder {
         return clean.length() <= maxChars ? clean : clean.substring(0, maxChars);
     }
 
-    private static boolean validRepositoryId(String value) {
-        return value != null && value.matches("[1-9][0-9]{0,18}");
-    }
-
-    private static String resolveStableId(TrendProjectVO item, Map<String, Set<String>> idsByName) {
-        if (validRepositoryId(item.repositoryId())) return item.repositoryId();
-        var candidates = idsByName.get(lowerName(item.fullName()));
-        return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
-    }
-
-    private static String validCategory(TrendProjectVO item) {
-        if (item.insight() == null || item.insight().category() == null) return null;
-        return TrendInsightCodec.CATEGORIES.contains(item.insight().category()) ? item.insight().category() : null;
-    }
-
-    private static String lowerName(String fullName) {
-        return fullName.toLowerCase(Locale.ROOT);
-    }
-
     private static final class CandidateAccumulator {
         private final String repositoryId;
         private final String fullName;
@@ -284,7 +241,7 @@ public final class TrendBriefingInputBuilder {
             if (item.starsAdded() != null && item.starsAdded() >= 0 && latestStarsAdded == null) {
                 latestStarsAdded = item.starsAdded();
             }
-            String validCat = validCategory(item);
+            String validCat = TrendWindowIdentity.validCategory(item);
             if (category == null && validCat != null) {
                 category = validCat;
                 definition = item.insight().definition();

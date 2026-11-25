@@ -34,15 +34,7 @@ public final class TrendWindowAggregator {
         LocalDate windowStart = anchorDate.minusDays(WINDOW_DAYS - 1);
 
         // 防御性按日期去重（若同日有多条记录，仅保留采集时间最新的一份）并限定在 7 日闭区间内。
-        Map<LocalDate, TrendReportVO> byDate = new HashMap<>();
-        for (var report : reports) {
-            if (report == null || report.periodKey() == null) continue;
-            if (report.periodKey().isBefore(windowStart) || report.periodKey().isAfter(anchorDate)) continue;
-            var existing = byDate.get(report.periodKey());
-            if (existing == null || report.capturedAt().isAfter(existing.capturedAt())) {
-                byDate.put(report.periodKey(), report);
-            }
-        }
+        Map<LocalDate, TrendReportVO> byDate = TrendWindowIdentity.latestByDateInWindow(anchorDate, windowStart, reports);
         var anchorReport = byDate.get(anchorDate);
         if (anchorReport == null) {
             throw new IllegalArgumentException("锚点日期缺少已发布日报: " + anchorDate);
@@ -62,15 +54,8 @@ public final class TrendWindowAggregator {
             }
         }
 
-        // 先在窗口内建立「仓库名 -> 稳定仓库 ID」映射，仅当名称无歧义指向唯一 ID 时，合并缺元数据的退化条目。
-        Map<String, Set<String>> idsByName = new HashMap<>();
-        for (var report : orderedReports) {
-            for (var item : report.items()) {
-                if (validRepositoryId(item.repositoryId())) {
-                    idsByName.computeIfAbsent(lowerName(item.fullName()), k -> new HashSet<>()).add(item.repositoryId());
-                }
-            }
-        }
+        // 与 2B 共用「仓库名 -> 稳定仓库 ID」索引规则，仅在无歧义指向唯一 ID 时合并缺元数据的退化条目。
+        Map<String, Set<String>> idsByName = TrendWindowIdentity.indexRepositoryIds(orderedReports);
 
         // 1. 锚点当日分母与分类计数
         int anchorClassified = 0;
@@ -78,7 +63,7 @@ public final class TrendWindowAggregator {
         int anchorMissingInsight = 0;
         Map<String, Integer> anchorCategoryCounts = new HashMap<>();
         for (var item : anchorReport.items()) {
-            String category = validCategory(item);
+            String category = TrendWindowIdentity.validCategory(item);
             if (category != null) {
                 anchorClassified++;
                 anchorCategoryCounts.merge(category, 1, Integer::sum);
@@ -99,8 +84,8 @@ public final class TrendWindowAggregator {
             LocalDate day = report.periodKey();
             for (var item : report.items()) {
                 totalAppearances++;
-                String resolvedId = resolveStableId(item, idsByName);
-                String key = resolvedId != null ? "id:" + resolvedId : "name:" + lowerName(item.fullName());
+                String resolvedId = TrendWindowIdentity.resolveStableId(item, idsByName);
+                String key = TrendWindowIdentity.repoKey(item, resolvedId);
                 var acc = repos.computeIfAbsent(key, k -> new RepoAccumulator(resolvedId, item));
                 acc.record(day, anchorDate, item);
             }
@@ -113,9 +98,9 @@ public final class TrendWindowAggregator {
             Map<String, String> previousRepoCategory = new LinkedHashMap<>();
             for (int i = 1; i < orderedReports.size(); i++) {
                 for (var item : orderedReports.get(i).items()) {
-                    String resolvedId = resolveStableId(item, idsByName);
-                    String key = resolvedId != null ? "id:" + resolvedId : "name:" + lowerName(item.fullName());
-                    String category = validCategory(item);
+                    String resolvedId = TrendWindowIdentity.resolveStableId(item, idsByName);
+                    String key = TrendWindowIdentity.repoKey(item, resolvedId);
+                    String category = TrendWindowIdentity.validCategory(item);
                     if (category != null) {
                         previousRepoCategory.putIfAbsent(key, category);
                     }
@@ -225,25 +210,6 @@ public final class TrendWindowAggregator {
                 coveredDates, missingDates, sampleStatus, anchorSummary, windowSummary, categories, recurring);
     }
 
-    private static boolean validRepositoryId(String value) {
-        return value != null && value.matches("[1-9][0-9]{0,18}");
-    }
-
-    private static String resolveStableId(TrendProjectVO item, Map<String, Set<String>> idsByName) {
-        if (validRepositoryId(item.repositoryId())) return item.repositoryId();
-        var candidates = idsByName.get(lowerName(item.fullName()));
-        return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
-    }
-
-    private static String validCategory(TrendProjectVO item) {
-        if (item.insight() == null || item.insight().category() == null) return null;
-        return TrendInsightCodec.CATEGORIES.contains(item.insight().category()) ? item.insight().category() : null;
-    }
-
-    private static String lowerName(String fullName) {
-        return fullName.toLowerCase(Locale.ROOT);
-    }
-
     private static Instant earlier(Instant current, Instant candidate) {
         if (candidate == null) return current;
         return current == null || candidate.isBefore(current) ? candidate : current;
@@ -344,7 +310,7 @@ public final class TrendWindowAggregator {
                 starsHistory.add(item.starsAdded());
                 if (latestStarsAdded == null) latestStarsAdded = item.starsAdded();
             }
-            String validCat = validCategory(item);
+            String validCat = TrendWindowIdentity.validCategory(item);
             if (category == null && validCat != null) {
                 category = validCat;
                 definition = item.insight().definition();
