@@ -17,9 +17,8 @@ import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.service.AccountProvisioningService;
 import com.polyethene.polyhouse.service.AuthService;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.PasswordUtils;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -54,7 +53,7 @@ import static org.mockito.Mockito.*;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AccountManagementIntegrationTest {
     private static final String PASSWORD = "P3-isolated-fixture!";
-    private static Sandbox sandbox;
+    private static IsolatedMysqlSandbox sandbox;
     @Autowired private AuthService auth;
     @Autowired private AccountManagementService management;
     @Autowired private JdbcTemplate jdbc;
@@ -68,10 +67,8 @@ class AccountManagementIntegrationTest {
     private String ownerToken, adminToken, userToken, insiderToken;
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p) throws Exception {
-        sandbox = new Sandbox();
-        String key = Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded());
-        p.add("spring.datasource.url", () -> sandbox.url); p.add("polyhouse.jwt.secret", () -> key);
-        p.add("spring.datasource.hikari.maximum-pool-size", () -> 4); p.add("spring.datasource.hikari.minimum-idle", () -> 1);
+        sandbox = IsolatedMysqlSandbox.create("management");
+        sandbox.registerDatasourceAndEphemeralJwt(p);
     }
     @BeforeEach void fixtures() {
         owner = create("p3_owner", UserRoleEnum.OWNER); admin = create("p3_admin", UserRoleEnum.ADMIN);
@@ -172,9 +169,13 @@ class AccountManagementIntegrationTest {
     }
     @Test void concurrentReplayDeliversOnceAndConfirmationIsActorScoped() throws Exception {
         var req = request(user);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            var a = pool.submit(() -> act(user, req, AccountManagementAction.PASSWORD_RESET, ownerToken));
-            var b = pool.submit(() -> act(user, req, AccountManagementAction.PASSWORD_RESET, ownerToken));
+            var a = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return act(user, req, AccountManagementAction.PASSWORD_RESET, ownerToken); });
+            var b = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return act(user, req, AccountManagementAction.PASSWORD_RESET, ownerToken); });
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
             var first = a.get(20, TimeUnit.SECONDS); var second = b.get(20, TimeUnit.SECONDS);
             assertThat(first.firstDelivery() ^ second.firstDelivery()).isTrue();
             assertThat(first.firstDelivery() ? second.temporaryPassword() : first.temporaryPassword()).isNull();
@@ -188,18 +189,26 @@ class AccountManagementIntegrationTest {
     }
     @Test void distinctConcurrentActionsOnlyOneCanUseTheObservedVersion() throws Exception {
         var a = request(user); var b = request(user);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            var one = pool.submit(() -> outcome(user, a, AccountManagementAction.BAN, ownerToken));
-            var two = pool.submit(() -> outcome(user, b, AccountManagementAction.PASSWORD_RESET, ownerToken));
+            var one = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return outcome(user, a, AccountManagementAction.BAN, ownerToken); });
+            var two = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return outcome(user, b, AccountManagementAction.PASSWORD_RESET, ownerToken); });
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
             assertThat(List.of(one.get(20, TimeUnit.SECONDS), two.get(20, TimeUnit.SECONDS))).containsExactlyInAnyOrder("success", "CONFLICT");
         }
         assertThat(version(user)).isEqualTo(1); assertThat(count()).isEqualTo(1);
     }
     @Test void ownerBanningAdminAndAdminBanningUserCannotDeadlock() throws Exception {
         var adminRequest = request(admin); var userRequest = request(user);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            var a = pool.submit(() -> outcome(admin, adminRequest, AccountManagementAction.BAN, ownerToken));
-            var b = pool.submit(() -> outcome(user, userRequest, AccountManagementAction.BAN, adminToken));
+            var a = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return outcome(admin, adminRequest, AccountManagementAction.BAN, ownerToken); });
+            var b = pool.submit(() -> { ready.countDown(); start.await(5, TimeUnit.SECONDS); return outcome(user, userRequest, AccountManagementAction.BAN, adminToken); });
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
             assertThat(a.get(20, TimeUnit.SECONDS)).isEqualTo("success");
             assertThat(b.get(20, TimeUnit.SECONDS)).isIn("success", "UNAUTHORIZED");
         }
@@ -230,7 +239,7 @@ class AccountManagementIntegrationTest {
     }
     @Test void freshSchemaCannotBeReplayedOverManagedAccount() throws Exception {
         act(user, request(user), AccountManagementAction.BAN, ownerToken);
-        try (Connection connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
+        try (Connection connection = sandbox.openConnection()) {
             assertThatThrownBy(() -> ScriptUtils.executeSqlScript(connection, new EncodedResource(
                     new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8)))
                     .isInstanceOf(org.springframework.jdbc.datasource.init.ScriptStatementFailedException.class);
@@ -289,44 +298,4 @@ class AccountManagementIntegrationTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
     private static void assertCode(Runnable action, ErrorCode expected) { assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class, failure -> assertThat(failure.getErrorCode()).isEqualTo(expected)); }
-    /** 只允许本机 MySQL，库名由内部随机十六进制构成；不会重放开发库迁移；OWNER 夹具只位于本测试随机库。 */
-    private static final class Sandbox implements AutoCloseable {
-        private final String name = "polyhouse_management_" + UUID.randomUUID().toString().replace("-", "");
-        private final String user = System.getenv("DB_USERNAME");
-        private final String password = System.getenv("DB_PASSWORD");
-        private final String direct;
-        private final String url;
-        private Sandbox() throws Exception {
-            String configured = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/polyhouse_db");
-            URI parsed = URI.create(configured.substring(5));
-            if (!List.of("localhost", "127.0.0.1").contains(parsed.getHost()) || !"/polyhouse_db".equals(parsed.getPath())) {
-                throw new IllegalArgumentException("Only local development server is allowed");
-            }
-            String redisHost = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
-            if (!List.of("localhost", "127.0.0.1", "::1").contains(redisHost)) throw new IllegalArgumentException("Only local Redis is allowed");
-            direct = "jdbc:mysql://" + parsed.getHost() + ":" + (parsed.getPort() < 0 ? 3306 : parsed.getPort())
-                    + "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai";
-            url = direct.replace("/?", "/" + name + "?");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                // JDBC 不支持绑定数据库标识符；名字不是用户输入，且删除时再次验证固定格式。
-                command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
-                connection.setCatalog(name);
-                try {
-                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
-                } catch (Exception error) {
-                    try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
-                    throw error;
-                }
-            }
-        }
-        /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
-        @Override
-        public void close() throws Exception {
-            if (!name.matches("polyhouse_management_[0-9a-f]{32}")) throw new IllegalStateException("Invalid sandbox name");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                command.execute("DROP DATABASE IF EXISTS `" + name + "`");
-            }
-        }
-    }
 }

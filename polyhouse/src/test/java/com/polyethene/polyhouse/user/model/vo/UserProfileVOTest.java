@@ -8,12 +8,16 @@ import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.common.result.Result;
 import com.polyethene.polyhouse.model.entity.User;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 检查资料输出的字段白名单和大整数精度，防止实体扩展后意外增加响应字段。 */
 class UserProfileVOTest {
@@ -53,17 +57,28 @@ class UserProfileVOTest {
         assertThat(UserProfileVO.from(user).avatar()).isNull();
     }
 
-    @Test
-    void shouldRejectIncompleteIdentityRatherThanExposeAmbiguousProfile() {
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(null));
-        User user = persistedUser();
-        user.setId(null);
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setId(0L);
-        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setId(1L);
-        user.setRole(null);
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
+    @ParameterizedTest(name = "拒绝残缺或非法用户实体：{0}")
+    @MethodSource("invalidUsers")
+    void shouldRejectIncompleteIdentityOrInvalidGrowthData(String label, Consumer<User> mutator,
+                                                           Class<? extends RuntimeException> expectedType) {
+        User candidate = mutator == null ? null : persistedUser();
+        if (mutator != null) mutator.accept(candidate);
+        assertThatThrownBy(() -> UserProfileVO.from(candidate)).isInstanceOf(expectedType);
+    }
+
+    private static Stream<Arguments> invalidUsers() {
+        return Stream.of(
+                Arguments.of("null 用户实体", null, NullPointerException.class),
+                Arguments.of("id 为 null", (Consumer<User>) u -> u.setId(null), NullPointerException.class),
+                Arguments.of("id 为 0", (Consumer<User>) u -> u.setId(0L), IllegalArgumentException.class),
+                Arguments.of("role 为 null", (Consumer<User>) u -> u.setRole(null), NullPointerException.class),
+                Arguments.of("experience 为 null", (Consumer<User>) u -> u.setExperience(null), NullPointerException.class),
+                Arguments.of("experience 为负数", (Consumer<User>) u -> u.setExperience(-1L), IllegalArgumentException.class),
+                Arguments.of("level 为 null", (Consumer<User>) u -> u.setLevel(null), NullPointerException.class),
+                Arguments.of("level 为 0", (Consumer<User>) u -> u.setLevel(0), IllegalArgumentException.class),
+                Arguments.of("coins 为 null", (Consumer<User>) u -> u.setCoins(null), NullPointerException.class),
+                Arguments.of("coins 为负数", (Consumer<User>) u -> u.setCoins(-1L), IllegalArgumentException.class)
+        );
     }
 
     private User persistedUser() {
@@ -77,24 +92,5 @@ class UserProfileVOTest {
         user.setLevel(1);
         user.setCoins(Long.MAX_VALUE);
         return user;
-    }
-
-    @Test
-    void shouldRejectMissingOrInvalidGrowthDataInsteadOfInventingBalances() {
-        User user = persistedUser();
-        user.setExperience(null);
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setExperience(-1L);
-        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setExperience(0L);
-        user.setLevel(null);
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setLevel(0);
-        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setLevel(1);
-        user.setCoins(null);
-        assertThatNullPointerException().isThrownBy(() -> UserProfileVO.from(user));
-        user.setCoins(-1L);
-        assertThatIllegalArgumentException().isThrownBy(() -> UserProfileVO.from(user));
     }
 }

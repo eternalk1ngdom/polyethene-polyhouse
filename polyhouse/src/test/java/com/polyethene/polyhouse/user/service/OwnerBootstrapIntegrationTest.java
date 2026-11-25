@@ -12,6 +12,8 @@ import com.polyethene.polyhouse.mapper.OwnerBootstrapMapper;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.ops.OwnerBootstrapCommand;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -44,11 +49,13 @@ import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 
-/** 真实提交、跨连接竞争和独立 CLI 进程验收；仅用于未初始化真实屋主的本机专用开发库。 */
+/** 真实提交、跨连接竞争和独立 CLI 进程验收；全程运行在随机隔离库中，绝不触碰本机正式屋主数据。 */
 @EnabledIfSystemProperty(named = "polyhouse.auth.integration", matches = "true")
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Import(OwnerBootstrapService.class)
 class OwnerBootstrapIntegrationTest {
+    private static IsolatedMysqlSandbox sandbox;
     @Autowired private OwnerBootstrapService owners;
     @Autowired private OwnerBootstrapMapper mapper;
     @Autowired private AuthService auth;
@@ -58,6 +65,17 @@ class OwnerBootstrapIntegrationTest {
     @Autowired private PlatformTransactionManager transactions;
     @SpyBean private AuthRedisStore sessions;
     private final List<Fixture> owned = new ArrayList<>();
+
+    @DynamicPropertySource
+    static void isolatedDatasource(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.create("owner_boot");
+        sandbox.registerDatasourceAndEphemeralJwt(properties);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
+    }
 
     @BeforeEach
     void requireUnclaimedDedicatedLocalDatabase() {
@@ -205,6 +223,7 @@ class OwnerBootstrapIntegrationTest {
                     assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
                     long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
                     while ((liveLockWaitCount(firstConnection.get()) == 0 || liveLockWaitCount(secondConnection.get()) == 0)
+                            && !results.get(0).isDone() && !results.get(1).isDone()
                             && System.nanoTime() < deadline) Thread.sleep(20);
                     assertThat(liveLockWaitCount(firstConnection.get())).as("第一个连接实际等待初始化槽锁").isPositive();
                     assertThat(liveLockWaitCount(secondConnection.get())).as("第二个连接实际等待初始化槽锁").isPositive();
@@ -259,7 +278,9 @@ class OwnerBootstrapIntegrationTest {
                 try {
                     assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
                     long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-                    while (liveLockWaitCount(readerConnection.get()) == 0 && System.nanoTime() < deadline) Thread.sleep(20);
+                    while (liveLockWaitCount(readerConnection.get()) == 0
+                            && !result.get(0).isDone()
+                            && System.nanoTime() < deadline) Thread.sleep(20);
                     assertThat(liveLockWaitCount(readerConnection.get())).as("旧会话已通过 Redis 初检并实际等待用户行锁").isPositive();
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
@@ -297,7 +318,10 @@ class OwnerBootstrapIntegrationTest {
                 "-cp", System.getProperty("surefire.test.class.path", System.getProperty("java.class.path")),
                 OwnerBootstrapCommand.class.getName(), "--user-id=" + target.id(), "--username=" + username));
         if (apply) command.add("--apply");
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+        // 强制独立 CLI 子进程连接本测试随机隔离库，绝不触碰宿主机 polyhouse_db 正式屋主库。
+        builder.environment().put("DB_URL", sandbox.url());
+        Process process = builder.start();
         try {
             assertThat(process.waitFor(40, TimeUnit.SECONDS)).as("独立命令必须退出，不能留下 Web 或 Redis 线程").isTrue();
             String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);

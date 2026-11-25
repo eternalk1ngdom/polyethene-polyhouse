@@ -12,9 +12,8 @@ import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.service.AccountProvisioningService;
 import com.polyethene.polyhouse.service.AuthService;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.PasswordUtils;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -50,7 +49,7 @@ import static org.mockito.Mockito.*;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AccountProvisioningIntegrationTest {
     private static final String OWNER_PASSWORD = "P2-isolated-owner-fixture!";
-    private static Sandbox sandbox;
+    private static IsolatedMysqlSandbox sandbox;
     @Autowired private AuthService auth;
     @Autowired private AccountProvisioningService provisioning;
     @Autowired private JdbcTemplate jdbc;
@@ -63,12 +62,8 @@ class AccountProvisioningIntegrationTest {
     private String ownerToken;
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry properties) throws Exception {
-        sandbox = new Sandbox();
-        String key = Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded());
-        properties.add("spring.datasource.url", () -> sandbox.url);
-        properties.add("polyhouse.jwt.secret", () -> key);
-        properties.add("spring.datasource.hikari.maximum-pool-size", () -> 4);
-        properties.add("spring.datasource.hikari.minimum-idle", () -> 1);
+        sandbox = IsolatedMysqlSandbox.create("provisioning");
+        sandbox.registerDatasourceAndEphemeralJwt(properties);
     }
 
     @BeforeEach void isolatedOwner() {
@@ -131,8 +126,8 @@ class AccountProvisioningIntegrationTest {
     }
 
     @Test void migrationKeepsExistingHistoryAndExpandsOnlyProvisionableRoles() throws Exception {
-        try (var migrationSandbox = new Sandbox();
-             var connection = DriverManager.getConnection(migrationSandbox.url, migrationSandbox.user, migrationSandbox.password);
+        try (var migrationSandbox = IsolatedMysqlSandbox.create("provisioning");
+             var connection = migrationSandbox.openConnection();
              var sql = connection.createStatement()) {
             sql.execute("ALTER TABLE sys_account_creation ADD CONSTRAINT chk_account_creation_role CHECK (role IN ('USER', 'ADMIN'))");
             sql.execute("ALTER TABLE sys_account_creation DROP CHECK chk_account_creation_role_v2");
@@ -309,45 +304,5 @@ class AccountProvisioningIntegrationTest {
     }
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class, failure -> assertThat(failure.getErrorCode()).isEqualTo(expected));
-    }
-    /** 只允许本机 MySQL，库名由内部随机十六进制构成；不会重放开发库迁移；OWNER 夹具只位于本测试随机库。 */
-    private static final class Sandbox implements AutoCloseable {
-        private final String name = "polyhouse_provisioning_" + UUID.randomUUID().toString().replace("-", "");
-        private final String user = System.getenv("DB_USERNAME");
-        private final String password = System.getenv("DB_PASSWORD");
-        private final String direct;
-        private final String url;
-        private Sandbox() throws Exception {
-            String configured = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/polyhouse_db");
-            URI parsed = URI.create(configured.substring(5));
-            if (!List.of("localhost", "127.0.0.1").contains(parsed.getHost()) || !"/polyhouse_db".equals(parsed.getPath())) {
-                throw new IllegalArgumentException("Only local development server is allowed");
-            }
-            String redisHost = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
-            if (!List.of("localhost", "127.0.0.1", "::1").contains(redisHost)) throw new IllegalArgumentException("Only local Redis is allowed");
-            direct = "jdbc:mysql://" + parsed.getHost() + ":" + (parsed.getPort() < 0 ? 3306 : parsed.getPort())
-                    + "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai";
-            url = direct.replace("/?", "/" + name + "?");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                // JDBC 不支持绑定数据库标识符；名字不是用户输入，且删除时再次验证固定格式。
-                command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
-                connection.setCatalog(name);
-                try {
-                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
-                } catch (Exception error) {
-                    try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
-                    throw error;
-                }
-            }
-        }
-        /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
-        @Override
-        public void close() throws Exception {
-            if (!name.matches("polyhouse_provisioning_[0-9a-f]{32}")) throw new IllegalStateException("Invalid sandbox name");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                command.execute("DROP DATABASE IF EXISTS `" + name + "`");
-            }
-        }
     }
 }

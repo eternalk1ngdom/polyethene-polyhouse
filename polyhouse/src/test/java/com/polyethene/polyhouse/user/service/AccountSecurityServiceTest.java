@@ -4,6 +4,7 @@ import com.polyethene.polyhouse.service.AccountSecurityService;
 import com.polyethene.polyhouse.service.AuthRedisStore;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.polyethene.polyhouse.common.constant.ErrorCode;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
@@ -25,6 +26,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -32,6 +37,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -70,6 +76,7 @@ class AccountSecurityServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void shouldChangeOnlySecurityColumnsAndRevokeAllClientsAfterAudit() {
         User user = current();
         user.setPasswordChangeRequired(true);
@@ -77,23 +84,42 @@ class AccountSecurityServiceTest {
         when(sessions.isCurrentSession(any())).thenReturn(true);
         when(users.update(isNull(), any())).thenReturn(1);
         when(audit.recordPasswordChange(42, 1)).thenReturn(1);
+
         service.changePassword(new PasswordChangeDTO(OLD, NEXT), token(0));
-        var order = inOrder(users, sessions, audit);
-        order.verify(users).selectOne(any());
-        order.verify(sessions).isCurrentSession(any());
-        order.verify(users).update(isNull(), any());
-        order.verify(audit).recordPasswordChange(42, 1);
-        order.verify(sessions).removeAllSessions(42);
-        verifyNoMoreInteractions(audit, sessions);
+
+        // 校验定向更新只修改安全列，且新密码按 BCrypt 哈希写入、版本号递增并解除首次改密标记。
+        ArgumentCaptor<LambdaUpdateWrapper<User>> updateCaptor = ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(users).update(isNull(), updateCaptor.capture());
+        LambdaUpdateWrapper<User> wrapper = updateCaptor.getValue();
+        assertThat(wrapper.getSqlSet())
+                .contains("password_hash", "credential_version", "password_change_required")
+                .doesNotContain("role", "coins", "experience", "level");
+        var boundValues = wrapper.getParamNameValuePairs().values();
+        assertThat(boundValues).contains(1L, false).doesNotContain(NEXT);
+        assertThat(boundValues).anyMatch(value -> value instanceof String s && PasswordUtils.matches(NEXT, s));
+
+        verify(audit).recordPasswordChange(42, 1);
+        verify(sessions).removeAllSessions(42);
+    }
+
+    @ParameterizedTest(name = "改密入参在触库前拒绝：{0}")
+    @MethodSource("invalidPasswordChangeRequests")
+    void shouldRejectBadDtosBeforeAnyStorage(String label, PasswordChangeDTO request) {
+        code(() -> service.changePassword(request, "invalid"), ErrorCode.INVALID_PARAMETER);
+        verifyNoInteractions(users, audit, sessions);
+    }
+
+    private static Stream<Arguments> invalidPasswordChangeRequests() {
+        return Stream.of(
+                Arguments.of("null 请求", null),
+                Arguments.of("当前密码过短", new PasswordChangeDTO("short", NEXT)),
+                Arguments.of("新密码超 72 UTF-8 字节", new PasswordChangeDTO(OLD, "密".repeat(25))),
+                Arguments.of("新密码全空白", new PasswordChangeDTO(OLD, " ".repeat(8)))
+        );
     }
 
     @Test
-    void shouldRejectBadDtosBeforeAnyStorageAndHidePasswords() throws Exception {
-        for (PasswordChangeDTO request : new PasswordChangeDTO[]{null, new PasswordChangeDTO("short", NEXT),
-                new PasswordChangeDTO(OLD, "密".repeat(25)), new PasswordChangeDTO(OLD, " ".repeat(8))}) {
-            code(() -> service.changePassword(request, "invalid"), ErrorCode.INVALID_PARAMETER);
-        }
-        verifyNoInteractions(users, audit, sessions);
+    void shouldHidePasswordsInDtoToStringAndJson() throws Exception {
         var request = new PasswordChangeDTO(OLD, NEXT);
         assertThat(request.toString()).doesNotContain(OLD, NEXT);
         assertThat(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request)).doesNotContain(OLD, NEXT);

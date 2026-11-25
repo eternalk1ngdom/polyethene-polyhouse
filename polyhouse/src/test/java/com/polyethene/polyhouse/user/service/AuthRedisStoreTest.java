@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -61,6 +62,8 @@ class AuthRedisStoreTest {
 
     @Test
     void shouldRejectMissingScriptResultRatherThanAssumeSuccess() {
+        // 显式模拟 Redis Lua 脚本返回 null（非 Mockito 默认值），验证绝不把未知结果当作删会话成功。
+        when(redis.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), any(), anyString())).thenReturn(null);
         assertUnavailable(() -> store.removeSession(claims()));
     }
 

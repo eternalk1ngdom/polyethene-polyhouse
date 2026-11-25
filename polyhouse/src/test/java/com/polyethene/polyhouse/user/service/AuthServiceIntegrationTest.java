@@ -12,15 +12,18 @@ import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.entity.User;
 import com.polyethene.polyhouse.model.vo.LoginVO;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,16 +39,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 显式启用的 MySQL + Redis 业务联调，数据库事务回滚，Redis 仅清理本次随机账号对应的精确键。
- * 使用内存中生成的测试 JWT 密钥，不替代用户待配置的日常运行密钥。
+ * 显式启用的随机隔离 MySQL + 本机 Redis 业务联调，数据库事务回滚，Redis 仅清理本次随机账号对应的精确键。
+ * 使用内存中生成的测试 JWT 密钥，绝不触碰本机 polyhouse_db 开发库。
  */
 @EnabledIfSystemProperty(named = "polyhouse.auth.integration", matches = "true")
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class AuthServiceIntegrationTest {
 
     private static final String PASSWORD = "Integration-fixture-password-2026!";
     private static final String TEST_KEY = Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded());
+    private static IsolatedMysqlSandbox sandbox;
 
     @Autowired
     private AuthService service;
@@ -57,8 +62,15 @@ class AuthServiceIntegrationTest {
     private final Set<String> ownedKeys = new HashSet<>();
 
     @DynamicPropertySource
-    static void configureEphemeralTestKey(DynamicPropertyRegistry properties) {
+    static void configureEphemeralTestKey(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.create("auth_service");
+        sandbox.registerDatasource(properties);
         properties.add("polyhouse.jwt.secret", () -> TEST_KEY);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
     }
 
     @AfterEach

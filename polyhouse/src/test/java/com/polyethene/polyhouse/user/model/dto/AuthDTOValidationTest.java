@@ -2,6 +2,7 @@ package com.polyethene.polyhouse.user.model.dto;
 
 import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
+import com.polyethene.polyhouse.model.dto.SessionTokenDTO;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validation;
@@ -92,24 +93,33 @@ class AuthDTOValidationTest {
                 .containsExactly("username", "password", "nickname");
     }
 
-    @Test
-    void shouldAllowOnlyKnownClientTypesAndKeepOmittedClientCompatible() {
-        assertThat(validator.validate(new LoginDTO("u_01", "a".repeat(8)))).isEmpty();
-        for (String client : new String[]{"PC", "H5", "PLUGIN"}) {
-            assertThat(validator.validate(new LoginDTO("u_01", "a".repeat(8), client))).isEmpty();
-        }
-        for (String client : new String[]{"", " ", "pc", "MOBILE"}) {
-            assertThat(validator.validate(new LoginDTO("u_01", "a".repeat(8), client))).isNotEmpty();
-        }
+    @ParameterizedTest(name = "终端类型白名单校验：client=''{0}'' -> 合法={1}")
+    @org.junit.jupiter.params.provider.CsvSource(value = {
+            "null, true",
+            "PC, true",
+            "H5, true",
+            "PLUGIN, true",
+            "'', false",
+            "' ', false",
+            "pc, false",
+            "MOBILE, false"
+    }, nullValues = "null")
+    void shouldAllowOnlyKnownClientTypesAndKeepOmittedClientCompatible(String client, boolean valid) {
+        LoginDTO dto = client == null
+                ? new LoginDTO("u_01", "a".repeat(8))
+                : new LoginDTO("u_01", "a".repeat(8), client);
+        assertThat(validator.validate(dto).isEmpty()).isEqualTo(valid);
     }
 
     @Test
-    void shouldNeverExposePasswordsInJsonOrDefaultDiagnosticText() throws Exception {
+    void shouldNeverExposePasswordsOrTokensInJsonOrDefaultDiagnosticText() throws Exception {
         String password = "sensitive-fixture-only";
         RegisterDTO register = new RegisterDTO("u_01", password, "居民");
         LoginDTO login = new LoginDTO("u_01", password);
+        SessionTokenDTO sessionToken = new SessionTokenDTO("hidden-credential");
         assertThat(register.toString()).doesNotContain(password, "u_01");
         assertThat(login.toString()).doesNotContain(password, "u_01");
+        assertThat(sessionToken.toString()).doesNotContain("hidden-credential");
         assertThat(objectMapper.readTree(objectMapper.writeValueAsString(register)).has("password")).isFalse();
         assertThat(objectMapper.readTree(objectMapper.writeValueAsString(login)).has("password")).isFalse();
         assertThat(objectMapper.writeValueAsString(register)).doesNotContain("passwordWithinBcryptLimit");

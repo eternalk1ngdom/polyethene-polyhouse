@@ -15,6 +15,7 @@ import com.polyethene.polyhouse.service.AccountManagementService;
 import com.polyethene.polyhouse.service.AuthRedisStore;
 import com.polyethene.polyhouse.service.AvatarService;
 import com.polyethene.polyhouse.user.fixture.AvatarFixture;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.AvatarImageUtils;
 import com.polyethene.polyhouse.service.ProfileModerationService;
 import com.polyethene.polyhouse.mapper.ProfileModerationMapper;
@@ -65,7 +66,7 @@ import static org.mockito.Mockito.*;
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class ProfileModerationIntegrationTest {
  private static final String PASSWORD="P4-isolated-fixture!";
- private static Sandbox sandbox;
+ private static IsolatedMysqlSandbox sandbox;
  @Autowired private AuthService auth;
  @Autowired private ProfileModerationService profiles;
  @Autowired private AvatarService avatars;
@@ -78,9 +79,8 @@ class ProfileModerationIntegrationTest {
  private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
  private long owner,user,other,admin;private String ownerToken,userToken,otherToken,adminToken;
  @DynamicPropertySource static void properties(DynamicPropertyRegistry p)throws Exception{
-  sandbox=new Sandbox();String key=Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded());
-  p.add("spring.datasource.url",()->sandbox.url);p.add("polyhouse.jwt.secret",()->key);
-  p.add("spring.datasource.hikari.maximum-pool-size",()->4);p.add("spring.datasource.hikari.minimum-idle",()->1);
+  sandbox=IsolatedMysqlSandbox.create("profile","p4","sql/016_profile_covers.sql");
+  sandbox.registerDatasourceAndEphemeralJwt(p);
  }
  @BeforeEach void fixtures(){
   owner=create("p4_owner",UserRoleEnum.OWNER);user=create("p4_user",UserRoleEnum.USER);
@@ -95,7 +95,7 @@ class ProfileModerationIntegrationTest {
    redis.delete(List.of("polyhouse:profile:avatar-quota:"+day+":"+uid,"polyhouse:profile:avatar-quota:"+day.plusDays(1)+":"+uid));
   }
   for(String table:List.of("sys_profile_audit","sys_profile_submission","sys_profile_field","sys_account_management_operation","sys_account_audit","sys_account_creation","sys_user_growth_reward","sys_user"))jdbc.execute("DELETE FROM "+table);
-  if(Files.exists(sandbox.root))try(var files=Files.walk(sandbox.root)){for(Path path:files.sorted(Comparator.reverseOrder()).toList())if(!path.equals(sandbox.root))Files.deleteIfExists(path);}
+  if(Files.exists(sandbox.tempDir()))try(var files=Files.walk(sandbox.tempDir())){for(Path path:files.sorted(Comparator.reverseOrder()).toList())if(!path.equals(sandbox.tempDir()))Files.deleteIfExists(path);}
  }
  @AfterAll static void drop()throws Exception{if(sandbox!=null)sandbox.close();}
  /** 四种身份、扣币与偏好都经过真实 HTTP 和随机库，用同一账号的第二端验证幂等。 */
@@ -127,9 +127,13 @@ class ProfileModerationIntegrationTest {
     // 两端跨日恢复会话并购买，先发的一枚奖励和两笔并发意图只产生一次支出。
     jdbc.update("UPDATE sys_user SET coins=9,experience=190 WHERE id=?",user);
     jdbc.update("UPDATE sys_user_growth_reward SET reward_date=DATE_SUB(reward_date,INTERVAL 1 DAY) WHERE user_id=?",user);
+    CountDownLatch ready = new CountDownLatch(2);
+    CountDownLatch start = new CountDownLatch(1);
     try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
-        var first = workers.submit(()->call("POST",base+"/purchase",userToken,purchase));
-        var next = workers.submit(()->call("POST",base+"/purchase",second,purchase));
+        var first = workers.submit(()->{ ready.countDown(); start.await(5,TimeUnit.SECONDS); return call("POST",base+"/purchase",userToken,purchase); });
+        var next = workers.submit(()->{ ready.countDown(); start.await(5,TimeUnit.SECONDS); return call("POST",base+"/purchase",second,purchase); });
+        assertThat(ready.await(5,TimeUnit.SECONDS)).isTrue();
+        start.countDown();
         for (var result : List.of(first,next)) {
             var response=result.get(20,TimeUnit.SECONDS);
             assertThat(response.statusCode()).isEqualTo(200);
@@ -258,16 +262,24 @@ class ProfileModerationIntegrationTest {
   profiles.maintain();assertThat(status(s.id())).isEqualTo("INVALIDATED");assertThat(pendingAvatar(user)).isNull();
  }
  @Test void deregisterAndExpiryClearPendingBytesButNeverPublish()throws Exception{
-  var expired=avatar(userToken);jdbc.update("UPDATE sys_profile_submission SET expires_at=? WHERE id=?",LocalDateTime.now().minusMinutes(1),expired.id());
+  var expired=avatar(userToken);
+  var expiredAt=LocalDateTime.ofInstant(clock.instant(),ZoneId.of("Asia/Shanghai")).minusMinutes(1);
+  jdbc.update("UPDATE sys_profile_submission SET expires_at=? WHERE id=?",expiredAt,expired.id());
   assertCode(()->profiles.decide(id(expired),decision(expired,true),ownerToken),ErrorCode.CONFLICT);profiles.maintain();assertThat(status(expired.id())).isEqualTo("EXPIRED");assertThat(pendingAvatar(user)).isNull();
   var deleted=avatar(userToken);auth.deregister(userToken);profiles.maintain();assertThat(status(deleted.id())).isEqualTo("INVALIDATED");assertThat(pendingAvatar(user)).isNull();
  }
  @Test void concurrentSubmitAndConflictingDecisionsHaveSingleWinners()throws Exception{
   var req=new NicknameSubmissionDTO(UUID.randomUUID().toString(),"同一并发申请");
   try(var pool=Executors.newVirtualThreadPerTaskExecutor()){
-   var a=pool.submit(()->profiles.submitNickname(req,userToken));var b=pool.submit(()->profiles.submitNickname(req,userToken));
+   CountDownLatch submitReady=new CountDownLatch(2),submitStart=new CountDownLatch(1);
+   var a=pool.submit(()->{submitReady.countDown();submitStart.await(5,TimeUnit.SECONDS);return profiles.submitNickname(req,userToken);});
+   var b=pool.submit(()->{submitReady.countDown();submitStart.await(5,TimeUnit.SECONDS);return profiles.submitNickname(req,userToken);});
+   assertThat(submitReady.await(5,TimeUnit.SECONDS)).isTrue();submitStart.countDown();
    var s=a.get(20,TimeUnit.SECONDS);assertThat(b.get(20,TimeUnit.SECONDS).id()).isEqualTo(s.id());
-   var x=pool.submit(()->decisionOutcome(s,true));var y=pool.submit(()->decisionOutcome(s,false));
+   CountDownLatch decideReady=new CountDownLatch(2),decideStart=new CountDownLatch(1);
+   var x=pool.submit(()->{decideReady.countDown();decideStart.await(5,TimeUnit.SECONDS);return decisionOutcome(s,true);});
+   var y=pool.submit(()->{decideReady.countDown();decideStart.await(5,TimeUnit.SECONDS);return decisionOutcome(s,false);});
+   assertThat(decideReady.await(5,TimeUnit.SECONDS)).isTrue();decideStart.countDown();
    assertThat(List.of(x.get(20,TimeUnit.SECONDS),y.get(20,TimeUnit.SECONDS))).containsExactlyInAnyOrder("success","CONFLICT");
   }
   assertThat(count("sys_profile_submission")).isEqualTo(1);assertThat(count("sys_profile_audit")).isEqualTo(2);
@@ -321,7 +333,7 @@ class ProfileModerationIntegrationTest {
  }
  @Test @EnabledIfEnvironmentVariable(named="POLYHOUSE_PROFILE_BROWSER",matches="true")
  void realBrowserUserAndOwnerReviewJourney()throws Exception{
-  Path input=sandbox.root.resolve("browser-input.png");Files.write(input,pngFixture());
+  Path input=sandbox.tempDir().resolve("browser-input.png");Files.write(input,pngFixture());
   ProcessBuilder builder=new ProcessBuilder("node.exe","scripts/verify-profile-moderation.cjs").directory(Path.of("../polyhouse-web").toFile()).redirectErrorStream(true);
   Map<String,String> inherited=new HashMap<>(builder.environment());builder.environment().clear();
   for(String key:List.of("PATH","SystemRoot","TEMP","TMP","USERPROFILE","LOCALAPPDATA","ProgramFiles","ProgramFiles(x86)","POLYHOUSE_PLAYWRIGHT_MODULE"))inherited.entrySet().stream().filter(e->e.getKey().equalsIgnoreCase(key)).findFirst().ifPresent(e->builder.environment().put(e.getKey(),e.getValue()));
@@ -341,8 +353,8 @@ class ProfileModerationIntegrationTest {
    // 测试文件使用 ISO 文本，不要求独立 ObjectMapper 注册生产时间模块或调整依赖。
    sessions.put(entry.getKey(),Map.of("accessToken",session.accessToken(),"user",session.user(),"tokenType",session.tokenType(),"expiresAt",session.expiresAt().toString()));
   }
-  Path config=sandbox.root.resolve("workspace-browser.json"),complete=sandbox.root.resolve("workspace-complete.json");
-  Files.write(sandbox.root.resolve("u4-avatar.png"),pngFixture());
+  Path config=sandbox.tempDir().resolve("workspace-browser.json"),complete=sandbox.tempDir().resolve("workspace-complete.json");
+  Files.write(sandbox.tempDir().resolve("u4-avatar.png"),pngFixture());
   Files.writeString(config,json.writeValueAsString(Map.of("backend","http://127.0.0.1:"+port,"sessions",sessions)));
   ProcessBuilder builder=new ProcessBuilder("node.exe","scripts/workspace-regression-server.cjs")
    .directory(Path.of("../polyhouse-web").toFile()).redirectErrorStream(true);
@@ -363,7 +375,7 @@ class ProfileModerationIntegrationTest {
    assertThat(jdbc.queryForObject("SELECT status FROM sys_user WHERE id=?",Integer.class,user)).isEqualTo(1);
    assertThat(count("sys_account_management_operation")).isEqualTo(2);
    // 数据库防重之外还核对传输事实，防止模拟断线被浏览器透明重放而掩盖未知结果分支。
-   var requests=json.readTree(Files.readString(sandbox.root.resolve("workspace-requests.json")));
+   var requests=json.readTree(Files.readString(sandbox.tempDir().resolve("workspace-requests.json")));
    int bans=0,unbans=0,confirmations=0;
    for(var request:requests){
     String method=request.path("method").asText(),path=request.path("path").asText();
@@ -407,52 +419,4 @@ class ProfileModerationIntegrationTest {
   return http.send(r.build(),HttpResponse.BodyHandlers.ofString());
  }
  private static void assertCode(Runnable action,ErrorCode code){assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.getErrorCode()).isEqualTo(code));}
-    /** 只允许本机 MySQL，库名由内部随机十六进制构成；不会重放开发库迁移；OWNER 夹具只位于本测试随机库。 */
-    private static final class Sandbox implements AutoCloseable {
-        private final Path root=Path.of("target").toAbsolutePath().resolve("p4-"+UUID.randomUUID().toString());
-        private final String name = "polyhouse_profile_" + UUID.randomUUID().toString().replace("-", "");
-        private final String user = System.getenv("DB_USERNAME");
-        private final String password = System.getenv("DB_PASSWORD");
-        private final String direct;
-        private final String url;
-        private Sandbox() throws Exception {
-            Files.createDirectories(root);
-            String configured = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/polyhouse_db");
-            URI parsed = URI.create(configured.substring(5));
-            if (!List.of("localhost", "127.0.0.1").contains(parsed.getHost()) || !"/polyhouse_db".equals(parsed.getPath())) {
-                throw new IllegalArgumentException("Only local development server is allowed");
-            }
-            String redisHost = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
-            if (!List.of("localhost", "127.0.0.1", "::1").contains(redisHost)) throw new IllegalArgumentException("Only local Redis is allowed");
-            direct = "jdbc:mysql://" + parsed.getHost() + ":" + (parsed.getPort() < 0 ? 3306 : parsed.getPort())
-                    + "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai";
-            url = direct.replace("/?", "/" + name + "?");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                // JDBC 不支持绑定数据库标识符；名字不是用户输入，且删除时再次验证固定格式。
-                command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
-                connection.setCatalog(name);
-                try {
-                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
-                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                            new FileSystemResource("sql/016_profile_covers.sql"), StandardCharsets.UTF_8));
-                } catch (Exception error) {
-                    try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
-                    throw error;
-                }
-            }
-        }
-        /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
-        @Override
-        public void close() throws Exception {
-            if (!name.matches("polyhouse_profile_[0-9a-f]{32}")) throw new IllegalStateException("Invalid sandbox name");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                command.execute("DROP DATABASE IF EXISTS `" + name + "`");
-                Path boundary=Path.of("target").toAbsolutePath().normalize();
-                if(!root.normalize().startsWith(boundary) || !root.getFileName().toString().startsWith("p4-"))throw new IllegalStateException("Unsafe fixture cleanup path");
-                if(Files.exists(root))try(var files=Files.walk(root)){for(Path p:files.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(p);}
-
-            }
-        }
-    }
 }

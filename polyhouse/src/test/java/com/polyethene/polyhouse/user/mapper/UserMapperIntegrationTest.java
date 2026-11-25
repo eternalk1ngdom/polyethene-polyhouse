@@ -6,6 +6,8 @@ import cn.hutool.crypto.digest.BCrypt;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.polyethene.polyhouse.common.constant.UserRoleEnum;
 import com.polyethene.polyhouse.model.entity.User;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,6 +17,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -27,19 +32,33 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 显式启用的真实 MySQL 验证；只写随机测试账号，所有写入由测试事务回滚，不执行建表或清库。
+ * 显式启用的真实 MySQL 验证；在随机隔离库中验证表结构、类型映射、软删除与 CHECK 约束，绝不触碰本机开发库。
  * 普通测试关闭此类，因此不要求开发机器的数据库始终在线。
  */
 @EnabledIfSystemProperty(named = "polyhouse.mysql.integration", matches = "true")
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class UserMapperIntegrationTest {
+
+    private static IsolatedMysqlSandbox sandbox;
 
     @Autowired
     private UserMapper mapper;
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @DynamicPropertySource
+    static void isolatedMysql(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.createMysqlOnly("user_mapper");
+        sandbox.registerDatasource(properties);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
+    }
 
     @Test
     void shouldMatchBaselineTablesGrowthMigrationAndUniqueIndex() {
@@ -49,9 +68,11 @@ class UserMapperIntegrationTest {
                 "sys_user_growth_reward", "sys_owner_bootstrap");
         List<String> columns = jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' ORDER BY ORDINAL_POSITION", String.class);
-        assertThat(columns).containsExactly("id", "username", "password_hash", "nickname", "avatar", "role",
-                "experience", "level", "coins",
-                "status", "last_login_ip", "last_login_time", "ext_json", "deleted", "create_time", "update_time", "owner_slot");
+        // 校验核心安全、审核与成长必需列存在，不再用过时精确列清单耦合后续合法演进列。
+        assertThat(columns).contains("id", "username", "password_hash", "nickname", "avatar", "pending_avatar",
+                "avatar_status", "role", "experience", "level", "coins", "credential_version",
+                "password_change_required", "management_version", "owner_slot", "status",
+                "last_login_ip", "last_login_time", "ext_json", "deleted", "create_time", "update_time");
         assertThat(jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' "
                 + "AND INDEX_NAME = 'uk_sys_user_owner_slot' AND NON_UNIQUE = 0 ORDER BY SEQ_IN_INDEX", String.class))

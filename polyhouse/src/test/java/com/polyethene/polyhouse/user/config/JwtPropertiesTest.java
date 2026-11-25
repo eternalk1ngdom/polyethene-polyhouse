@@ -8,6 +8,8 @@ import com.polyethene.polyhouse.utils.JwtUtils;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -57,10 +59,10 @@ class JwtPropertiesTest {
                 });
     }
 
-    @Test
-    void shouldRejectNonpositiveConfiguredLifetime() {
-        runner.withPropertyValues("polyhouse.jwt.expiration-days=0").run(context -> assertThat(context).hasFailed());
-        runner.withPropertyValues("polyhouse.jwt.expiration-days=-1").run(context -> assertThat(context).hasFailed());
+    @ParameterizedTest(name = "拒绝非正数过期天数：{0}")
+    @ValueSource(ints = {0, -1})
+    void shouldRejectNonpositiveConfiguredLifetime(int days) {
+        runner.withPropertyValues("polyhouse.jwt.expiration-days=" + days).run(context -> assertThat(context).hasFailed());
     }
 
     @Test

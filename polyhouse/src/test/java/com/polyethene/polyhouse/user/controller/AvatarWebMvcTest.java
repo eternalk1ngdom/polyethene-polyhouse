@@ -1,6 +1,7 @@
 package com.polyethene.polyhouse.user.controller;
 
 import com.polyethene.polyhouse.common.constant.*;
+import com.polyethene.polyhouse.common.context.UserContext;
 import com.polyethene.polyhouse.config.WebMvcConfig;
 import com.polyethene.polyhouse.controller.AvatarController;
 import com.polyethene.polyhouse.model.dto.AvatarSubmitDTO;
@@ -8,6 +9,7 @@ import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
 import com.polyethene.polyhouse.service.AvatarService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -30,18 +33,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AvatarWebMvcTest {
     private static final String PATH = "/api/auth/avatar/submissions";
     private static final String ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    private static final LocalDateTime FIXED_TIME = LocalDateTime.of(2026, 11, 25, 10, 0);
     @Autowired private MockMvc mvc;
     @MockBean private AvatarService avatars;
     @MockBean private AuthService auth;
+
+    @AfterEach
+    void contextCleared() {
+        assertThat(UserContext.isAuthenticated()).isFalse();
+    }
 
     @Test
     void acceptsJsonWithoutExposingPendingContent() throws Exception {
         authenticate();
         var dto = new AvatarSubmitDTO("UklGRg==", ID);
-        var now = LocalDateTime.now();
         when(avatars.upload(dto, "fixture")).thenReturn(new ProfileSubmissionVO(
             "123","42","fixture",ProfileField.AVATAR,ProfileReviewStatus.PENDING,"1",ID,
-            null,null,now,now.plusDays(7),4));
+            null,null,FIXED_TIME,FIXED_TIME.plusDays(7),4));
         mvc.perform(post(PATH).contentType("application/json").content(body(dto.avatarBase64()))
                 .header("Authorization","Bearer fixture"))
             .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))

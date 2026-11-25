@@ -27,9 +27,12 @@ import java.time.ZoneOffset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /** 验证展示进度的门槛、满级大整数和服务端日期，读取状态自身不能制造奖励。 */
@@ -90,9 +93,9 @@ class UserGrowthStatusTest {
         assertThat(status.progressPercent()).isEqualTo(percent);
         assertThat(status.maxLevelReached()).isEqualTo(level == UserGrowthRules.MAX_LEVEL);
         assertThat(status.dailyLoginRewardClaimed()).isFalse();
-        verify(users).selectOne(any());
-        verify(rewards).findRewardDetailsForUpdate(42L, UserGrowthRules.DAILY_LOGIN_ACTION, LocalDate.of(2026, 10, 27));
-        verifyNoMoreInteractions(users, rewards);
+        // 只读状态查询绝不产生写库或补发奖励副作用，不耦合内部只读查询方法名。
+        verify(users, never()).update(any(), any());
+        verify(rewards, never()).insertReward(anyLong(), anyString(), any(), anyInt(), anyInt(), anyString());
     }
 
     @Test

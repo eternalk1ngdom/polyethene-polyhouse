@@ -14,6 +14,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
@@ -52,7 +54,7 @@ class AccountProvisioningWebMvcTest {
         if (role != UserRoleEnum.OWNER) verifyNoInteractions(provisioning);
     }
 
-    @Test void shouldValidateAndDisableCacheWithoutBindingSensitiveExtraFields() throws Exception {
+    @Test void shouldDisableCacheAndIgnoreSensitiveExtraFields() throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
         when(provisioning.create(any(), any())).thenReturn(new AccountCreationVO("42", "ph000001", "小屋住户000001", UserRoleEnum.USER, true, "Temporary-fixture!234"));
         mvc.perform(post("/api/manage/accounts").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON)
@@ -60,11 +62,21 @@ class AccountProvisioningWebMvcTest {
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.username").value("ph000001"));
         verify(provisioning).create(new AccountCreateDTO(REQUEST, UserRoleEnum.USER, null), "fixture");
-        for (String body : new String[]{"{}", BODY.replace(REQUEST, "bad"), BODY.replace("USER", "UNKNOWN"), BODY.replace("USER", "ADMIN")}) {
-            mvc.perform(post("/api/manage/accounts").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isBadRequest());
-        }
         assertThat(new AccountCreateDTO(REQUEST, UserRoleEnum.ADMIN, "private-fixture").toString()).doesNotContain("private-fixture");
+    }
+
+    @ParameterizedTest(name = "拒绝非法开户请求体")
+    @MethodSource("invalidCreateBodies")
+    void shouldRejectInvalidCreateBodiesBeforeService(String body) throws Exception {
+        when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
+        mvc.perform(post("/api/manage/accounts").header("Authorization", "Bearer fixture")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(provisioning);
+    }
+
+    private static Stream<String> invalidCreateBodies() {
+        return Stream.of("{}", BODY.replace(REQUEST, "bad"), BODY.replace("USER", "UNKNOWN"), BODY.replace("USER", "ADMIN"));
     }
 
     @Test void shouldRejectAnonymousAndInitialOwnerBeforeService() throws Exception {

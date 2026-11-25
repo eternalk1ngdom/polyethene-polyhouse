@@ -14,6 +14,8 @@ import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.entity.User;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
@@ -29,6 +31,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -59,15 +62,17 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 /**
- * 真实 MySQL/Redis 成长验收，服务事务实际提交；仅替换奖励时钟来模拟跨日和一年登录。
- * 流水防重、并发和回滚均使用真实存储，测试不依赖外层统一回滚掩盖业务错误。
+ * 随机隔离 MySQL / 本机 Redis 成长验收，服务事务实际提交；仅替换奖励时钟来模拟跨日和一年登录。
+ * 流水防重、并发和回滚均使用真实存储，绝不触碰本机 polyhouse_db 开发库。
  */
 @EnabledIfSystemProperty(named = "polyhouse.auth.integration", matches = "true")
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class UserGrowthIntegrationTest {
 
     private static final Instant FIRST_DAY = Instant.parse("2026-01-01T04:00:00Z");
     private static final String TEST_KEY = temporaryKey();
+    private static IsolatedMysqlSandbox sandbox;
 
     @Autowired
     private AuthService auth;
@@ -93,8 +98,15 @@ class UserGrowthIntegrationTest {
     private final List<Fixture> owned = new ArrayList<>();
 
     @DynamicPropertySource
-    static void useEphemeralKeyOnlyForThisTestContext(DynamicPropertyRegistry properties) {
+    static void useEphemeralKeyOnlyForThisTestContext(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.create("growth");
+        sandbox.registerDatasource(properties);
         properties.add("polyhouse.jwt.secret", () -> TEST_KEY);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
     }
 
     @BeforeEach

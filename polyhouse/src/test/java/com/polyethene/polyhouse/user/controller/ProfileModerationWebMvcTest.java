@@ -10,6 +10,7 @@ import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -46,16 +47,27 @@ class ProfileModerationWebMvcTest {
    .andExpect(status().isOk()).andExpect(content().contentType("image/webp")).andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"));
   verify(profiles).image(new ProfileResourceDTO(42L),"fixture");
  }
- @Test void invalidDtoAndInitialCredentialNeverReachService()throws Exception{
-  for(String query:List.of("page=0","pageSize=51","kind=PASSWORD"))mvc.perform(get("/api/manage/profile-reviews?"+query).header("Authorization","Bearer fixture")).andExpect(status().isBadRequest());
-  for(String body:List.of("{}","{\"requestId\":\"bad\",\"nickname\":\"合法昵称\"}","{\"requestId\":\""+REQUEST+"\",\"nickname\":\"含\\n换行\"}"))
-   mvc.perform(post("/api/auth/nickname/submissions").header("Authorization","Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+ @ParameterizedTest(name = "拒绝非法审核列表查询：{0}")
+ @ValueSource(strings = {"page=0", "pageSize=51", "kind=PASSWORD"})
+ void invalidReviewQueryNeverReachesService(String query)throws Exception{
+  mvc.perform(get("/api/manage/profile-reviews?"+query).header("Authorization","Bearer fixture")).andExpect(status().isBadRequest());
+  verifyNoInteractions(profiles);
+ }
+ @ParameterizedTest(name = "拒绝非法昵称提交请求体")
+ @ValueSource(strings = {"{}", "{\"requestId\":\"bad\",\"nickname\":\"合法昵称\"}", "{\"requestId\":\""+REQUEST+"\",\"nickname\":\"含\\n换行\"}"})
+ void invalidNicknameSubmissionNeverReachesService(String body)throws Exception{
+  mvc.perform(post("/api/auth/nickname/submissions").header("Authorization","Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+  verifyNoInteractions(profiles);
+ }
+ @Test void invalidPathAndInitialCredentialNeverReachService()throws Exception{
   mvc.perform(get("/api/profile-submissions/bad/image").header("Authorization","Bearer fixture")).andExpect(status().isBadRequest());
   identity(UserRoleEnum.OWNER,true);mvc.perform(get("/api/auth/profile-submissions").header("Authorization","Bearer fixture")).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
   verifyNoInteractions(profiles);
  }
- @Test void anonymousCannotReadPrivateStatusOrMedia()throws Exception{
-  for(String path:List.of("/api/auth/profile-submissions","/api/profile-submissions/42/image","/api/manage/profile-reviews","/api/manage/profile-published"))mvc.perform(get(path)).andExpect(status().isUnauthorized());
+ @ParameterizedTest(name = "匿名用户禁止访问私有资料接口：{0}")
+ @ValueSource(strings = {"/api/auth/profile-submissions", "/api/profile-submissions/42/image", "/api/manage/profile-reviews", "/api/manage/profile-published"})
+ void anonymousCannotReadPrivateStatusOrMedia(String path)throws Exception{
+  mvc.perform(get(path)).andExpect(status().isUnauthorized());
   verifyNoInteractions(profiles);
  }
  private void identity(UserRoleEnum role,boolean initial){when(auth.getCurrentUser("fixture")).thenReturn(new UserProfileVO("1","fixture","测试",null,role,"0",1,"0",initial));}

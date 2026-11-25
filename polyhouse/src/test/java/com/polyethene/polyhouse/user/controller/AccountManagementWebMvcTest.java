@@ -11,6 +11,8 @@ import com.polyethene.polyhouse.service.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -18,6 +20,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
+import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -62,14 +65,28 @@ class AccountManagementWebMvcTest {
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.total").value("0"));
     }
-    @Test void invalidQueryAndOperationNeverReachService() throws Exception {
-        for (String query : List.of("page=0", "pageSize=51", "role=UNKNOWN", "status=2", "username=%25")) {
-            mvc.perform(get("/api/manage/accounts?" + query).header("Authorization", "Bearer fixture")).andExpect(status().isBadRequest());
-        }
-        for (String body : List.of("{}", BODY.replace(ID, "bad"), BODY.replace("测试封禁", ""), BODY.replace("USER", "UNKNOWN"), BODY.replace("\"0\"", "-1"))) {
-            mvc.perform(post("/api/manage/accounts/42/ban").header("Authorization", "Bearer fixture")
-                    .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
-        }
+    @ParameterizedTest(name = "拒绝非法列表查询参数：{0}")
+    @ValueSource(strings = {"page=0", "pageSize=51", "role=UNKNOWN", "status=2", "username=%25"})
+    void invalidQueryNeverReachesService(String query) throws Exception {
+        mvc.perform(get("/api/manage/accounts?" + query).header("Authorization", "Bearer fixture"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(management);
+    }
+
+    @ParameterizedTest(name = "拒绝非法管理操作请求体")
+    @MethodSource("invalidOperationBodies")
+    void invalidOperationBodyNeverReachesService(String body) throws Exception {
+        mvc.perform(post("/api/manage/accounts/42/ban").header("Authorization", "Bearer fixture")
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        verifyNoInteractions(management);
+    }
+
+    private static Stream<String> invalidOperationBodies() {
+        return Stream.of("{}", BODY.replace(ID, "bad"), BODY.replace("测试封禁", ""),
+                BODY.replace("USER", "UNKNOWN"), BODY.replace("\"0\"", "-1"));
+    }
+
+    @Test void invalidTargetPathNeverReachesService() throws Exception {
         mvc.perform(post("/api/manage/accounts/invalid/ban").header("Authorization", "Bearer fixture")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isBadRequest());
         verifyNoInteractions(management);

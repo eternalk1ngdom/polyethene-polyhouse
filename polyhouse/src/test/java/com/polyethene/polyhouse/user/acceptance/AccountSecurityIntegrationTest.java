@@ -14,6 +14,7 @@ import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.service.AccountSecurityService;
 import com.polyethene.polyhouse.service.AuthRedisStore;
 import com.polyethene.polyhouse.service.AuthService;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.JwtUtils;
 import io.jsonwebtoken.Header;
 import io.jsonwebtoken.Jwts;
@@ -68,7 +69,7 @@ import static org.mockito.Mockito.*;
 class AccountSecurityIntegrationTest {
     private static final String OLD = "P1-integration-old-fixture!";
     private static final String NEXT = "P1-integration-new-fixture!";
-    private static Sandbox sandbox;
+    private static IsolatedMysqlSandbox sandbox;
     @Autowired private AuthService auth;
     @Autowired private AccountSecurityService security;
     @Autowired private JwtProperties jwt;
@@ -83,22 +84,22 @@ class AccountSecurityIntegrationTest {
 
     @DynamicPropertySource
     static void isolatedProperties(DynamicPropertyRegistry properties) throws Exception {
-        sandbox = new Sandbox();
-        String temporaryKey = Base64.getEncoder().encodeToString(Keys.secretKeyFor(SignatureAlgorithm.HS256).getEncoded());
-        properties.add("spring.datasource.url", () -> sandbox.url);
-        properties.add("polyhouse.jwt.secret", () -> temporaryKey);
-        properties.add("spring.datasource.hikari.maximum-pool-size", () -> 4);
-        properties.add("spring.datasource.hikari.minimum-idle", () -> 1);
+        sandbox = IsolatedMysqlSandbox.create("security");
+        sandbox.registerDatasourceAndEphemeralJwt(properties);
     }
 
     @AfterEach
     void removeOnlyOwnedSessionsAndRows() {
         reset(sessions, audit);
-        for (long userId : ownedUsers) {
-            redis.delete(List.of("PC", "H5", "PLUGIN").stream()
-                    .map(client -> RedisConstants.buildAuthTokenKey(userId, client)).toList());
-            jdbc.update("DELETE FROM sys_account_audit WHERE target_id=?", userId);
-            jdbc.update("DELETE FROM sys_user WHERE id=?", userId);
+        try {
+            for (long userId : ownedUsers) {
+                redis.delete(List.of("PC", "H5", "PLUGIN").stream()
+                        .map(client -> RedisConstants.buildAuthTokenKey(userId, client)).toList());
+                jdbc.update("DELETE FROM sys_account_audit WHERE target_id=?", userId);
+                jdbc.update("DELETE FROM sys_user WHERE id=?", userId);
+            }
+        } finally {
+            ownedUsers.clear();
         }
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_account_audit", Long.class)).isZero();
@@ -116,7 +117,7 @@ class AccountSecurityIntegrationTest {
                 .setIssuedAt(Date.from(now)).setExpiration(Date.from(now.plusSeconds(3600)))
                 .claim("tokenType", "ACCESS").claim("role", "USER").claim("clientType", "PC")
                 .signWith(jwt.signingKey(), SignatureAlgorithm.HS256).compact();
-        var claims = JwtUtils.parseAndValidate(legacy, jwt.signingKey(), Instant.now());
+        var claims = JwtUtils.parseAndValidate(legacy, jwt.signingKey(), now);
         sessions.saveSession(claims, Duration.ofMinutes(50));
         assertThat(call("GET", "/api/auth/me", legacy, null).statusCode()).isEqualTo(200);
         assertThat(change(legacy, OLD, NEXT).statusCode()).isEqualTo(200);
@@ -272,46 +273,5 @@ class AccountSecurityIntegrationTest {
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
                 error -> assertThat(error.getErrorCode()).isEqualTo(expected));
-    }
-
-    /** 只允许本机 MySQL，库名由内部随机十六进制构成；不会重放开发库迁移或创建 OWNER。 */
-    private static final class Sandbox implements AutoCloseable {
-        private final String name = "polyhouse_security_" + UUID.randomUUID().toString().replace("-", "");
-        private final String user = System.getenv("DB_USERNAME");
-        private final String password = System.getenv("DB_PASSWORD");
-        private final String direct;
-        private final String url;
-        private Sandbox() throws Exception {
-            String configured = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/polyhouse_db");
-            URI parsed = URI.create(configured.substring(5));
-            if (!List.of("localhost", "127.0.0.1").contains(parsed.getHost()) || !"/polyhouse_db".equals(parsed.getPath())) {
-                throw new IllegalArgumentException("Only local development server is allowed");
-            }
-            String redisHost = System.getenv().getOrDefault("REDIS_HOST", "127.0.0.1");
-            if (!List.of("localhost", "127.0.0.1", "::1").contains(redisHost)) throw new IllegalArgumentException("Only local Redis is allowed");
-            direct = "jdbc:mysql://" + parsed.getHost() + ":" + (parsed.getPort() < 0 ? 3306 : parsed.getPort())
-                    + "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai";
-            url = direct.replace("/?", "/" + name + "?");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                // JDBC 不支持绑定数据库标识符；名字不是用户输入，且删除时再次验证固定格式。
-                command.execute("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4");
-                connection.setCatalog(name);
-                try {
-                    ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                            new FileSystemResource("sql/001_schema.sql"), StandardCharsets.UTF_8));
-                } catch (Exception error) {
-                    try { close(); } catch (Exception cleanup) { error.addSuppressed(cleanup); }
-                    throw error;
-                }
-            }
-        }
-        /** 只删除本次生成且格式严格匹配的隔离库，不包含任何已有开发数据。 */
-        @Override
-        public void close() throws Exception {
-            if (!name.matches("polyhouse_security_[0-9a-f]{32}")) throw new IllegalStateException("Invalid sandbox name");
-            try (Connection connection = DriverManager.getConnection(direct, user, password); var command = connection.createStatement()) {
-                command.execute("DROP DATABASE IF EXISTS `" + name + "`");
-            }
-        }
     }
 }

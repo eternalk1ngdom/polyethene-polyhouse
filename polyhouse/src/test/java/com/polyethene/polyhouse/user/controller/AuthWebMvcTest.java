@@ -24,7 +24,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -43,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.concurrent.Callable;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -261,10 +265,45 @@ class AuthWebMvcTest {
         for (String command : new String[]{"logout", "deregister"}) {
             mvc.perform(post("/api/auth/" + command).contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"" + TOKEN + "\"}"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
+                    .andExpect(jsonPath("$.data").isEmpty());
         }
         verify(service).logout(TOKEN);
         verify(service).deregister(TOKEN);
+    }
+
+    @ParameterizedTest(name = "会话命令拒绝非法请求体：{0} / {1}")
+    @MethodSource("invalidSessionCommandPayloads")
+    void shouldRejectInvalidBodyTokenCommandsBeforeService(String command, String label, String body) throws Exception {
+        mvc.perform(post("/api/auth/" + command).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
+        verifyNoInteractions(service);
+    }
+
+    private static Stream<Arguments> invalidSessionCommandPayloads() {
+        return Stream.of("logout", "deregister").flatMap(command -> Stream.of(
+                Arguments.of(command, "缺 token 字段", "{}"),
+                Arguments.of(command, "空白 token", "{\"token\":\" \"}"),
+                Arguments.of(command, "畸形 JSON", "{"),
+                Arguments.of(command, "空请求体", ""),
+                Arguments.of(command, "超过 4096 字符上限", "{\"token\":\"" + "x".repeat(4097) + "\"}")
+        ));
+    }
+
+    @ParameterizedTest(name = "会话命令透传业务异常状态：{0} -> {1} ({2})")
+    @CsvSource({
+            "deregister, UNAUTHORIZED, 401, 40100",
+            "logout, SERVICE_UNAVAILABLE, 503, 50300"
+    })
+    void shouldPreserveErrorStatusForBodyTokenCommands(String command, ErrorCode errorCode, int httpStatus, int code) throws Exception {
+        if ("deregister".equals(command)) {
+            doThrow(new BusinessException(errorCode)).when(service).deregister(TOKEN);
+        } else {
+            doThrow(new BusinessException(errorCode)).when(service).logout(TOKEN);
+        }
+        mvc.perform(post("/api/auth/" + command).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + TOKEN + "\"}"))
+                .andExpect(status().is(httpStatus)).andExpect(jsonPath("$.code").value(code));
     }
 
     @ParameterizedTest

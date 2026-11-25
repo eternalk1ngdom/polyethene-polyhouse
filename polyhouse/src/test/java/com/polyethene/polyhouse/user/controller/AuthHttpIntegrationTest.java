@@ -12,8 +12,10 @@ import com.polyethene.polyhouse.mapper.UserMapper;
 import com.polyethene.polyhouse.config.JwtProperties;
 import com.polyethene.polyhouse.model.entity.User;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.user.service.AuthTransactionFixtureMapper;
 import com.polyethene.polyhouse.utils.JwtUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,13 +49,16 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 通过随机端口的真实 HTTP 调用生产 Controller、拦截器、MySQL 和 Redis，避免只用模拟业务验收。
- * 使用本机预设的真实运行密钥，不覆盖配置；测试账号独立提交并按精确 ID/随机账号清理。
+ * 通过随机端口的真实 HTTP 调用生产 Controller、拦截器、随机隔离 MySQL 和本机 Redis，避免只用模拟业务验收。
+ * 隔离库中安全验证 OWNER 防注销等写操作，不触碰本机 polyhouse_db 正式屋主数据。
  */
 @EnabledIfSystemProperty(named = "polyhouse.auth.integration", matches = "true")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Import(AuthHttpIntegrationTest.RoleProbeController.class)
 class AuthHttpIntegrationTest {
+
+    private static IsolatedMysqlSandbox sandbox;
 
     @Autowired
     private TestRestTemplate http;
@@ -69,6 +77,17 @@ class AuthHttpIntegrationTest {
     private JdbcTemplate jdbc;
 
     private final List<Fixture> ownedFixtures = new ArrayList<>();
+
+    @DynamicPropertySource
+    static void isolatedDatasource(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.create("auth_http");
+        sandbox.registerDatasource(properties);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
+    }
 
     @BeforeEach
     void useHttpClientThatCanReadPostAuthenticationFailures() {

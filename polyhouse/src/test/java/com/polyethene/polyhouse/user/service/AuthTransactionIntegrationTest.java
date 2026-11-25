@@ -10,6 +10,8 @@ import com.polyethene.polyhouse.mapper.UserMapper;
 import com.polyethene.polyhouse.model.dto.LoginDTO;
 import com.polyethene.polyhouse.model.dto.RegisterDTO;
 import com.polyethene.polyhouse.model.vo.LoginVO;
+import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -46,15 +49,17 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 
 /**
- * 使用真实 MySQL 提交/回滚和 Redis 验收注销边界；故意不加测试类级 @Transactional，
+ * 使用随机隔离 MySQL 真实提交/回滚和本机 Redis 验收注销边界；故意不加测试类级 @Transactional，
  * 避免服务加入永不提交的外层测试事务，掩盖回滚或跨线程可见性问题。
  * 并发用例通过门闩控制关键位置，并以 MySQL 的实际锁等待作为竞争已经发生的证据。
  */
 @EnabledIfSystemProperty(named = "polyhouse.auth.integration", matches = "true")
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AuthTransactionIntegrationTest {
 
     private static final String TEST_KEY = temporaryKey();
+    private static IsolatedMysqlSandbox sandbox;
 
     @Autowired
     private AuthService service;
@@ -74,8 +79,15 @@ class AuthTransactionIntegrationTest {
     private final List<Fixture> ownedFixtures = new ArrayList<>();
 
     @DynamicPropertySource
-    static void useOnlyEphemeralTestKey(DynamicPropertyRegistry properties) {
+    static void useOnlyEphemeralTestKey(DynamicPropertyRegistry properties) throws Exception {
+        sandbox = IsolatedMysqlSandbox.create("auth_tx");
+        sandbox.registerDatasource(properties);
         properties.add("polyhouse.jwt.secret", () -> TEST_KEY);
+    }
+
+    @AfterAll
+    static void dropSandbox() throws Exception {
+        if (sandbox != null) sandbox.close();
     }
 
     @AfterEach
