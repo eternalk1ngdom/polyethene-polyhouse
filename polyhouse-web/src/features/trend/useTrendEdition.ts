@@ -32,6 +32,7 @@ export function useTrendEdition(
   const loadingWindow = ref(false)
   let reportBlockedUntil = 0
   let windowBlockedUntil = 0
+  let lastFailedDateAppend = false
   let reportRequest: AbortController | undefined
   let datesRequest: AbortController | undefined
   let windowRequest: AbortController | undefined
@@ -140,14 +141,22 @@ export function useTrendEdition(
       if (request.signal.aborted) return
       dates.value = append ? [...new Set([...dates.value, ...result.items])] : result.items
       cursor.value = result.nextBefore
+      lastFailedDateAppend = false
     } catch (failure: unknown) {
       if (request.signal.aborted) return
       dateError.value = true
+      // 记住失败时的分页方向，重试历史时才能接回中断的游标而不是覆盖回首页。
+      lastFailedDateAppend = append
       if (failure instanceof ApiError && failure.status === 429)
         dateBlockedUntil.value = Date.now() + (failure.retryAfterSeconds ?? 2) * 1000
     } finally {
       if (!request.signal.aborted) loadingDates.value = false
     }
+  }
+
+  /** 按上一次失败的分页方向重试历史日期，保留已加载页和游标位置。 */
+  function retryDates(): Promise<void> {
+    return loadDates(lastFailedDateAppend)
   }
 
   watch(
@@ -191,6 +200,7 @@ export function useTrendEdition(
     dateError,
     loadingDates,
     loadDates,
+    retryDates,
     windowStats,
     windowBriefing,
     windowError,

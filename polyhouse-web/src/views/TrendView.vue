@@ -44,6 +44,7 @@ const {
   dateError,
   loadingDates,
   loadDates,
+  retryDates,
   windowStats,
   windowBriefing,
   windowError,
@@ -327,7 +328,7 @@ watch(
           >
         </div>
         <p v-if="dateError" class="notice" role="status">
-          历史日期暂时无法读取。<ElButton text @click="loadDates()">重试历史</ElButton>
+          历史日期暂时无法读取。<ElButton text @click="retryDates()">重试历史</ElButton>
         </p>
       </template>
       <a v-else class="utility back" :href="router.resolve(returnTo).href" @click="goBack"
