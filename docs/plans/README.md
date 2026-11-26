@@ -4,6 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
+| [上下文与 Token 降本瘦身专项计划](context-token-optimization.md) | 已完成并验证（分支 `chore/context-token-optimization`：阶段切分、双文档零降级瘦身、测试静默脚本与 SSOT 降频同步；待合 `dev`） | [dev.23](../dev-log/v1.0-dev.23.md) |
 | [架构解耦止血与 AI 协作降噪计划](architecture-decoupling-optimization.md) | 已完成并快进合入 `dev`（全部 2 批次 4 项：跨端数量硬编码解耦、后端 4 处时钟注入统一、拆分 `api/trend.ts`、清理 21 行 `AvatarService` 空壳） | [dev.22](../dev-log/v1.0-dev.22.md) |
 | [项目架构解耦与可维护性专项评估计划](architecture-decoupling-assessment.md) | 已完成（基线 `dev` @ `5118cfc`，只读未改代码）；诊断报告已归档至[架构解耦评估报告](../design/architecture-decoupling-assessment.md) | [dev.22](../dev-log/v1.0-dev.22.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 已完成并合入本地 `dev`（阶段 A～C 与 D1/D2 全部收口，测试红线已并入 `AGENTS.md`；`#16` 远端 Pages 首轮发布与远端推送待另行确认） | [dev.21](../dev-log/v1.0-dev.21.md) |

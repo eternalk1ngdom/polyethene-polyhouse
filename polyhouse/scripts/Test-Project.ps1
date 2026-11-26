@@ -6,9 +6,16 @@
 阶段失败立即停止；真实实例验收仍由 Invoke-LocalAuth.ps1 单独显式执行。
 #>
 [CmdletBinding()]
-param()
+param(
+    # 开启后委托给 Test-Quiet.ps1，通过时仅输出单行摘要，失败时展开完整日志。
+    [switch]$Quiet
+)
 
 $ErrorActionPreference = 'Stop'
+if ($Quiet) {
+    & (Join-Path $PSScriptRoot 'Test-Quiet.ps1') -Scope All
+    exit $LASTEXITCODE
+}
 $verifyBackend = Split-Path -Parent $PSScriptRoot
 $verifyRoot = Split-Path -Parent $verifyBackend
 $verifyFrontend = Join-Path $verifyRoot 'polyhouse-web'

@@ -1,59 +1,32 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-25（Asia/Shanghai）。**v1.0 开发中。** 当前阶段日志：[v1.0-dev.22.md](docs/dev-log/v1.0-dev.22.md)。
+更新时间：2026-11-26（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.23.md](docs/dev-log/v1.0-dev.23.md)。
 
-- 架构解耦只读评估与[轻量优化计划](docs/plans/architecture-decoupling-optimization.md)全部 4 项已收口并合入 `dev`、同步 `origin/dev`（[诊断报告](docs/design/architecture-decoupling-assessment.md) / [dev.22](docs/dev-log/v1.0-dev.22.md)）；`main` 晋级与线上发布待另行确认。
-- [仓库维护计划](docs/plans/repository-maintenance-backlog.md)高价值 10 项与[测试升级与修复验收计划](docs/plans/testing-upgrade-and-maintenance-verification.md)（阶段 A～D、测试红线并入 `AGENTS.md`、范式沉淀至 `verification.md`）已完整收口并快进合入本地 `dev`，详见 [dev.21](docs/dev-log/v1.0-dev.21.md)；远端推送、合入 `main` 及 `#16` Pages 双作业首轮发布验收待另行确认。语言统计规则已合入本地 `dev`（`f2241cc`）。
+## 当前焦点与未决边界
 
-- [本地自定义卡面](docs/plans/local-profile-cover.md)与[选图异常修复](docs/dev-log/v1.0-dev.20.md#动图选取与读取恢复)已合入 dev。短循环动态卡面列为低优先级待办，暂不排期。
-- 卡面布局修整已在本地分支完成，详见 [dev.20](docs/dev-log/v1.0-dev.20.md#卡面操作移入资料区)。
+- **进行中（dev.23）**：[上下文与 Token 降本瘦身](docs/plans/context-token-optimization.md)（已完成双文档瘦身、测试静默脚本与 SSOT 降频同步）。
+- **近期已合 `dev`**：架构解耦优化 4 项（[dev.22](docs/dev-log/v1.0-dev.22.md)，已推 `origin/dev`）；仓库维护 10 项与测试升级（[dev.21](docs/dev-log/v1.0-dev.21.md)）；个人空间卡面（[dev.20](docs/dev-log/v1.0-dev.20.md)）；星潮阅读/2B 简报（[dev.18](docs/dev-log/v1.0-dev.18.md)/[dev.19](docs/dev-log/v1.0-dev.19.md)）。
+- **待授权/延后**：`main` 晋级、云端 `015` 迁移、账单对账、线上部署与 `#16` Pages 双作业首轮验收待确认；动态卡面、架构条件项及维护 `#7/#8/#9/#11/#12/#13` 延后；11-20 断源首故障缺现场证据。
+- **线上基线**：`dev` `9606cd4` → `main` `aaa4ddc`，Render/TiDB/Upstash/Pages 已部署，见[上线清单](docs/dev-log/launch-preparation.md)。
 
-- [个人空间卡面](docs/dev-log/v1.0-dev.20.md#购买与佩戴)已实现购买、等级解锁与跨端佩戴（PR #20 合 `dev`）。
-- [登录态走查与星潮视觉/简报升级](docs/dev-log/v1.0-dev.19.md#星潮阅读页降噪与报刊头条重绘)：5 页收边（PR #18）、发布台三卡统一（PR #19）与星潮阅读页降噪、全局语义色彩及大白话简报提示词（PR #21）均已完成并合入 `dev`。
-- [星潮 2B 7 日风口简报](docs/dev-log/v1.0-dev.18.md#星潮-2b-7-日风口简报)已经 PR #16 合入 `dev`（`da62b75`）；云端库 `015` 迁移、平台账单对账与合入 `main`/部署待另行授权。
-- 前端精修 F1～F5 与星潮 5:1 月夜横幅均已合入 `dev`（PR #12～#15），详见 [dev.17](docs/dev-log/v1.0-dev.17.md)；星潮内容演进（`radar-3` / 2A / `radar-4`）与首页卡面重绘/收尾区方案 A 均已合入 `dev`（PR #7～#11），详见 [dev.16](docs/dev-log/v1.0-dev.16.md)；星潮基础工程（PR #6）详见 [dev.15](docs/dev-log/v1.0-dev.15.md)。11 月 20 日下午断源的首个故障仍缺现场证据。
-- [前端技能](docs/operations/ui-ux-skill.md)保留正式版 v2.15.0。WSL 服务已恢复，原 Redis 启动检查通过，Docker 作为备用入口。
-- 基线：试用后 dev `9606cd4` 合入 main `aaa4ddc`，Render 已部署；用户确认公开前端可登录、账号列表正常。
-- Q0/Q1布局完成：1320px/900px断点、妙压长名称修复；原目录/工作树保留。
-- 云端：[上线验收清单](docs/dev-log/launch-preparation.md)。采用 Render、TiDB Cloud 与 Upstash。
-- 入口：[契约](AGENTS.md) / [README](README.md) / [设计](docs/design/blueprint-index.md) / [计划](docs/plans/README.md)，历史按需读。
+## 长期红线与核心能力
 
-## 已实现与边界
+- **本机正式屋主**：禁清空初始化、禁在开发库跑未隔离 OWNER 夹具；凭据复用忽略的 `polyhouse/.idea/workspace.xml`（先 Inspect，勿输出）。
+- **版本与范围红线**：后端依赖冻结（仅批 Tomcat `10.1.61`）；T5 换底/PDF/云预设已否决；3D/社交不在范围；公网与部署须具体授权。
+- **已交付核心**：认证/Redis 多端/唯一 OWNER/成长/开户与资料先审后发（ADMIN 仅管 USER，历史资料待核）；视觉 1.0（[设计](docs/design/frontend-v2.md)/[回滚](docs/operations/frontend-variants.md)）；妙替 R1～R7、妙压 T1～T4（[指南](docs/guides/features.md)）；星潮雷达与简报；[前端技能](docs/operations/ui-ux-skill.md) v2.15.0。
+- **常用入口**：[契约](AGENTS.md) / [README](README.md) / [设计](docs/design/blueprint-index.md) / [计划](docs/plans/README.md) / [验证](docs/operations/verification.md) / [审核](docs/operations/profile-moderation.md) / [数据库](docs/operations/database-bootstrap.md)。
 
-- 认证、Redis多端、唯一OWNER、成长、P0～P4/U1～U4完成。公共注册关闭，屋主可创建USER/ADMIN/INSIDER，TiDB约束已核对；ADMIN仅管理USER，资料先审后发，历史资料待人工核对。
-- 前端视觉基线 1.0（原方案二）：白底墨色、小窗/空间、“开门小屋”SVG及首页特色；方案一/选型历史保留。[设计](docs/design/frontend-v2.md) / [回滚](docs/operations/frontend-variants.md)。
-- 妙替R1～R7、妙压T1～T4完成：文本替换、词库/草稿/分享、图片体积/DPI/ZIP；[指南](docs/guides/features.md)，验收dev.10/11。T5换底/PDF/云预设已否决。
-- **本机有正式屋主**：不清空初始化，不在开发库跑 OWNER 夹具。凭据复用忽略的 `polyhouse/.idea/workspace.xml`，先 Inspect，勿复制/输出；Redis 启动检查非运行期监控。
-- **后端依赖版本继续冻结**，仅批准 Tomcat 升至 10.1.61，候选镜像本地已验。云模板未接入，3D/社交不在范围。服务器与公网操作须具体授权。
+## 历史索引（按需查阅，`docs/dev-log/v1.0-dev.<N>.md`）
 
-## 既有交付（详细验收见 dev.13）
-
-- 头像160×160 WebP入库、资料审核、工具入口/下载及PC/H5双端登录均已验，见[dev.13](docs/dev-log/v1.0-dev.13.md)和[审核运维](docs/operations/profile-moderation.md)。
-- 开户支持复制账号/遮罩一次性密码，详情只读，遗失走重置。备份/还原/重建、TiDB 21条CHECK及屋主记录见[数据库运维](docs/operations/database-bootstrap.md)。
-- Render登录/刷新、约一分钟唤醒、Pages及未验边界见[上线清单](docs/dev-log/launch-preparation.md)，具体唤醒请求未确认。
-
-## 历史索引（按需）
-
-| 阶段 | 已完成内容 |
+| 阶段 | 已完成摘要 |
 | --- | --- |
-| [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项高价值修复、全仓测试体系升级（A～D）与真实验收、测试红线并入 `AGENTS.md`（已合入本地 `dev`） |
-| [dev.20](docs/dev-log/v1.0-dev.20.md) | 个人空间官方卡面、本地自定义卡面与选图异常修复 |
-| [dev.19](docs/dev-log/v1.0-dev.19.md) | 登录态五页收边、星潮发布台样式统一、星潮阅读页降噪/全局语义色彩与简报大白话提示词（PR #18、#19、#21） |
-| [dev.18](docs/dev-log/v1.0-dev.18.md) | 星潮 2B 7 日风口简报 B1～B5、本机真实试跑与提示词微调（PR #16 合 `dev`） |
-| [dev.17](docs/dev-log/v1.0-dev.17.md) | 前端精修 F1～F5 与星潮 5:1 月夜全景横幅（PR #12～#15 合 `dev`） |
-| [dev.16](docs/dev-log/v1.0-dev.16.md) | 星潮内容演进（`radar-3` / 2A / `radar-4`）与首页妙替/妙压重绘、收尾区方案 A（PR #7～#11） |
-| [dev.15](docs/dev-log/v1.0-dev.15.md) | 星潮基础工程 G1～G6、外部预热、G4b 小样本对账与首版阅读/发布台（PR #6） |
-| [dev.14](docs/dev-log/v1.0-dev.14.md) | PR #4/#5合dev；[评估](docs/design/framework-assessment.md)保留分层、跳过F5；历史验收通过 |
-| [dev.13](docs/dev-log/v1.0-dev.13.md) | 头像入库、云端适配及 Render 与 GitHub Pages 发布验收 |
-| [dev.12](docs/dev-log/v1.0-dev.12.md) | 上线前质量、回归与合并 |
-| [dev.11](docs/dev-log/v1.0-dev.11.md) | 妙压 T1～T4、取消保护、隔离集成与 Git 同步 |
-| [dev.10](docs/dev-log/v1.0-dev.10.md) | 妙替 R1～R7、复审与同步 |
-| [dev.9](docs/dev-log/v1.0-dev.9.md) | 文档治理、主线整合与规范去重 |
-| [dev.8](docs/dev-log/v1.0-dev.8.md) | P4 资料审核、U1～U4 整理与验收，已收口 |
-| [dev.7](docs/dev-log/v1.0-dev.7.md) | P0～P3 账号安全/开户/管理 |
-| [dev.6](docs/dev-log/v1.0-dev.6.md) | 方案二与品牌、备份回滚 |
-| [dev.5](docs/dev-log/v1.0-dev.5.md) | 妙替、功能边界与有限容量/故障恢复 |
-| [dev.4](docs/dev-log/v1.0-dev.4.md) / [dev.3](docs/dev-log/v1.0-dev.3.md) | 头像、首页、个人区域与成长 |
-| [dev.2](docs/dev-log/v1.0-dev.2.md) / [dev.1](docs/dev-log/v1.0-dev.1.md) | 鉴权基础、成长与初始工程 |
+| [dev.22](docs/dev-log/v1.0-dev.22.md) | 架构解耦诊断与轻量优化 4 项（已推 `origin/dev`） |
+| [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项、测试升级 A～D、红线入 `AGENTS.md` |
+| [dev.20](docs/dev-log/v1.0-dev.20.md) | 个人空间官方/本地卡面与选图异常修复 |
+| [dev.19](docs/dev-log/v1.0-dev.19.md) / [dev.18](docs/dev-log/v1.0-dev.18.md) | 登录态收边、星潮降噪与大白话简报；星潮 2B 7 日简报 |
+| [dev.17](docs/dev-log/v1.0-dev.17.md) / [dev.16](docs/dev-log/v1.0-dev.16.md) / [dev.15](docs/dev-log/v1.0-dev.15.md) | 前端精修 F1～F5 与月夜横幅；星潮演进与首页重绘；星潮基础 G1～G6 |
+| [dev.14](docs/dev-log/v1.0-dev.14.md) / [dev.13](docs/dev-log/v1.0-dev.13.md) / [dev.12](docs/dev-log/v1.0-dev.12.md) | 框架评估与文档重塑；头像入库与云端验收；上线前质量收敛 |
+| [dev.11](docs/dev-log/v1.0-dev.11.md) / [dev.10](docs/dev-log/v1.0-dev.10.md) / [dev.9](docs/dev-log/v1.0-dev.9.md) | 妙压 T1～T4；妙替 R1～R7；文档治理与规范去重 |
+| dev.8 ～ dev.1 | P4 审核与 U1～U4（8）、账号管理（7）、视觉方案二（6）、妙替基础/成长/初始工程（5～1） |
 
-旧清单见[入口快照](docs/dev-log/entry-before-context-governance.md)；阶段号/提交/历史测试不等于发布。
+旧清单见[入口快照](docs/dev-log/entry-before-context-governance.md)；阶段号/提交/历史测试不等于正式发布。
