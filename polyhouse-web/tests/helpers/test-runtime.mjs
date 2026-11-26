@@ -10,9 +10,11 @@ export function dataUrl(code) {
 
 /**
  * 在内存中编译真实 TypeScript 源码为可导入的 data URL。
- * 调用方传入绝对 URL 与显式模块替换映射，不跨测试缓存可变状态。
+ * 支持递归编译未被 replacements 替换的同仓相对 .ts 依赖；缓存仅限单次调用，不跨测试共享可变状态。
  */
-export async function typeScriptModuleUrl(sourceUrl, replacements = {}) {
+export async function typeScriptModuleUrl(sourceUrl, replacements = {}, cache = new Map()) {
+  const key = sourceUrl instanceof URL ? sourceUrl.href : String(sourceUrl)
+  if (cache.has(key)) return cache.get(key)
   const source = await readFile(sourceUrl, 'utf8')
   let code = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -20,7 +22,16 @@ export async function typeScriptModuleUrl(sourceUrl, replacements = {}) {
   for (const [from, to] of Object.entries(replacements)) {
     code = code.replaceAll(from, to)
   }
-  return dataUrl(code)
+  const relativeImports = [...code.matchAll(/from\s+(['"])(\.\.?\/[^'"]+)\1/g)]
+  for (const match of relativeImports) {
+    const spec = match[2]
+    const targetUrl = new URL(spec.endsWith('.ts') ? spec : `${spec}.ts`, sourceUrl)
+    const compiledUrl = await typeScriptModuleUrl(targetUrl, replacements, cache)
+    code = code.replaceAll(match[0], `from '${compiledUrl}'`)
+  }
+  const result = dataUrl(code)
+  cache.set(key, result)
+  return result
 }
 
 /**
