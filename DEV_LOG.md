@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **进行中（dev.23）**：[上下文与 Token 降本瘦身及防膨胀治理](docs/plans/context-token-optimization.md)（批次 A：冷热分层归档、永久钉选区、体检脚本与宪法哨兵、静默脚本加固；批次 B：`AGENTS.md` 黄金基准白盒审定锁定）。
+- **已收口待合 `dev`（dev.23）**：[上下文与 Token 降本瘦身及防膨胀治理](docs/plans/context-token-optimization.md)全部两批次已完成（冷热归档、永久钉选区、体检脚本与宪法哨兵、静默脚本加固，以及经白盒审定独立锁定的 `AGENTS.md` 黄金基线）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

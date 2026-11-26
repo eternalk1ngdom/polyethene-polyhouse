@@ -6,7 +6,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [上下文与 Token 降本瘦身专项计划](context-token-optimization.md) | 实施中（批次 A 工程底座与防膨胀护栏落地；批次 B `AGENTS.md` 黄金基准待用户白盒审定锁定） | [dev.23](../dev-log/v1.0-dev.23.md) |
+| [上下文与 Token 降本瘦身专项计划](context-token-optimization.md) | 已完成并验证（分支 `chore/context-token-optimization`：批次 A 工程底座与护栏、批次 B `AGENTS.md` 黄金基线白盒锁定全部收口，待确认合入 `dev`） | [dev.23](../dev-log/v1.0-dev.23.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 本地 `dev` 已收口（阶段 A～C 与 D1/D2）；`#16` 远端 Pages 双作业首轮发布验收与推送待确认 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
