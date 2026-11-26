@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.24.md](docs/dev-log/v1.0-dev.24.md)。
+更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.25.md](docs/dev-log/v1.0-dev.25.md)。
 
 ## 当前焦点
 
-- **短期分支待合入（dev.24）**：[星潮异动、自动拉取与费用对账](docs/plans/startide-delta-automation-billing.md) 3 个闭环已在 `feat/startide-delta-automation-billing` 验收完成，待确认推送合入 `dev`；云端与 `015`/`017` 迁移另行授权。
+- **已立项待实施（dev.25）**：[星潮精修、缺陷根治与全局巡检](docs/plans/startide-dev24-polish-and-bugfix.md)（分支 `feat/startide-delta-automation-billing`，新窗口确认方案、修并发 429 等缺陷并真机巡检后合 `dev`）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
@@ -18,9 +18,9 @@
 
 | 阶段 | 已完成摘要 |
 | --- | --- |
+| [dev.24](docs/dev-log/v1.0-dev.24.md) | 星潮榜单新面孔与退榜区、发布台自动采集状态与 7 日简报自动生成、AI 双口径对账与 `017` 迁移（本地分支待修巡检） |
 | [dev.23](docs/dev-log/v1.0-dev.23.md) | 上下文瘦身、冷热归档与永久钉选区、静默脚本/体检哨兵与 `AGENTS.md` 黄金基线锁定（已合 `dev`） |
 | [dev.22](docs/dev-log/v1.0-dev.22.md) | 架构解耦 6 维只读诊断与轻量优化 4 项收口并同步 `origin/dev` |
 | [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项修复、测试体系升级 A～D、测试红线并入 `AGENTS.md` |
-| [dev.20](docs/dev-log/v1.0-dev.20.md) | 个人空间官方卡面、本地自定义卡面与选图异常修复 |
 
-更早阶段（dev.19 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。
+更早阶段（dev.20 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。

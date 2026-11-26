@@ -6,7 +6,8 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](startide-delta-automation-billing.md) | 3 个闭环已在 `feat/startide-delta-automation-billing` 全部实施并完成离线单测/构建验收，待确认推送与合入 `dev`；云端开启与 `015`/`017` 迁移待授权 | [dev.24](../dev-log/v1.0-dev.24.md) |
+| [星潮 dev.24 体验精修、缺陷根治与全局巡检](startide-dev24-polish-and-bugfix.md) | 待新会话确认方案并实施（根治发布台并发 429/待确认、重排日报标签与发布台卡片、真机全局巡检与 `017` 隔离库验收） | [dev.25](../dev-log/v1.0-dev.25.md) |
+| [星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](startide-delta-automation-billing.md) | 3 个闭环已在 `feat/startide-delta-automation-billing` 完成初版实现与离线验收；真机反馈问题与全局巡检已转入 `dev.25` | [dev.24](../dev-log/v1.0-dev.24.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 本地 `dev` 已收口（阶段 A～C 与 D1/D2）；`#16` 远端 Pages 双作业首轮发布验收与推送待确认 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
