@@ -14,11 +14,13 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.time.*;
+import java.util.List;
 import java.util.Set;
 
 /** 数据库单槽、执行代数及租约形成发布围栏；不在事务内抓取网页或请求AI。 */
 @Service
 public class TrendJobStore {
+    private static final int RECENT_JOBS_LIMIT = 5;
     private final TrendJobMapper mapper;
     private final TrendOwnerAuthorization owners;
     private final TrendArchiveService archive;
@@ -26,23 +28,33 @@ public class TrendJobStore {
     private final TrendJobProperties jobs;
     private final TrendAiProperties ai;
     private final TrendScheduleProperties schedule;
+    private final TrendBriefingProperties briefing;
     private final TrendScheduleMapper scheduled;
     private final TransactionTemplate transaction;
 
     /** 所有短事务使用同一管理器；发布加入当前事务，任务结果和公开版本同步提交。 */
     public TrendJobStore(TrendJobMapper mapper, TrendOwnerAuthorization owners, TrendArchiveService archive,
                          TrendProperties module, TrendJobProperties jobs, TrendAiProperties ai, PlatformTransactionManager manager) {
-        this(mapper, owners, archive, module, jobs, ai, manager, new TrendScheduleProperties(false, null, null), null);
+        this(mapper, owners, archive, module, jobs, ai, manager, new TrendScheduleProperties(false, null, null),
+                null, new TrendBriefingProperties(false));
     }
 
-    /** 生产追加定时配置与映射，旧内部验收构造仍保持定时关闭，无需重放旧迁移。 */
-    @Autowired
+    /** 兼容既有 9 参测试构造：自动简报默认关闭。 */
     public TrendJobStore(TrendJobMapper mapper, TrendOwnerAuthorization owners, TrendArchiveService archive,
                          TrendProperties module, TrendJobProperties jobs, TrendAiProperties ai, PlatformTransactionManager manager,
                          TrendScheduleProperties schedule, TrendScheduleMapper scheduled) {
+        this(mapper, owners, archive, module, jobs, ai, manager, schedule, scheduled, new TrendBriefingProperties(false));
+    }
+
+    /** 生产追加定时与自动简报配置，旧内部验收构造仍保持默认关闭，无需重放旧迁移。 */
+    @Autowired
+    public TrendJobStore(TrendJobMapper mapper, TrendOwnerAuthorization owners, TrendArchiveService archive,
+                         TrendProperties module, TrendJobProperties jobs, TrendAiProperties ai, PlatformTransactionManager manager,
+                         TrendScheduleProperties schedule, TrendScheduleMapper scheduled, TrendBriefingProperties briefing) {
         this.mapper = mapper; this.owners = owners; this.archive = archive;
         this.module = module; this.jobs = jobs; this.ai = ai;
         this.schedule = schedule; this.scheduled = scheduled;
+        this.briefing = briefing == null ? new TrendBriefingProperties(false) : briefing;
         transaction = new TransactionTemplate(manager); transaction.setTimeout(5);
     }
 
@@ -124,6 +136,78 @@ public class TrendJobStore {
             if (job == null) throw new BusinessException(ErrorCode.NOT_FOUND);
             return view(job);
         });
+    }
+
+    /**
+     * 屋主只读查询每日自动采集配置、今日受理状态及最近 5 条任务记录；
+     * 定时关闭时绝不访问 014 调度表，兼容仅迁移 010～013 的环境。
+     */
+    public TrendScheduleStatusVO scheduleStatus() {
+        return transaction.execute(status -> {
+            var now = mapper.now();
+            var local = now.toInstant(ZoneOffset.UTC).atZone(ZoneId.of("Asia/Shanghai"));
+            var today = local.toLocalDate();
+            boolean scheduleEnabled = module.enabled() && jobs.enabled() && schedule.ready() && scheduled != null;
+            boolean todayPublished = scheduled != null && scheduled.published(today);
+            var recentRecords = mapper.recent(RECENT_JOBS_LIMIT);
+            List<TrendJobVO> recentJobs = recentRecords == null ? List.of() : recentRecords.stream().map(this::view).toList();
+
+            String todayStatus = resolveTodayStatus(scheduleEnabled, todayPublished, today, local, recentRecords);
+            return new TrendScheduleStatusVO(
+                    module.enabled(),
+                    jobs.enabled(),
+                    scheduleEnabled,
+                    scheduleEnabled && briefing.autoEnabled(),
+                    ai.ready(),
+                    schedule.dailyTime(),
+                    schedule.retryDelayMinutes(),
+                    today,
+                    todayStatus,
+                    todayPublished,
+                    recentJobs);
+        });
+    }
+
+    private String resolveTodayStatus(boolean scheduleEnabled, boolean todayPublished, LocalDate today,
+                                      ZonedDateTime local, List<TrendJobRecord> recentRecords) {
+        if (!scheduleEnabled) return "DISABLED";
+        var attempts = scheduled.byDay(today);
+        List<TrendJobRecord> todayScheduledJobs = new java.util.ArrayList<>();
+        if (attempts != null) {
+            for (var attempt : attempts) {
+                var matched = findJob(recentRecords, attempt.jobId());
+                if (matched == null) matched = mapper.lockJob(attempt.jobId());
+                if (matched != null) todayScheduledJobs.add(matched);
+            }
+        }
+        if (todayScheduledJobs.stream().anyMatch(j -> "QUEUED".equals(j.state()) || "RUNNING".equals(j.state()))) {
+            return "RUNNING";
+        }
+        if (todayPublished) {
+            boolean publishedByAuto = todayScheduledJobs.stream().anyMatch(j -> j.reportId() != null);
+            return publishedByAuto ? "PUBLISHED_AUTO" : "PUBLISHED_MANUAL";
+        }
+        int nowMinute = local.getHour() * 60 + local.getMinute();
+        int startMinute = schedule.startMinute();
+        int retryEndMinute = startMinute + schedule.retryDelayMinutes() + 10;
+        if (attempts != null && attempts.size() == 1 && attempts.getFirst().attempt() == 0 && !todayScheduledJobs.isEmpty()) {
+            var firstJob = todayScheduledJobs.getFirst();
+            if ("FAILED".equals(firstJob.state()) && "COLLECTING".equals(firstJob.phase()) && nowMinute < retryEndMinute) {
+                return "RETRY_PENDING";
+            }
+        }
+        if (!todayScheduledJobs.isEmpty()) {
+            return "FAILED";
+        }
+        return nowMinute < startMinute + 10 ? "WAITING_WINDOW" : "MISSED_WINDOW";
+    }
+
+    private static TrendJobRecord findJob(List<TrendJobRecord> recent, String jobId) {
+        if (recent == null || jobId == null) return null;
+        for (var item : recent) {
+            if (jobId.equals(item.id())) return item;
+        }
+        return null;
     }
 
     /**

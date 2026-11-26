@@ -137,6 +137,22 @@
 
 系统任务不存JWT或用户ID，每次调用/发布前复核配置及受理映射。未启用定时的节点不领取系统队列，避免误中断其他合格节点的任务；所有节点停用后，未领取任务仍由原30分钟期限回收，运行中执行权也需通过配置校验。手动仍按最新屋主/凭据版本校验。打开配置及重启可能受理新任务或继续已受理任务，真实小样本联调先保持定时关闭。仅验证运行中线程及可控数据库时间，未等待真实06:30或部署云端。G3d已补本地[Render外部预热/限时保活](trend-render-wake.md)，只探测匿名应用就绪，不调用生成接口；默认关闭、尚未远端启用，不能替代实际云端保障验收。
 
+### 顺路自动生成 7 日风口简报与云端一键开启/回退清单
+
+每日自动日报发布成功后，可通过独立开关 `POLYHOUSE_TREND_BRIEFING_AUTO_ENABLED=true`（默认 `false`，对应 `polyhouse.trend.briefing.auto-enabled`）顺路刷新当期 7 日风口简报：仅对系统定时任务触发（屋主手动任务不顺路扣费），先检样本硬门槛（`coveredDays >= 3 && radar3ReadyCount >= 5`）再复用 `TrendBriefingLedger` 同指纹零费用防重与 10 元共享月预算红线；简报异常或预算不足均独立隔离，绝不影响已发布日报的任务成功状态。
+
+屋主可在发布台「每日自动采集状态」卡片（只读接口 `GET /api/manage/trend/jobs/schedule`，仅 `OWNER`、`Cache-Control: no-store`）随时核对开关、今日受理状态与最近 5 条任务记录。实际在云端启用或回退须另行明确授权，操作清单如下：
+
+| 平台 | 变量名 | 开启建议值 | 一键回退值 | 作用说明 |
+| --- | --- | --- | --- | --- |
+| Render（后端） | `POLYHOUSE_TREND_SCHEDULE_ENABLED` | `true` | `false` | 开启/关闭每日自动日报受理与补偿（需先完成 `014` 迁移） |
+| Render（后端） | `POLYHOUSE_TREND_DAILY_TIME` | `06:30` | `06:30` | 每日采集时间（北京时间 `HH:mm`，可按需调整） |
+| Render（后端） | `POLYHOUSE_TREND_BRIEFING_AUTO_ENABLED` | `true` | `false` | 每日自动日报成功后顺路刷新 7 日风口简报（需先完成 `015` 迁移且 AI 就绪） |
+| GitHub Variables | `TREND_WAKE_ENABLED` | `true` | `false` | 启用/停用 `.github/workflows/trend-wake.yml` 在窗口内唤醒 Render 免费实例 |
+| GitHub Variables | `TREND_WAKE_BASE_URL` | 生产后端根地址 | 保持或清空 | 仅探测匿名只读 `/api/trend/readiness`，不携带任何凭据或触发生成 |
+
+回退顺序：先将 Render `POLYHOUSE_TREND_BRIEFING_AUTO_ENABLED` 与 `POLYHOUSE_TREND_SCHEDULE_ENABLED` 设为 `false`，再将 GitHub Variable `TREND_WAKE_ENABLED` 设为 `false`；无需回滚数据库表或删除历史报告。
+
 ## 可选公开内容缓存
 
 默认`POLYHOUSE_TREND_CACHE_ENABLED=false`，完全走原数据库路径。开启后仅一个`polyhouse:trend:view:latest` hash，恰好id/stamp/payload三字段、900秒TTL、最多256KiB字符/1MiB UTF8字节；不存README、Key、用户、任务或费用。主要加速最新日报；历史也校验已发布身份但通常回源，日期列表不缓存，不按访客/日期增殖键。HTTP继续no-store，服务端Redis缓存不代表浏览器缓存开放。

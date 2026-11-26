@@ -98,10 +98,32 @@ public class TrendBriefingService {
         }
         String periodKey = request == null ? null : request.periodKey();
         var snapshot = reports.windowSnapshot(periodKey);
-        LocalDate anchorDate = snapshot.anchorDate();
-        var input = TrendBriefingInputBuilder.build(anchorDate, snapshot.reports());
+        var input = TrendBriefingInputBuilder.build(snapshot.anchorDate(), snapshot.reports());
         input.requireEligible();
+        return executeGenerate(input, true);
+    }
 
+    /**
+     * 每日自动日报发布成功后的系统顺路简报生成入口：复用同指纹零费用防重与 10 元共享月预算红线；
+     * 样本不足或配置未就绪时安全跳过，绝不抛出未受控异常影响已发布日报。
+     * @param anchorDate 刚发布日报的北京期号
+     * @return 结果状态码（GENERATED / REUSED / BUDGET_LIMIT / PENDING / INVALID_OUTPUT / UNAVAILABLE / SKIPPED_*）
+     */
+    @RequireRole(UserRoleEnum.INSIDER)
+    public String generateForScheduled(LocalDate anchorDate) {
+        if (!module.enabled() || !ai.ready()) {
+            return "SKIPPED_DISABLED";
+        }
+        var snapshot = reports.windowSnapshot(anchorDate == null ? null : anchorDate.toString());
+        var input = TrendBriefingInputBuilder.build(snapshot.anchorDate(), snapshot.reports());
+        if (!input.eligible()) {
+            return "SKIPPED_INELIGIBLE";
+        }
+        return executeGenerate(input, false).outcome();
+    }
+
+    private TrendBriefingGenerateVO executeGenerate(TrendBriefingInputBuilder.BriefingInput input, boolean checkCooldown) {
+        LocalDate anchorDate = input.stats().anchorDate();
         TrendBriefingRecord existing = readBriefing(anchorDate);
         if (isFreshReusable(existing, input)) {
             var content = safeCached(existing.payload());
@@ -116,7 +138,9 @@ public class TrendBriefingService {
             return new TrendBriefingGenerateVO("PENDING", false, toView(input, readBriefing(anchorDate)));
         }
         try {
-            enforceCooldown();
+            if (checkCooldown) {
+                enforceCooldown();
+            }
             var prepared = codec.prepare(input, ai.model(), ai.thinkingActive(), ai.thinkingEffort());
             String requestId = UUID.randomUUID().toString();
             String expectedFingerprint = existing == null ? null : existing.sourceFingerprint();

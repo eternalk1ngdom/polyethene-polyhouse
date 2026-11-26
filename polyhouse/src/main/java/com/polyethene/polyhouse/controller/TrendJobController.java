@@ -36,6 +36,12 @@ public class TrendJobController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(service.query(request, session.token())));
     }
 
+    /** 屋主只读查询每日自动采集开关、今日受理状态及最近 5 条任务记录；响应禁缓存。 */
+    @GetMapping("/schedule")
+    public ResponseEntity<Result<TrendScheduleStatusVO>> scheduleStatus(@Valid SessionTokenDTO session) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(service.scheduleStatus(session.token())));
+    }
+
     /** 冷却拒绝和入口限流保持相同的429/Retry-After/no-store语义。 */
     @ExceptionHandler(TrendJobThrottle.class)
     public ResponseEntity<Result<Void>> throttled(TrendJobThrottle failure) {

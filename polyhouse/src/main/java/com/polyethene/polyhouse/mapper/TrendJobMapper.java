@@ -4,6 +4,7 @@ import com.polyethene.polyhouse.model.entity.TrendJobRecord;
 import com.polyethene.polyhouse.model.entity.TrendJobSlot;
 import org.apache.ibatis.annotations.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 固定单槽是所有实例的执行权来源；网络调用期间不持有数据库锁。 */
 @Mapper
@@ -63,6 +64,11 @@ public interface TrendJobMapper {
     /** 固定阶段由服务端选择，不接受公网任意状态。 */
     @Update("UPDATE tool_trend_job SET phase=#{phase} WHERE id=#{id} AND state='RUNNING' AND generation=#{generation}")
     int phase(@Param("id") String id, @Param("generation") long generation, @Param("phase") String phase);
+
+    /** 按受理时间倒序返回最近若干条任务，limit 仅由服务端白名单传入，供屋主发布台速览。 */
+    @Select("SELECT * FROM tool_trend_job ORDER BY created_at DESC LIMIT #{limit}")
+    @Options(timeout = 3)
+    List<TrendJobRecord> recent(@Param("limit") int limit);
 
     /** 发布调用与终结使用同一短事务；失败时保留原阶段，便于判断是否触及外部AI。 */
     @Update("""

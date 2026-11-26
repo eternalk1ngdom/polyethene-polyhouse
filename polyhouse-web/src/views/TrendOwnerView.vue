@@ -4,6 +4,7 @@ import { ElButton, ElIcon } from 'element-plus'
 import { Back, Refresh } from '@element-plus/icons-vue'
 import { starTide } from '../config/starTide'
 import TrendTaskProgress from '../features/trend/TrendTaskProgress.vue'
+import TrendScheduleCard from '../features/trend/TrendScheduleCard.vue'
 import TrendBriefingControl from '../features/trend/TrendBriefingControl.vue'
 import TrendFeeLedger from '../features/trend/TrendFeeLedger.vue'
 import { useTrendOwner } from '../features/trend/useTrendOwner'
@@ -17,15 +18,18 @@ const {
   job,
   fees,
   briefing,
+  scheduleStatus,
   intent,
   knownJobId,
   jobBusy,
   feesBusy,
   briefingBusy,
+  scheduleBusy,
   briefingGenerating,
   jobError,
   feeError,
   briefingError,
+  scheduleError,
   submissionNote,
   briefingNote,
   active,
@@ -35,6 +39,7 @@ const {
   submit,
   refreshFees,
   refreshBriefing,
+  refreshScheduleStatus,
   generateBriefing,
 } = useTrendOwner()
 </script>
@@ -93,6 +98,12 @@ const {
           :error="jobError"
           :note="submissionNote"
           @refresh="refreshJob"
+        />
+        <TrendScheduleCard
+          :status="scheduleStatus"
+          :busy="scheduleBusy"
+          :error="scheduleError"
+          @refresh="refreshScheduleStatus"
         />
         <TrendBriefingControl
           :briefing="briefing"

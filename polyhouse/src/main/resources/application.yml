@@ -58,6 +58,9 @@ polyhouse:
       enabled: ${POLYHOUSE_TREND_SCHEDULE_ENABLED:false}
       daily-time: ${POLYHOUSE_TREND_DAILY_TIME:06:30}
       retry-delay-minutes: 45
+    # 每日自动日报发布成功后顺路自动生成 7 日风口简报（独立开关，默认关闭；复用同指纹防重与 10 元共享月预算）。
+    briefing:
+      auto-enabled: ${POLYHOUSE_TREND_BRIEFING_AUTO_ENABLED:false}
     # 单条公开内容缓存；数据库指针仍是权威，不用于防重或存放私有材料。
     cache:
       enabled: ${POLYHOUSE_TREND_CACHE_ENABLED:false}

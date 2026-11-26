@@ -36,17 +36,28 @@ class TrendJobControllerTest {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(role, false));
         when(jobs.submit(any(), any())).thenReturn(new TrendJobSubmissionVO(true, false, job()));
         when(jobs.query(any(), any())).thenReturn(job());
+        when(jobs.scheduleStatus(any())).thenReturn(scheduleStatus());
         mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().is(role == UserRoleEnum.OWNER ? 202 : 403));
         mvc.perform(get("/api/manage/trend/jobs").param("jobId", ID).header("Authorization", "Bearer fixture"))
                 .andExpect(status().is(role == UserRoleEnum.OWNER ? 200 : 403));
+        var scheduleResult = mvc.perform(get("/api/manage/trend/jobs/schedule").header("Authorization", "Bearer fixture"))
+                .andExpect(status().is(role == UserRoleEnum.OWNER ? 200 : 403));
+        if (role == UserRoleEnum.OWNER) {
+            scheduleResult.andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.data.todayStatus").value("WAITING_WINDOW"))
+                    .andExpect(jsonPath("$.data.recentJobs[0].trigger").value("MANUAL"));
+        }
         if (role != UserRoleEnum.OWNER) verifyNoInteractions(jobs);
     }
 
     @Test void anonymousAndInitialOwnerCannotReachBusiness() throws Exception {
         mvc.perform(post("/api/manage/trend/jobs").contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/manage/trend/jobs/schedule")).andExpect(status().isUnauthorized());
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, true));
         mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
+        mvc.perform(get("/api/manage/trend/jobs/schedule").header("Authorization", "Bearer fixture"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
         verifyNoInteractions(jobs);
     }
@@ -87,6 +98,10 @@ class TrendJobControllerTest {
 
     private static TrendJobVO job() {
         return new TrendJobVO(ID, "QUEUED", "QUEUED", false, TrendAiFixture.NOW, null, null, TrendAiFixture.NOW.plusSeconds(1800), null, null);
+    }
+    private static TrendScheduleStatusVO scheduleStatus() {
+        return new TrendScheduleStatusVO(true, true, true, true, true, "06:30", 45,
+                java.time.LocalDate.of(2026, 11, 26), "WAITING_WINDOW", false, java.util.List.of(job()));
     }
     private static UserProfileVO profile(UserRoleEnum role, boolean initial) {
         return new UserProfileVO("42", "fixture", "测试", null, role, "0", 1, "0", initial);

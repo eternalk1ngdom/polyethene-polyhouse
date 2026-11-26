@@ -3,6 +3,7 @@ package com.polyethene.polyhouse.mapper;
 import com.polyethene.polyhouse.model.entity.TrendScheduleRecord;
 import org.apache.ibatis.annotations.*;
 import java.time.LocalDate;
+import java.util.List;
 
 /** 以日期/尝试唯一键和任务单槽共同防重，不依靠某个进程的定时器内存状态。 */
 @Mapper
@@ -15,6 +16,11 @@ public interface TrendScheduleMapper {
     @Select("SELECT * FROM tool_trend_schedule WHERE job_id=#{id}")
     @Options(timeout = 3)
     TrendScheduleRecord byJob(@Param("id") String id);
+
+    /** 读取当日全部定时受理事实（首次/补偿），供屋主发布台推导今日自动采集状态。 */
+    @Select("SELECT * FROM tool_trend_schedule WHERE period_date=#{day} ORDER BY attempt ASC")
+    @Options(timeout = 3)
+    List<TrendScheduleRecord> byDay(@Param("day") LocalDate day);
 
     /** 已有当期公开内容时不自动创建另一版本，屋主明确手动更新仍可进行。 */
     @Select("SELECT EXISTS(SELECT 1 FROM tool_trend_daily WHERE period_date=#{day} AND report_id IS NOT NULL)")

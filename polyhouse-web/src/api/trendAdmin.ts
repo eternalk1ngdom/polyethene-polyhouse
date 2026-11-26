@@ -1,8 +1,46 @@
 import { apiRequest } from './index'
-import { choice, id, instant, list, object, optional, text, truth, whole } from './trendCodec'
+import {
+  choice,
+  date,
+  id,
+  instant,
+  list,
+  object,
+  optional,
+  text,
+  truth,
+  whole,
+} from './trendCodec'
 
 const jobStates = ['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'INTERRUPTED'] as const
 const jobPhases = ['QUEUED', 'COLLECTING', 'ANALYZING', 'PUBLISHING', 'DONE'] as const
+const scheduleTodayStatuses = [
+  'DISABLED',
+  'WAITING_WINDOW',
+  'RUNNING',
+  'PUBLISHED_AUTO',
+  'PUBLISHED_MANUAL',
+  'RETRY_PENDING',
+  'FAILED',
+  'MISSED_WINDOW',
+] as const
+
+export type TrendScheduleTodayStatus = (typeof scheduleTodayStatuses)[number]
+
+/** 屋主发布台「每日自动采集状态」只读视图。 */
+export interface TrendScheduleStatus {
+  moduleEnabled: boolean
+  jobsEnabled: boolean
+  scheduleEnabled: boolean
+  briefingAutoEnabled: boolean
+  aiReady: boolean
+  dailyTime: string
+  retryDelayMinutes: number
+  todayDate: string
+  todayStatus: TrendScheduleTodayStatus
+  todayPublished: boolean
+  recentJobs: TrendJob[]
+}
 
 export interface TrendJob {
   jobId: string
@@ -151,6 +189,23 @@ export function getTrendJob(token: string, jobId: string, signal?: AbortSignal):
   return apiRequest({ url: '/manage/trend/jobs', params: { jobId }, signal }, job, token)
 }
 
+function scheduleStatus(value: unknown): TrendScheduleStatus {
+  const row = object(value)
+  return {
+    moduleEnabled: truth(row.moduleEnabled),
+    jobsEnabled: truth(row.jobsEnabled),
+    scheduleEnabled: truth(row.scheduleEnabled),
+    briefingAutoEnabled: truth(row.briefingAutoEnabled),
+    aiReady: truth(row.aiReady),
+    dailyTime: text(row.dailyTime),
+    retryDelayMinutes: whole(row.retryDelayMinutes),
+    todayDate: date(row.todayDate),
+    todayStatus: choice(row.todayStatus, scheduleTodayStatuses),
+    todayPublished: truth(row.todayPublished),
+    recentJobs: list(row.recentJobs, 5, job),
+  }
+}
+
 /** 费用面板使用本地账本，读取本身不会支付费用。 */
 export function getTrendFees(
   token: string,
@@ -158,4 +213,12 @@ export function getTrendFees(
   signal?: AbortSignal,
 ): Promise<TrendFees> {
   return apiRequest({ url: '/manage/trend/fees', params: { after }, signal }, fees, token)
+}
+
+/** 屋主只读查询每日自动采集开关、今日受理状态与最近 5 条任务记录。 */
+export function getTrendScheduleStatus(
+  token: string,
+  signal?: AbortSignal,
+): Promise<TrendScheduleStatus> {
+  return apiRequest({ url: '/manage/trend/jobs/schedule', signal }, scheduleStatus, token)
 }

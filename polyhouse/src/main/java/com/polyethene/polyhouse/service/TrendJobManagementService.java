@@ -48,6 +48,13 @@ public class TrendJobManagementService {
         } catch (DataAccessException | TransactionException failure) { throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE); }
     }
 
+    /** 屋主只读查询每日自动采集配置、今日受理状态与最近 5 条任务记录。 */
+    public TrendScheduleStatusVO scheduleStatus(String token) {
+        try {
+            return transaction.execute(status -> { owners.lockSession(token); return store.scheduleStatus(); });
+        } catch (DataAccessException | TransactionException failure) { throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE); }
+    }
+
     private void validate(Object request) {
         if (request == null || !validator.validate(request).isEmpty()) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
