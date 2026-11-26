@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-26（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.23.md](docs/dev-log/v1.0-dev.23.md)。
+更新时间：2026-11-26（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.24.md](docs/dev-log/v1.0-dev.24.md)。
 
 ## 当前焦点
 
-- **已收口待合 `dev`（dev.23）**：[上下文与 Token 降本瘦身及防膨胀治理](docs/plans/context-token-optimization.md)全部两批次已完成（冷热归档、永久钉选区、体检脚本与宪法哨兵、静默脚本加固，以及经白盒审定独立锁定的 `AGENTS.md` 黄金基线）。
+- **已立项待实施（dev.24）**：[星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](docs/plans/startide-delta-automation-billing.md)（3 个闭环设计口径均已获用户批准，待新会话从 `dev` 开短期分支实施）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
@@ -18,9 +18,9 @@
 
 | 阶段 | 已完成摘要 |
 | --- | --- |
+| [dev.23](docs/dev-log/v1.0-dev.23.md) | 上下文瘦身、冷热归档与永久钉选区、静默脚本/体检哨兵与 `AGENTS.md` 黄金基线锁定（已合 `dev`） |
 | [dev.22](docs/dev-log/v1.0-dev.22.md) | 架构解耦 6 维只读诊断与轻量优化 4 项收口并同步 `origin/dev` |
 | [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项修复、测试体系升级 A～D、测试红线并入 `AGENTS.md` |
 | [dev.20](docs/dev-log/v1.0-dev.20.md) | 个人空间官方卡面、本地自定义卡面与选图异常修复 |
-| [dev.19](docs/dev-log/v1.0-dev.19.md) | 登录态 5 页收边、星潮发布台统一、阅读页降噪与大白话简报 |
 
-更早阶段（dev.18 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。
+更早阶段（dev.19 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。
