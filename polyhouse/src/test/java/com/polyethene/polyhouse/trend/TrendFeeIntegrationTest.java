@@ -34,11 +34,13 @@ class TrendFeeIntegrationTest {
     private static JdbcTemplate jdbc;
     private static DataSourceTransactionManager manager;
     private static TrendAiMapper aiMapper;
+    private static TrendBriefingMapper briefingMapper;
     private static TrendFeeMapper feeMapper;
     private static TrendJobMapper jobMapper;
     private static TrendArchiveService archive;
     private static ValidatorFactory validation;
     private TrendAiLedger ledger;
+    private TrendBriefingLedger briefingLedger;
     private TrendJobStore jobs;
     private TrendFeeService fees;
     private TrendOwnerAuthorization owners;
@@ -49,10 +51,13 @@ class TrendFeeIntegrationTest {
         jdbc = new JdbcTemplate(source); manager = new DataSourceTransactionManager(source);
         var configuration = new Configuration();
         configuration.setMapUnderscoreToCamelCase(true); configuration.setArgNameBasedConstructorAutoMapping(true);
-        for (var type : List.of(TrendAiMapper.class, TrendFeeMapper.class, TrendJobMapper.class, TrendMapper.class)) configuration.addMapper(type);
+        for (var type : List.of(TrendAiMapper.class, TrendBriefingMapper.class, TrendFeeMapper.class, TrendJobMapper.class, TrendMapper.class)) {
+            configuration.addMapper(type);
+        }
         var factory = new SqlSessionFactoryBean(); factory.setDataSource(source); factory.setConfiguration(configuration);
         var session = new SqlSessionTemplate(Objects.requireNonNull(factory.getObject()));
-        aiMapper = session.getMapper(TrendAiMapper.class); feeMapper = session.getMapper(TrendFeeMapper.class); jobMapper = session.getMapper(TrendJobMapper.class);
+        aiMapper = session.getMapper(TrendAiMapper.class); briefingMapper = session.getMapper(TrendBriefingMapper.class);
+        feeMapper = session.getMapper(TrendFeeMapper.class); jobMapper = session.getMapper(TrendJobMapper.class);
         var reports = session.getMapper(TrendMapper.class);
         archive = new TrendArchiveService(reports, new TrendReportService(reports, TrendFixture.json(), new TrendProperties(true, null)), TrendFixture.json(), manager);
         validation = Validation.buildDefaultValidatorFactory();
@@ -69,6 +74,8 @@ class TrendFeeIntegrationTest {
         when(owners.lockSession("fixture")).thenReturn(TrendFixture.owner());
         when(owners.lockActor(42, 0)).thenReturn(TrendFixture.owner());
         ledger = new TrendAiLedger(aiMapper, TrendAiFixture.settings(), Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC), manager);
+        briefingLedger = new TrendBriefingLedger(briefingMapper, aiMapper, TrendAiFixture.settings(),
+                Clock.fixed(TrendAiFixture.NOW, ZoneOffset.UTC), manager);
         jobs = new TrendJobStore(jobMapper, owners, archive, new TrendProperties(true, null), new TrendJobProperties(true), TrendAiFixture.settings(), manager);
         fees = service(TrendAiFixture.settings());
     }
@@ -235,6 +242,77 @@ class TrendFeeIntegrationTest {
         assertThat(feeMapper.insert(backup)).isEqualTo(1);
         assertThat(fees.resolve(request, "fixture").replayed()).isTrue();
         assertThat(fees.query(new TrendFeeQueryDTO("2026-11", null, null), "fixture").conservativeMicros()).isEqualTo(2800);
+    }
+
+    @Test void migration017DegradesSafelyBeforeApplyComputesDualBookAfterApplyAndRollsBackCleanly() throws Exception {
+        // 1. 017 未迁移前：单仓与简报带缓存命中拆分结算不得污染主事务，usage 安全降级为 null。
+        String preRepo = UUID.randomUUID().toString();
+        assertThat(ledger.reserve(preRepo, 10L, TrendAiFixture.SHA, 1000, 100, null).status()).isEqualTo("GRANTED");
+        ledger.settle(preRepo, 500, 100, 300, 200, null);
+
+        LocalDate anchor1 = LocalDate.of(2026, 11, 20);
+        String preBrief = UUID.randomUUID().toString();
+        assertThat(briefingLedger.reserve(preBrief, anchor1, "1".repeat(64), 1000, 100, null).status()).isEqualTo("GRANTED");
+        briefingLedger.settle(preBrief, 400, 50, 200, 200, new TrendBriefingLedger.SettlementPayload(
+                anchor1.minusDays(6), anchor1, 4, "LIMITED", "{\"headline\":\"未迁移017样本\"}", TrendAiFixture.NOW));
+
+        // 500*2 + 100*8 = 1800; 400*2 + 50*8 = 1200; 合计 3000 微元。
+        assertThat(number("used_micros", "2026-11")).isEqualTo(3000L);
+        assertThat(number("held_micros", "2026-11")).isZero();
+        var before017 = fees.query(new TrendFeeQueryDTO("2026-11", null, null), "fixture");
+        assertThat(before017.accountedMicros()).isEqualTo(3000L);
+        assertThat(before017.usage()).isNull();
+
+        // 2. 执行 017 正向迁移，验证 CHECK 约束、单仓+简报+旧行双口径汇总，并在 finally 逆序回退以保持同库基线。
+        try (var connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
+            migrate(connection, "017_trend_ai_cache_tokens.sql");
+        }
+        try {
+            assertThatThrownBy(() -> jdbc.update(
+                    "UPDATE tool_trend_ai_request SET cache_hit_tokens=-1 WHERE id=?", preRepo))
+                    .isInstanceOf(org.springframework.dao.DataAccessException.class);
+            assertThatThrownBy(() -> jdbc.update(
+                    "UPDATE tool_trend_briefing_request SET estimated_actual_micros=-1 WHERE id=?", preBrief))
+                    .isInstanceOf(org.springframework.dao.DataAccessException.class);
+
+            // TrendAiFixture.NOW = 2026-11-16T00:00:00Z = 北京时间 2026-11-16 08:00（周一 00:30～08:30 非高峰 5 折，缓存命中 0.02x）：
+            // 单仓新结算：1000 输入（700 命中 + 300 未命中）+ 200 输出；保守=1000*2+200*8=3600；
+            // 估算实扣=ceil(700*2*0.02*0.5 + 300*2*0.5 + 200*8*0.5)=14+300+800=1114。
+            String postRepo = UUID.randomUUID().toString();
+            assertThat(ledger.reserve(postRepo, 11L, TrendAiFixture.SHA, 1200, 300, null).status()).isEqualTo("GRANTED");
+            ledger.settle(postRepo, 1000, 200, 700, 300, null);
+
+            // 简报新结算：800 输入（600 命中 + 200 未命中）+ 100 输出；保守=800*2+100*8=2400；
+            // 估算实扣=ceil(600*2*0.02*0.5 + 200*2*0.5 + 100*8*0.5)=12+200+400=612。
+            LocalDate anchor2 = LocalDate.of(2026, 11, 21);
+            String postBrief = UUID.randomUUID().toString();
+            assertThat(briefingLedger.reserve(postBrief, anchor2, "2".repeat(64), 1000, 200, null).status()).isEqualTo("GRANTED");
+            briefingLedger.settle(postBrief, 800, 100, 600, 200, new TrendBriefingLedger.SettlementPayload(
+                    anchor2.minusDays(6), anchor2, 5, "SUFFICIENT", "{\"headline\":\"迁移017后样本\"}", TrendAiFixture.NOW));
+
+            var after017 = fees.query(new TrendFeeQueryDTO("2026-11", null, null), "fixture");
+            // 保守硬闸门总计 = 3000 + 3600 + 2400 = 9000 微元。
+            assertThat(after017.accountedMicros()).isEqualTo(9000L);
+            assertThat(after017.usage()).isNotNull();
+            assertThat(after017.usage().settledRequests()).isEqualTo(4L);
+            assertThat(after017.usage().promptTokens()).isEqualTo(500L + 400L + 1000L + 800L);
+            assertThat(after017.usage().cacheHitTokens()).isEqualTo(700L + 600L);
+            // 旧行 NULL 命中列回退为全部未命中：500 + 400 + 300 + 200 = 1400。
+            assertThat(after017.usage().cacheMissTokens()).isEqualTo(1400L);
+            assertThat(after017.usage().completionTokens()).isEqualTo(100L + 50L + 200L + 100L);
+            // 预计平台实扣 = 旧行回退保守额 3000 + 新行空闲 5 折估算 1114 + 612 = 4726 微元。
+            assertThat(after017.usage().estimatedActualMicros()).isEqualTo(4726L);
+        } finally {
+            // 3. 逆序回退 017：先删 CHECK 约束再删三列，确认既有主费用与请求事实完整无损且降级回 usage=null。
+            jdbc.execute("ALTER TABLE tool_trend_briefing_request DROP CHECK chk_trend_briefing_req_cache_tokens, "
+                    + "DROP COLUMN estimated_actual_micros, DROP COLUMN cache_miss_tokens, DROP COLUMN cache_hit_tokens");
+            jdbc.execute("ALTER TABLE tool_trend_ai_request DROP CHECK chk_trend_ai_req_cache_tokens, "
+                    + "DROP COLUMN estimated_actual_micros, DROP COLUMN cache_miss_tokens, DROP COLUMN cache_hit_tokens");
+        }
+
+        var afterRollback = fees.query(new TrendFeeQueryDTO("2026-11", null, null), "fixture");
+        assertThat(afterRollback.accountedMicros()).isEqualTo(9000L);
+        assertThat(afterRollback.usage()).isNull();
     }
 
     private TrendFeeService service(TrendAiProperties settings) {

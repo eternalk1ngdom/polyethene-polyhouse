@@ -222,6 +222,8 @@ class TrendAutomationTest {
         assertThat(status.todayStatus()).isEqualTo(expectedStatus);
         assertThat(status.briefingAutoEnabled()).isEqualTo(scheduleEnabled);
         assertThat(status.recentJobs()).hasSize(recentJobs.size());
+        assertThat(status.recentJobs()).allSatisfy(item -> assertThat(item.summary()).isNull());
+        verifyNoInteractions(archive);
         if (!scheduleEnabled) {
             verify(scheduleMapper, never()).byDay(any());
         }

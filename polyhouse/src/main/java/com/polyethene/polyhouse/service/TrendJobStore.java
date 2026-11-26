@@ -150,7 +150,9 @@ public class TrendJobStore {
             boolean scheduleEnabled = module.enabled() && jobs.enabled() && schedule.ready() && scheduled != null;
             boolean todayPublished = scheduled != null && scheduled.published(today);
             var recentRecords = mapper.recent(RECENT_JOBS_LIMIT);
-            List<TrendJobVO> recentJobs = recentRecords == null ? List.of() : recentRecords.stream().map(this::view).toList();
+            // 最近 5 条任务列表只展示触发来源、状态与时间，避免无谓读取并反序列化 5 份完整日报 JSON。
+            List<TrendJobVO> recentJobs = recentRecords == null ? List.of()
+                    : recentRecords.stream().map(record -> view(record, false)).toList();
 
             String todayStatus = resolveTodayStatus(scheduleEnabled, todayPublished, today, local, recentRecords);
             return new TrendScheduleStatusVO(
@@ -327,9 +329,12 @@ public class TrendJobStore {
         if (!module.enabled() || !jobs.enabled()) throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "技术雷达任务尚未启用");
     }
     private TrendJobVO view(TrendJobRecord job) {
+        return view(job, true);
+    }
+    private TrendJobVO view(TrendJobRecord job, boolean includeSummary) {
         return new TrendJobVO(job.id(), job.state(), job.phase(), job.aiRequested(), instant(job.createdAt()), instant(job.startedAt()),
                 instant(job.completedAt()), instant(job.deadline()), job.reportId(), job.reason(), job.actorId() == null ? "SCHEDULED" : "MANUAL",
-                job.reportId() == null ? null : archive.summary(job.reportId()));
+                includeSummary && job.reportId() != null ? archive.summary(job.reportId()) : null);
     }
     private static Instant instant(LocalDateTime value) { return value == null ? null : value.toInstant(ZoneOffset.UTC); }
     private static LocalDateTime earlier(LocalDateTime a, LocalDateTime b) { return a.isBefore(b) ? a : b; }

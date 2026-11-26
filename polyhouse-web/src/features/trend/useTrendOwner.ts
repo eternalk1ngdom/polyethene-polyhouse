@@ -20,7 +20,12 @@ interface OwnerSession {
   token: string
   storageKey: string
   requests: AbortController
+  inFlightManaged: number
+  managedQueue: Array<() => void>
 }
+
+/** 与后端 /api/manage/trend/* 并发预算（并发=2）对齐，杜绝发布台多卡并发撞穿限流。 */
+const MAX_MANAGED_CONCURRENCY = 2
 
 /** 丢失提交响应时保留原编号，只有屋主再次点击才发送同一请求。 */
 export function useTrendOwner() {
@@ -58,8 +63,14 @@ export function useTrendOwner() {
   let briefingUnblock: ReturnType<typeof setTimeout> | undefined
 
   function reset(): void {
-    session?.requests.abort()
+    const previous = session
     session = undefined
+    previous?.requests.abort()
+    if (previous) {
+      // 立刻唤醒排队中的管理调用，使其感知会话已失效并安静退出，避免挂起微任务。
+      const waiters = previous.managedQueue.splice(0)
+      for (const wake of waiters) wake()
+    }
     clearTimeout(poll)
     clearTimeout(unblock)
     clearTimeout(briefingUnblock)
@@ -86,6 +97,28 @@ export function useTrendOwner() {
     scheduleWaitUntil.value = 0
     waiting.value = false
     briefingWaiting.value = false
+  }
+
+  /**
+   * 统一排程所有走 /api/manage/trend/* 的请求，保证同一会话内同时在途严格 ≤ 2，
+   * 不放宽后端安全限流预算而从源头根治并发 429。
+   */
+  async function runManaged<T>(current: OwnerSession, task: () => Promise<T>): Promise<T | undefined> {
+    if (session !== current) return undefined
+    if (current.inFlightManaged >= MAX_MANAGED_CONCURRENCY) {
+      await new Promise<void>((resolve) => {
+        current.managedQueue.push(resolve)
+      })
+    }
+    if (session !== current) return undefined
+    current.inFlightManaged += 1
+    try {
+      return await task()
+    } finally {
+      current.inFlightManaged -= 1
+      const next = current.managedQueue.shift()
+      next?.()
+    }
   }
 
   function remember(current: OwnerSession): void {
@@ -130,7 +163,16 @@ export function useTrendOwner() {
     jobError.value = '请求较频繁或更新正在冷却，请稍后重试。'
   }
 
-  async function refreshJob(): Promise<void> {
+  /** 任务结束后串行联动刷新费用、自动采集状态与公开 7 日简报，确保各卡片即时一致。 */
+  async function refreshAfterJobFinished(current: OwnerSession): Promise<void> {
+    void refreshBriefing()
+    await refreshFees()
+    if (session !== current) return
+    await refreshScheduleStatus()
+  }
+
+  async function refreshJob(options?: { cascade?: boolean }): Promise<void> {
+    const cascade = options?.cascade ?? true
     const current = session
     const target = intent.value ?? knownJobId.value
     if (!current || !target || jobBusy.value || Date.now() < jobWaitUntil.value) return
@@ -138,15 +180,17 @@ export function useTrendOwner() {
     jobBusy.value = true
     jobError.value = ''
     try {
-      const result = await getTrendJob(current.token, target, current.requests.signal)
-      if (session !== current) return
+      const result = await runManaged(current, () =>
+        getTrendJob(current.token, target, current.requests.signal),
+      )
+      if (!result || session !== current) return
       const wasActive = active.value
       job.value = result
       knownJobId.value = result.jobId
       if (intent.value === target) intent.value = null
       remember(current)
       if (active.value) schedulePoll()
-      else if (wasActive || !fees.value) void refreshFees()
+      else if (cascade && (wasActive || !fees.value)) void refreshAfterJobFinished(current)
     } catch (failure: unknown) {
       if (session !== current) return
       if (failure instanceof ApiError && failure.status === 429) {
@@ -172,6 +216,7 @@ export function useTrendOwner() {
       jobError.value = '请在安全连接下提交更新。'
       return
     }
+    const hadPriorIntent = intent.value !== null
     const requestId = intent.value ?? globalThis.crypto.randomUUID()
     intent.value = requestId
     remember(current)
@@ -179,8 +224,10 @@ export function useTrendOwner() {
     jobError.value = ''
     submissionNote.value = ''
     try {
-      const result = await submitTrendJob(current.token, requestId, current.requests.signal)
-      if (session !== current) return
+      const result = await runManaged(current, () =>
+        submitTrendJob(current.token, requestId, current.requests.signal),
+      )
+      if (!result || session !== current) return
       job.value = result.job
       knownJobId.value = result.job.jobId
       intent.value = null
@@ -191,11 +238,27 @@ export function useTrendOwner() {
           ? '已查到同一次更新。'
           : '已有任务在执行，正在查看该任务。'
       if (active.value) schedulePoll()
-      else void refreshFees()
+      else void refreshAfterJobFinished(current)
     } catch (failure: unknown) {
       if (session !== current) return
-      if (failure instanceof ApiError && failure.status === 429) onJobRateLimit(failure)
-      else jobError.value = '未收到更新确认。可以先重查任务，也可以用原编号继续。'
+      // 明确被限流/参数/权限拒绝的新请求必然未被服务端受理，须立即清理 intent 避免残留「本次更新待确认」。
+      const definiteRejection =
+        failure instanceof ApiError &&
+        (failure.status === 429 ||
+          failure.status === 400 ||
+          failure.status === 401 ||
+          failure.status === 403)
+      if (!hadPriorIntent && definiteRejection) {
+        intent.value = null
+        remember(current)
+      }
+      if (failure instanceof ApiError && failure.status === 429) {
+        onJobRateLimit(failure)
+      } else if (definiteRejection && failure instanceof ApiError) {
+        jobError.value = failure.message || '当前无法发起本次更新，请刷新后重试。'
+      } else {
+        jobError.value = '未收到更新确认。可以先重查任务，也可以用原编号继续。'
+      }
     } finally {
       if (session === current) jobBusy.value = false
     }
@@ -209,12 +272,14 @@ export function useTrendOwner() {
     feesBusy.value = true
     feeError.value = ''
     try {
-      const result = await getTrendFees(
-        current.token,
-        append ? (previous?.nextAfter ?? undefined) : undefined,
-        current.requests.signal,
+      const result = await runManaged(current, () =>
+        getTrendFees(
+          current.token,
+          append ? (previous?.nextAfter ?? undefined) : undefined,
+          current.requests.signal,
+        ),
       )
-      if (session !== current) return
+      if (!result || session !== current) return
       if (append && previous && previous.month === result.month) {
         result.pending = [...previous.pending, ...result.pending]
       } else if (append) {
@@ -281,12 +346,14 @@ export function useTrendOwner() {
     briefingError.value = ''
     briefingNote.value = ''
     try {
-      const result = await generateTrendBriefing(
-        current.token,
-        briefing.value?.anchorDate,
-        current.requests.signal,
+      const result = await runManaged(current, () =>
+        generateTrendBriefing(
+          current.token,
+          briefing.value?.anchorDate,
+          current.requests.signal,
+        ),
       )
-      if (session !== current) return
+      if (!result || session !== current) return
       briefing.value = result.briefing
       briefingNote.value = briefingOutcomeNote(result.outcome)
       if (result.charged) void refreshFees()
@@ -311,8 +378,10 @@ export function useTrendOwner() {
     scheduleBusy.value = true
     scheduleError.value = ''
     try {
-      const result = await getTrendScheduleStatus(current.token, current.requests.signal)
-      if (session !== current) return
+      const result = await runManaged(current, () =>
+        getTrendScheduleStatus(current.token, current.requests.signal),
+      )
+      if (!result || session !== current) return
       scheduleStatus.value = result
     } catch (failure: unknown) {
       if (session !== current) return
@@ -325,6 +394,21 @@ export function useTrendOwner() {
     }
   }
 
+  /**
+   * 登录初始化编排：公开只读简报可并行加载，3 个管理读接口严格串行（并发=1），
+   * 为屋主在进页瞬间点击「更新本期日报」或「生成简报」预留 1 个实时并发槽位。
+   */
+  async function hydrate(current: OwnerSession): Promise<void> {
+    void refreshBriefing()
+    if (intent.value || knownJobId.value) {
+      await refreshJob({ cascade: false })
+    }
+    if (session !== current) return
+    await refreshFees()
+    if (session !== current) return
+    await refreshScheduleStatus()
+  }
+
   watch(
     [allowed, () => user.token, () => user.user?.id],
     ([canRead, token, ownerId]) => {
@@ -334,12 +418,11 @@ export function useTrendOwner() {
         token,
         storageKey: `polyhouse:star-tide:${ownerId}`,
         requests: new AbortController(),
+        inFlightManaged: 0,
+        managedQueue: [],
       }
       restore(session)
-      void refreshFees()
-      void refreshBriefing()
-      void refreshScheduleStatus()
-      if (intent.value || knownJobId.value) void refreshJob()
+      void hydrate(session)
     },
     { immediate: true },
   )
