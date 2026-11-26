@@ -10,7 +10,7 @@ import com.polyethene.polyhouse.model.dto.SessionTokenDTO;
 import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
-import com.polyethene.polyhouse.service.AvatarService;
+import com.polyethene.polyhouse.service.ProfileModerationService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,18 +20,18 @@ import org.springframework.web.bind.annotation.RestController;
 /** 头像属于用户已明确要求向普通账号开放的基本资料能力，处理限制为单张 160 像素小图。 */
 @RestController
 public class AvatarController {
-    private final AvatarService service;
+    private final ProfileModerationService moderation;
 
-    /** 控制器不处理文件路径、图片解码或数据库事务。 */
-    public AvatarController(AvatarService service) {
-        this.service = service;
+    /** 控制器不处理文件路径、图片解码或数据库事务，直接交由资料审核服务统一落库。 */
+    public AvatarController(ProfileModerationService moderation) {
+        this.moderation = moderation;
     }
 
     /** 使用 Bearer 身份提交自己的头像审核申请；裁剪在客户端完成，不开放付费处理或任意大小的服务器图像工具。 */
     @RequireRole(UserRoleEnum.USER)
     @PostMapping(value = "/api/auth/avatar/submissions", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Result<ProfileSubmissionVO>> upload(@Valid @RequestBody AvatarSubmitDTO request, @Valid SessionTokenDTO session) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(service.upload(request, session.token())));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(moderation.submitAvatar(request, session.token())));
     }
     /** 关闭旧的立即发布地址；新旧前后端混用也不能因响应解析发生在写入之后而绕过审核。 */
     @RequireRole(UserRoleEnum.USER)

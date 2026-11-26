@@ -8,7 +8,7 @@ import com.polyethene.polyhouse.model.dto.AvatarSubmitDTO;
 import com.polyethene.polyhouse.model.vo.ProfileSubmissionVO;
 import com.polyethene.polyhouse.model.vo.UserProfileVO;
 import com.polyethene.polyhouse.service.AuthService;
-import com.polyethene.polyhouse.service.AvatarService;
+import com.polyethene.polyhouse.service.ProfileModerationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +35,7 @@ class AvatarWebMvcTest {
     private static final String ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     private static final LocalDateTime FIXED_TIME = LocalDateTime.of(2026, 11, 25, 10, 0);
     @Autowired private MockMvc mvc;
-    @MockBean private AvatarService avatars;
+    @MockBean private ProfileModerationService moderation;
     @MockBean private AuthService auth;
 
     @AfterEach
@@ -47,7 +47,7 @@ class AvatarWebMvcTest {
     void acceptsJsonWithoutExposingPendingContent() throws Exception {
         authenticate();
         var dto = new AvatarSubmitDTO("UklGRg==", ID);
-        when(avatars.upload(dto, "fixture")).thenReturn(new ProfileSubmissionVO(
+        when(moderation.submitAvatar(dto, "fixture")).thenReturn(new ProfileSubmissionVO(
             "123","42","fixture",ProfileField.AVATAR,ProfileReviewStatus.PENDING,"1",ID,
             null,null,FIXED_TIME,FIXED_TIME.plusDays(7),4));
         mvc.perform(post(PATH).contentType("application/json").content(body(dto.avatarBase64()))
@@ -56,7 +56,7 @@ class AvatarWebMvcTest {
             .andExpect(jsonPath("$.data.status").value("PENDING"))
             .andExpect(jsonPath("$.data.avatarBase64").doesNotExist())
             .andExpect(jsonPath("$.data.remainingToday").value(4));
-        verify(avatars).upload(dto,"fixture");
+        verify(moderation).submitAvatar(dto,"fixture");
     }
 
     @Test
@@ -68,7 +68,7 @@ class AvatarWebMvcTest {
                 .header("Authorization","Bearer fixture")).andExpect(status().isBadRequest());
         mvc.perform(multipart(PATH).header("Authorization","Bearer fixture"))
             .andExpect(status().isUnsupportedMediaType());
-        verifyNoInteractions(avatars);
+        verifyNoInteractions(moderation);
     }
 
     @Test
@@ -77,7 +77,7 @@ class AvatarWebMvcTest {
         mvc.perform(post("/api/auth/avatar").header("Authorization","Bearer fixture"))
             .andExpect(status().isConflict());
         mvc.perform(get("/api/media/avatars/"+"a".repeat(32)+".jpg")).andExpect(status().isNotFound());
-        verifyNoInteractions(avatars);
+        verifyNoInteractions(moderation);
     }
 
     private void authenticate() {

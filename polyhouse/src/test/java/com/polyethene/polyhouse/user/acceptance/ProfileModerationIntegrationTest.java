@@ -13,7 +13,6 @@ import com.polyethene.polyhouse.common.constant.AccountManagementAction;
 import com.polyethene.polyhouse.mapper.AccountManagementMapper;
 import com.polyethene.polyhouse.service.AccountManagementService;
 import com.polyethene.polyhouse.service.AuthRedisStore;
-import com.polyethene.polyhouse.service.AvatarService;
 import com.polyethene.polyhouse.user.fixture.AvatarFixture;
 import com.polyethene.polyhouse.user.fixture.IsolatedMysqlSandbox;
 import com.polyethene.polyhouse.utils.AvatarImageUtils;
@@ -69,7 +68,6 @@ class ProfileModerationIntegrationTest {
  private static IsolatedMysqlSandbox sandbox;
  @Autowired private AuthService auth;
  @Autowired private ProfileModerationService profiles;
- @Autowired private AvatarService avatars;
  @Autowired private JdbcTemplate jdbc;
  @Autowired private StringRedisTemplate redis;
  @SpyBean private ProfileModerationMapper mapper;
@@ -203,7 +201,7 @@ class ProfileModerationIntegrationTest {
  @Test void replacementAndRejectionReleaseOnlyPendingBytes()throws Exception{
   var a=avatar(userToken);
   var request=image(UUID.randomUUID().toString(),12);
-  var b=avatars.upload(request,userToken);
+  var b=profiles.submitAvatar(request,userToken);
   assertCode(()->profiles.decide(id(a),decision(a,true),ownerToken),ErrorCode.CONFLICT);
   assertThat(status(a.id())).isEqualTo("SUPERSEDED");
   assertThat(pendingAvatar(user)).isEqualTo(request.avatarBase64());
@@ -394,7 +392,7 @@ class ProfileModerationIntegrationTest {
  private long create(String name,UserRoleEnum role){long id=Long.parseLong(auth.register(new RegisterDTO(name,PASSWORD,"旧昵称")).id());jdbc.update("UPDATE sys_user SET role=?,avatar=null WHERE id=?",role.getCode(),id);return id;}
  private String login(String name){return auth.login(new LoginDTO(name,PASSWORD),null).accessToken();}
  private ProfileSubmissionVO nickname(String text,String token){return profiles.submitNickname(new NicknameSubmissionDTO(UUID.randomUUID().toString(),text),token);}
- private ProfileSubmissionVO avatar(String token)throws Exception{return avatars.upload(image(UUID.randomUUID().toString(),1),token);}
+ private ProfileSubmissionVO avatar(String token)throws Exception{return profiles.submitAvatar(image(UUID.randomUUID().toString(),1),token);}
  private void avatarUnchecked(String token){try{avatar(token);}catch(BusinessException e){throw e;}catch(Exception e){throw new IllegalStateException("fixture image failure",e);}}
  private AvatarSubmitDTO image(String request,int color)throws Exception{return new AvatarSubmitDTO(AvatarFixture.webp(color==1?"blue":"green"),request);}
  private byte[] pngFixture()throws Exception{

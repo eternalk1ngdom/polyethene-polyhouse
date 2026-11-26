@@ -56,8 +56,8 @@ import java.util.function.Supplier;
     public ProfileSubmissionVO submitNickname(NicknameSubmissionDTO dto,String token) {
         validate(dto);return submit(ProfileField.NICKNAME,dto.requestId(),dto.nickname(),null,token);
     }
-    /* 通过会话检查后再验证和散列有界图像。 */
-    ProfileSubmissionVO submitAvatar(AvatarSubmitDTO dto,String token) {
+    /** 提交头像仅创建待审申请；通过会话检查后再验证和散列有界图像，已发布值仍由屋主批准后替换。 */
+    public ProfileSubmissionVO submitAvatar(AvatarSubmitDTO dto,String token) {
         validate(dto);return submit(ProfileField.AVATAR,dto.requestId(),null,dto.avatarBase64(),token);
     }
     private ProfileSubmissionVO submit(ProfileField kind,String requestId,String value,String avatar,String token) {
