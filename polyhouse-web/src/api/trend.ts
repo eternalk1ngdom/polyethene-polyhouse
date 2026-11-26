@@ -498,6 +498,9 @@ function windowRecurringRepo(value: unknown): TrendWindowRecurringRepo {
   }
 }
 
+/** 7 日窗口分类统计列表上限：留出温和扩展余量，避免后端新增分类时前端硬编码 8 触发 502。 */
+const MAX_WINDOW_CATEGORIES = 32
+
 function windowStats(value: unknown): TrendWindowStats {
   const row = object(value)
   return {
@@ -512,7 +515,7 @@ function windowStats(value: unknown): TrendWindowStats {
     sampleStatus: choice(row.sampleStatus, windowSampleStatuses),
     anchorSummary: windowAnchorSummary(row.anchorSummary),
     windowSummary: windowSummary(row.windowSummary),
-    categories: list(row.categories, 8, windowCategoryStat),
+    categories: list(row.categories, MAX_WINDOW_CATEGORIES, windowCategoryStat),
     recurringRepos: list(row.recurringRepos, 15, windowRecurringRepo),
   }
 }

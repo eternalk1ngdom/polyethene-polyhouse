@@ -24,7 +24,9 @@ class TrendInsightCodecTest {
         assertThat(body.has("tools")).isFalse();
         String system = body.path("messages").get(0).path("content").asText();
         assertThat(system).doesNotContain("Ignore all prior instructions")
-                .contains("禁止使用反引号", "保留英文原名", "中文括号解释", "descriptionZh", "\n{");
+                .contains("禁止使用反引号", "保留英文原名", "中文括号解释", "descriptionZh", "\n{",
+                        "category 从 " + String.join(",", TrendInsightCodec.CATEGORY_ORDER) + " 选一。");
+        assertThat(TrendInsightCodec.CATEGORIES).containsExactlyInAnyOrderElementsOf(TrendInsightCodec.CATEGORY_ORDER);
         var example = codec.insight(system.substring(system.indexOf("\n{") + 1), TrendAiFixture.SHA, "deepseek-flash", TrendAiFixture.NOW);
         assertThat(example.ruleVersion()).isEqualTo("radar-4");
         assertThat(example.painPoint()).contains("\n\n").contains("YAML（").contains("PR（").contains("CLI（");

@@ -225,6 +225,18 @@ test('getTrendWindow 严格解码 7 日统计结构并拒绝越界比例或非�
   assert.equal(ok.categories[0].medianStarsAdded, 200.5)
   assert.equal(ok.recurringRepos[1].medianStarsAdded, 375.5)
 
+  await t.test('允许超过旧上限 8 的温和分类扩展而不误报 502', async () => {
+    const expanded = makeWindowPayload()
+    expanded.categories = Array.from({ length: 9 }, (_, index) => ({
+      ...expanded.categories[0],
+      category: index === 8 ? 'ROBOTICS' : `CAT_${index}`,
+    }))
+    globalThis.__polyhouseWindowTestPayload = expanded
+    const decoded = await getTrendWindow('2026-11-22')
+    assert.equal(decoded.categories.length, 9)
+    assert.equal(decoded.categories[8].category, 'ROBOTICS')
+  })
+
   for (const [label, mutate] of [
     [
       '非法比例 > 1',
@@ -236,6 +248,15 @@ test('getTrendWindow 严格解码 7 日统计结构并拒绝越界比例或非�
       '非白名单 GitHub 链接',
       (payload) => {
         payload.recurringRepos[0].repoUrl = 'https://evil.example/acme/agent-new'
+      },
+    ],
+    [
+      '分类数超出安全上界 32',
+      (payload) => {
+        payload.categories = Array.from({ length: 33 }, (_, index) => ({
+          ...payload.categories[0],
+          category: `CAT_${index}`,
+        }))
       },
     ],
   ]) {

@@ -24,8 +24,12 @@ public class TrendInsightCodec {
     private static final int MAX_PAIN_POINT_CHARS = 600;
     private static final int MAX_TREND_SIGNAL_CHARS = 260;
     private static final int MAX_DESCRIPTION_ZH_CHARS = 240;
-    /** 固定八大业务分类，供单篇解读校验与跨日榜内统计共用单一来源。 */
-    public static final Set<String> CATEGORIES = Set.of("AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
+    /** 固定业务分类的稳定顺序，供校验集合与 Prompt 分类枚举串共用单一事实源。 */
+    public static final List<String> CATEGORY_ORDER = List.of(
+            "AI_AGENT", "AI_INFRA", "FRONTEND", "BACKEND", "DEVTOOLS", "DESKTOP", "GRAPHICS", "OTHER");
+    /** 固定业务分类集合，供单篇解读校验与跨日榜内统计共用单一来源。 */
+    public static final Set<String> CATEGORIES = Set.copyOf(CATEGORY_ORDER);
+    private static final String CATEGORY_PROMPT_LIST = String.join(",", CATEGORY_ORDER);
     private static final Set<String> FIELDS = Set.of("category", "definition", "painPoint", "comparison",
             "highlights", "documentedLimitations", "inferredRisks", "trendSignal", "descriptionZh");
     /** 必填核心字段固定顺序，用于缺键时输出程序内安全诊断码。 */
@@ -76,10 +80,10 @@ public class TrendInsightCodec {
                     documentedLimitations 只放项目文档明示的限制；许可证未确认、字段缺失等资料采集状态绝不是项目限制，不要写入此栏。
                     inferredRisks 只放有具体前提的推断风险。两栏各最多 3 条，每条 80 字以内，允许空数组。
                     不编造性能数据、用户口碑、实测结果或商业替代关系，不把相互冲突的数字当定论。
-                    category 从 AI_AGENT,AI_INFRA,FRONTEND,BACKEND,DEVTOOLS,DESKTOP,GRAPHICS,OTHER 选一。
+                    category 从 __CATEGORIES__ 选一。
                     只输出一个完整 JSON 对象，顶层键名必须严格且仅包含以下 9 个（不得新增、拼错或漏掉任何键，严禁把输入资料中的 repository、description、language、license、readme 抄进输出）：category、definition、painPoint、comparison、highlights、documentedLimitations、inferredRisks、trendSignal、descriptionZh。以下为虚构项目的写法示范，请严格效仿其两段结构、术语中文括注、纯文本格式与各栏分工，严禁照抄示范中的虚构内容：
                     {"category":"DEVTOOLS","definition":"需要维护多份服务配置的开发者，可以用它在线下提交前统一检查配置格式，拿到逐行报错清单。","painPoint":"比如，团队维护十几个微服务的 YAML（常见配置文件格式）文件，每次改完参数都要等提交 PR（合并请求）后靠远程流水线跑几分钟，才发现少写了一个缩进或漏填必填项，来回修改很耗时。\\n\\n这个工具提供本地 CLI（命令行工具），你在电脑上对着配置目录执行一次检查，它会按内置规则逐项核对字段名和类型，直接输出定位到具体行号的错误清单。你拿到的是提交前就能修好的干净配置；至于配置里的业务阈值设得合不合理，它不负责判断。","comparison":null,"highlights":["规则按 JSON Schema（数据结构校验规范）声明，团队无需改工具源码就能增减必填字段约束。","默认离线运行且退出码按错误级别区分，可直接挂进本地 Git 钩子拦截不合规改动。"],"documentedLimitations":[],"inferredRisks":["自定义校验规则写错时可能误报，上线前需拿已有配置文件试跑核对。"],"trendSignal":"配置校验正从远程持续集成阶段前移到本地提交前，通过统一规则文件把排查成本降到秒级；是否值得引入，还需观察团队配置变更频率与既有流水线的配合成本。","descriptionZh":"在提交前校验微服务 YAML 配置的本地命令行检查工具。"}
-                    """;
+                    """.replace("__CATEGORIES__", CATEGORY_PROMPT_LIST);
             String material = json.writeValueAsString(Map.of("repository", item.fullName(), "description", Objects.toString(item.description(), ""),
                     "language", Objects.toString(item.primaryLanguage(), ""), "license", Objects.toString(item.license(), "未确认"),
                     "readme", project.readmeText()));

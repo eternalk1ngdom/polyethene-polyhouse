@@ -57,7 +57,9 @@ function decode(value: unknown): CoverCatalog {
       missingExperience: item.missingExperience,
     }
   })
-  if (covers.length !== 3 || new Set(covers.map((item) => item.key)).size !== 3) return fail()
+  const keys = new Set(covers.map((item) => item.key))
+  // 仅校验非空、key 唯一且当前佩戴项在目录中，避免未来新增官方卡面时因固定数量校验触发 502。
+  if (covers.length < 1 || keys.size !== covers.length || !keys.has(value.equipped)) return fail()
   return {
     userId: value.userId,
     coins: value.coins,
