@@ -33,6 +33,10 @@ export function whole(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : invalid()
 }
 
+export function signedInt(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : invalid()
+}
+
 export function ratio(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
     ? value

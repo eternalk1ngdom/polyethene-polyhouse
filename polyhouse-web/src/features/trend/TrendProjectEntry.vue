@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ElIcon } from 'element-plus'
 import { StarFilled } from '@element-plus/icons-vue'
 import type { TrendProject } from '../../api/trend'
 import { languageColor } from './languageColors'
-import { categoryLabel, categoryTone, trendNumber } from './presentation'
+import { categoryLabel, categoryTone, presenceBadge, trendNumber } from './presentation'
 
 interface Props {
   /** 排名和星标取自同一期，筛选后仍可与来源逐项核对。 */
@@ -14,8 +15,9 @@ interface Props {
 interface Emits {
   open: [event: MouseEvent, fullName: string]
 }
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+const badge = computed(() => presenceBadge(props.project.presence))
 </script>
 <template>
   <article class="entry">
@@ -44,6 +46,15 @@ const emit = defineEmits<Emits>()
         {{ project.insight?.definition ?? project.description }}
       </p>
       <div class="meta-tags">
+        <span v-if="badge" class="presence-badge" :class="`presence-${badge.tone}`">
+          {{ badge.label }}
+          <span
+            v-if="badge.rankRise"
+            class="rank-rise"
+            :aria-label="`较上期排名上升 ${badge.rankRise.slice(1)} 位`"
+            >{{ badge.rankRise }}</span
+          >
+        </span>
         <span
           class="language"
           :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
@@ -138,6 +149,43 @@ h2 a:focus-visible {
   border-radius: 999px;
   background: var(--st-pill-bg);
   color: var(--st-pill-ink);
+}
+.presence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+.presence-new-top {
+  background: #fdece7;
+  border-color: #f0bfb2;
+  color: #8f2d1b;
+}
+.presence-new {
+  background: #e2f5f4;
+  border-color: #a9dedb;
+  color: #0e5a63;
+}
+.presence-returning {
+  background: #efeaf8;
+  border-color: #d3c6eb;
+  color: #4b3d7a;
+}
+.presence-streak {
+  background: #f1f5f7;
+  border-color: #d9e3e8;
+  color: #566a78;
+  font-weight: 550;
+}
+.rank-rise {
+  color: #1f6e58;
+  font-weight: 700;
 }
 .language::before {
   content: '';

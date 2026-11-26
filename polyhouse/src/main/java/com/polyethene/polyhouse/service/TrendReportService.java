@@ -13,6 +13,7 @@ import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.model.vo.TrendPeriodsVO;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
 import com.polyethene.polyhouse.model.vo.TrendWindowStatsVO;
+import com.polyethene.polyhouse.service.trend.TrendPresenceCalculator;
 import com.polyethene.polyhouse.service.trend.TrendWindowAggregator;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -51,11 +54,29 @@ public class TrendReportService {
         this.cache = cache;
     }
 
-    /** 校验日期与周期，读取最新或某日当前发布版本；无报告返回 404。 */
+    /** 校验日期与周期，读取最新或某日当前发布版本并实时附加前 7 日榜单异动；无报告返回 404。 */
     public TrendReportVO report(TrendReportQueryDTO request) {
         requireEnabled();
         if (!"DAILY".equals(request.periodType())) throw invalid();
         LocalDate date = date(request.periodKey());
+        return enrichWithPresence(loadPublishedReport(date));
+    }
+
+    /** 只用最近已发布版本中的稳定 ID 排采集顺序；没有历史或读不到提示时仍可生成首份日报。 */
+    public Set<String> missingInsightIds() {
+        try {
+            requireEnabled();
+            var latest = loadPublishedReport(null);
+            return latest.items().stream().filter(item -> item.insight() == null && !"DOC_LIST".equals(item.repoType()))
+                    .map(item -> item.repositoryId()).filter(id -> id != null && id.matches("[1-9][0-9]{0,18}"))
+                    .collect(Collectors.toUnmodifiableSet());
+        } catch (BusinessException failure) {
+            if (failure.getErrorCode() != ErrorCode.NOT_FOUND) LOGGER.warn("星潮上期缺稿提示不可用，沿原榜序补全");
+            return Set.of();
+        }
+    }
+
+    private TrendReportVO loadPublishedReport(LocalDate date) {
         try {
             if (cache != null && cache.enabled()) {
                 var header = date == null ? mapper.latestHeader() : mapper.publishedHeader(date);
@@ -77,17 +98,30 @@ public class TrendReportService {
         } catch (DataAccessException failure) { throw unavailable(); }
     }
 
-    /** 只用最近已发布版本中的稳定 ID 排采集顺序；没有历史或读不到提示时仍可生成首份日报。 */
-    public Set<String> missingInsightIds() {
+    /**
+     * 基于前 7 个自然日已发布快照实时计算异动身份；历史查询或单条归档异常时优雅降级，不阻断当期主日报阅读。
+     */
+    private TrendReportVO enrichWithPresence(TrendReportVO current) {
+        LocalDate anchor = current.periodKey();
+        List<TrendReportRecord> priorRecords;
         try {
-            var latest = report(new TrendReportQueryDTO("DAILY", null));
-            return latest.items().stream().filter(item -> item.insight() == null && !"DOC_LIST".equals(item.repoType()))
-                    .map(item -> item.repositoryId()).filter(id -> id != null && id.matches("[1-9][0-9]{0,18}"))
-                    .collect(Collectors.toUnmodifiableSet());
-        } catch (BusinessException failure) {
-            if (failure.getErrorCode() != ErrorCode.NOT_FOUND) LOGGER.warn("星潮上期缺稿提示不可用，沿原榜序补全");
-            return Set.of();
+            priorRecords = mapper.publishedRange(anchor.minusDays(TrendPresenceCalculator.LOOKBACK_DAYS), anchor.minusDays(1));
+        } catch (DataAccessException failure) {
+            LOGGER.warn("星潮前 7 日历史快照读取失败，降级隐藏当期异动标识");
+            return current;
         }
+        if (priorRecords == null || priorRecords.isEmpty()) {
+            return current;
+        }
+        List<TrendReportVO> priorViews = new ArrayList<>(priorRecords.size());
+        for (var record : priorRecords) {
+            try {
+                priorViews.add(decode(record));
+            } catch (BusinessException damaged) {
+                LOGGER.warn("星潮历史快照损坏已跳过：periodDate={}", record.periodDate());
+            }
+        }
+        return TrendPresenceCalculator.enrich(current, priorViews);
     }
 
     /** 多取一项判断是否还有下一页，不靠空页猜测，也不计算全表 COUNT。 */

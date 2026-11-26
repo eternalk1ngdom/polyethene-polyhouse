@@ -10,6 +10,7 @@ import {
   optional,
   ratio,
   repoIdentity,
+  signedInt,
   signedRatio,
   text,
   truth,
@@ -35,6 +36,40 @@ export interface TrendInsight {
   ruleVersion: string
 }
 
+const presenceStatuses = ['NEW', 'NEW_TOP', 'RETURNING', 'STREAK'] as const
+
+export type TrendPresenceStatus = (typeof presenceStatuses)[number]
+
+/** 单个项目相对前 7 日已发布快照实时计算的榜上异动信号。 */
+export interface TrendPresence {
+  status: TrendPresenceStatus
+  streakDays: number
+  previousRank: number | null
+  rankDelta: number | null
+}
+
+/** 上一已发布日在榜、当期退榜的项目速览。 */
+export interface TrendDroppedProject {
+  previousRank: number
+  repositoryId: string | null
+  fullName: string
+  repoUrl: string
+  primaryLanguage: string | null
+  category: string | null
+  previousStarsAdded: number | null
+}
+
+/** 当期日榜相对前 7 日已发布快照的异动汇总；无前序历史时为 null。 */
+export interface TrendPresenceSummary {
+  previousDate: string
+  lookbackDays: number
+  newCount: number
+  newTopCount: number
+  returningCount: number
+  streakCount: number
+  droppedItems: TrendDroppedProject[]
+}
+
 export interface TrendProject {
   rankNum: number
   repositoryId: string | null
@@ -54,6 +89,7 @@ export interface TrendProject {
   insightStatus: string
   insightReason: string | null
   insight: TrendInsight | null
+  presence: TrendPresence | null
 }
 
 export interface TrendReport {
@@ -65,6 +101,7 @@ export interface TrendReport {
   sourceUrl: string
   insightComplete: boolean
   items: TrendProject[]
+  presenceSummary: TrendPresenceSummary | null
 }
 
 export interface TrendPeriods {
@@ -187,6 +224,43 @@ function insight(value: unknown): TrendInsight {
   }
 }
 
+function presence(value: unknown): TrendPresence {
+  const row = object(value)
+  return {
+    status: choice(row.status, presenceStatuses),
+    streakDays: whole(row.streakDays),
+    previousRank: optional(row.previousRank, whole),
+    rankDelta: optional(row.rankDelta, signedInt),
+  }
+}
+
+function droppedProject(value: unknown): TrendDroppedProject {
+  const row = object(value)
+  const { fullName, repoUrl } = repoIdentity(row)
+  return {
+    previousRank: whole(row.previousRank),
+    repositoryId: optional(row.repositoryId, text),
+    fullName,
+    repoUrl,
+    primaryLanguage: optional(row.primaryLanguage, text),
+    category: optional(row.category, text),
+    previousStarsAdded: optional(row.previousStarsAdded, whole),
+  }
+}
+
+function presenceSummary(value: unknown): TrendPresenceSummary {
+  const row = object(value)
+  return {
+    previousDate: date(row.previousDate),
+    lookbackDays: whole(row.lookbackDays),
+    newCount: whole(row.newCount),
+    newTopCount: whole(row.newTopCount),
+    returningCount: whole(row.returningCount),
+    streakCount: whole(row.streakCount),
+    droppedItems: list(row.droppedItems, 25, droppedProject),
+  }
+}
+
 function project(value: unknown): TrendProject {
   const row = object(value)
   const { fullName, repoUrl } = repoIdentity(row)
@@ -209,6 +283,7 @@ function project(value: unknown): TrendProject {
     insightStatus: text(row.insightStatus),
     insightReason: optional(row.insightReason, text),
     insight: optional(row.insight, insight),
+    presence: optional(row.presence, presence),
   }
 }
 
@@ -223,6 +298,7 @@ function report(value: unknown): TrendReport {
     sourceUrl: choice(row.sourceUrl, ['https://github.com/trending?since=daily']),
     insightComplete: truth(row.insightComplete),
     items: list(row.items, 25, project),
+    presenceSummary: optional(row.presenceSummary, presenceSummary),
   }
 }
 

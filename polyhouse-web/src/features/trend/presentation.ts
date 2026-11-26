@@ -209,3 +209,41 @@ export function trendMedianNumber(value: number | null): string {
 export function shortTrendDate(isoDate: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? isoDate.slice(5) : isoDate
 }
+
+/** 榜上异动身份徽标展示模型。 */
+export interface TrendPresenceBadge {
+  label: string
+  tone: 'new-top' | 'new' | 'returning' | 'streak'
+  rankRise: string | null
+}
+
+/** 判断项目是否属于当期突发新面孔（含普通新上榜与空降前 5）。 */
+export function isNewFacePresence(
+  presence: { status: string } | null | undefined,
+): boolean {
+  return presence?.status === 'NEW' || presence?.status === 'NEW_TOP'
+}
+
+/**
+ * 将后端榜上异动信号映射为通俗中文徽标；无基线或连榜不足 2 天时返回 null，避免视觉噪音。
+ */
+export function presenceBadge(
+  presence: { status: string; streakDays: number; rankDelta: number | null } | null | undefined,
+): TrendPresenceBadge | null {
+  if (!presence) return null
+  if (presence.status === 'NEW_TOP') {
+    return { label: '空降前 5', tone: 'new-top', rankRise: null }
+  }
+  if (presence.status === 'NEW') {
+    return { label: '新上榜', tone: 'new', rankRise: null }
+  }
+  if (presence.status === 'RETURNING') {
+    return { label: '重回榜单', tone: 'returning', rankRise: null }
+  }
+  if (presence.status === 'STREAK' && presence.streakDays >= 2) {
+    const rankRise =
+      presence.rankDelta !== null && presence.rankDelta >= 3 ? `↑${presence.rankDelta}` : null
+    return { label: `连榜 ${presence.streakDays} 天`, tone: 'streak', rankRise }
+  }
+  return null
+}

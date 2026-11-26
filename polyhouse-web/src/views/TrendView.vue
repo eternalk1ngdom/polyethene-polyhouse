@@ -10,10 +10,14 @@ import { useUserStore } from '../stores/useUserStore'
 import {
   categoryCounts,
   categoryLabel,
+  categoryTone,
+  isNewFacePresence,
   isTrendCategoryFilter,
   projectCategory,
+  shortTrendDate,
   siblingProjects,
   trendCategoryKeys,
+  trendNumber,
   trendTime,
   UNCATEGORIZED,
   type TrendCategoryFilter,
@@ -59,6 +63,9 @@ const language = computed(() => (typeof route.query.lang === 'string' ? route.qu
 const category = computed<TrendCategoryFilter | ''>(() =>
   isTrendCategoryFilter(route.query.cat) ? route.query.cat : '',
 )
+const onlyNew = computed(() => route.query.fresh === '1')
+const presenceSummary = computed(() => report.value?.presenceSummary ?? null)
+const newFaceCount = computed(() => presenceSummary.value?.newCount ?? 0)
 const languages = computed(() => {
   const counts = new Map<string, number>()
   for (const item of report.value?.items ?? []) {
@@ -87,13 +94,14 @@ const categoryOptions = computed(() => {
   }
   return list
 })
-const hasFilter = computed(() => Boolean(language.value || category.value))
+const hasFilter = computed(() => Boolean(language.value || category.value || onlyNew.value))
 const entries = computed(
   () =>
     report.value?.items.filter(
       (item) =>
         (!language.value || item.primaryLanguage === language.value) &&
-        (!category.value || projectCategory(item.insight?.category) === category.value),
+        (!category.value || projectCategory(item.insight?.category) === category.value) &&
+        (!onlyNew.value || isNewFacePresence(item.presence)),
     ) ?? [],
 )
 const repoName = computed(() => `${route.params.owner}/${route.params.repo}`)
@@ -103,13 +111,21 @@ const project = computed(() =>
 const listHeading = ref<HTMLElement>()
 const detailPanel = ref<HTMLElement>()
 
-function directoryLocation(date: string, lang: string, cat = '', at?: string, view?: 'window') {
+function directoryLocation(
+  date: string,
+  lang: string,
+  cat = '',
+  at?: string,
+  view?: 'window',
+  fresh = false,
+) {
   return {
     name: starTide.name,
     query: {
       date: date || undefined,
       lang: view === 'window' ? undefined : lang || undefined,
       cat: view === 'window' ? undefined : cat || undefined,
+      fresh: view === 'window' ? undefined : fresh ? '1' : undefined,
       view: view === 'window' ? 'window' : undefined,
       at,
     },
@@ -126,6 +142,7 @@ const returnTo = computed(() =>
     category.value,
     project.value?.fullName ?? repoName.value,
     returnView.value,
+    onlyNew.value,
   ),
 )
 const neighbors = computed(() => {
@@ -137,6 +154,7 @@ const neighbors = computed(() => {
 const neighborScope = computed(() => {
   if (!neighbors.value?.filtered) return '按本期排名'
   const parts: string[] = []
+  if (onlyNew.value) parts.push('仅看新面孔')
   if (language.value) parts.push(language.value)
   if (category.value) {
     parts.push(categoryLabel(category.value === UNCATEGORIZED ? null : category.value))
@@ -151,6 +169,7 @@ function detailLocation(name: string) {
     query: {
       lang: inWindowContext.value ? undefined : language.value || undefined,
       cat: inWindowContext.value ? undefined : category.value || undefined,
+      fresh: inWindowContext.value ? undefined : onlyNew.value ? '1' : undefined,
       view: inWindowContext.value ? 'window' : undefined,
     },
   }
@@ -169,6 +188,7 @@ async function openProject(event: MouseEvent, name: string) {
     category.value,
     name,
     isWindowView.value ? 'window' : undefined,
+    onlyNew.value,
   )
   await router.replace({ ...origin, state: { tideScroll: window.scrollY }, force: true })
   await router.push({ ...destination, state: { tideOrigin: router.currentRoute.value.fullPath } })
@@ -200,6 +220,7 @@ function selectView(view: 'daily' | 'window') {
       category.value,
       undefined,
       view === 'window' ? 'window' : undefined,
+      onlyNew.value,
     ),
   )
 }
@@ -211,6 +232,7 @@ function selectDate(event: Event) {
       '',
       undefined,
       isWindowView.value ? 'window' : undefined,
+      false,
     ),
   )
 }
@@ -220,6 +242,9 @@ function selectLanguage(event: Event) {
       selectedDate.value,
       (event.target as HTMLSelectElement).value,
       category.value,
+      undefined,
+      undefined,
+      onlyNew.value,
     ),
   )
 }
@@ -229,6 +254,21 @@ function selectCategory(event: Event) {
       selectedDate.value,
       language.value,
       (event.target as HTMLSelectElement).value,
+      undefined,
+      undefined,
+      onlyNew.value,
+    ),
+  )
+}
+function toggleOnlyNew() {
+  void router.replace(
+    directoryLocation(
+      selectedDate.value,
+      language.value,
+      category.value,
+      undefined,
+      undefined,
+      !onlyNew.value,
     ),
   )
 }
@@ -323,6 +363,17 @@ watch(
               </option>
             </select>
           </label>
+          <button
+            v-if="!isWindowView && (presenceSummary || onlyNew)"
+            type="button"
+            class="fresh-toggle"
+            :class="{ active: onlyNew }"
+            :aria-pressed="onlyNew"
+            :disabled="!onlyNew && newFaceCount === 0"
+            @click="toggleOnlyNew"
+          >
+            只看新面孔 ({{ newFaceCount }})
+          </button>
           <RouterLink v-if="owner" :to="starTide.ownerRoute" class="utility owner-link"
             >星潮发布台</RouterLink
           >
@@ -362,6 +413,7 @@ watch(
             <p class="meta">
               <time :datetime="report.periodKey">{{ report.periodKey }}</time>
               <span>本期 {{ report.items.length }} 个项目</span>
+              <span v-if="presenceSummary">今日新上榜 {{ presenceSummary.newCount }} 个</span>
               <span>采集于 {{ trendTime(report.capturedAt) }}（北京时间）</span>
             </p>
             <a class="utility" :href="report.sourceUrl" target="_blank" rel="noopener noreferrer"
@@ -388,8 +440,59 @@ watch(
           />
           <p v-if="!entries.length" class="state">
             本期没有符合条件的项目。
-            <RouterLink :to="directoryLocation(selectedDate, '', '')">查看全部</RouterLink>
+            <RouterLink :to="directoryLocation(selectedDate, '', '', undefined, undefined, false)"
+              >查看全部</RouterLink
+            >
           </p>
+          <details
+            v-if="presenceSummary && presenceSummary.droppedItems.length"
+            class="dropped-panel"
+          >
+            <summary>
+              <span>昨日退榜速览</span>
+              <span class="dropped-meta"
+                >共 {{ presenceSummary.droppedItems.length }} 项 · 较
+                {{ shortTrendDate(presenceSummary.previousDate) }}</span
+              >
+            </summary>
+            <ul class="dropped-list">
+              <li
+                v-for="item in presenceSummary.droppedItems"
+                :key="item.fullName"
+                class="dropped-item"
+              >
+                <span class="dropped-rank" :aria-label="`上期排名 ${item.previousRank}`"
+                  >#{{ String(item.previousRank).padStart(2, '0') }}</span
+                >
+                <a
+                  class="dropped-repo"
+                  :href="item.repoUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >{{ item.fullName }}</a
+                >
+                <span class="dropped-tags">
+                  <span v-if="item.primaryLanguage" class="dropped-lang">{{
+                    item.primaryLanguage
+                  }}</span>
+                  <span
+                    v-if="item.category"
+                    class="dropped-cat"
+                    :style="{
+                      backgroundColor: categoryTone(item.category).bg,
+                      color: categoryTone(item.category).ink,
+                    }"
+                    >{{ categoryLabel(item.category) }}</span
+                  >
+                </span>
+                <span class="dropped-stars">{{
+                  item.previousStarsAdded === null
+                    ? '—'
+                    : '+' + trendNumber(item.previousStarsAdded)
+                }}</span>
+              </li>
+            </ul>
+          </details>
         </template>
       </template>
       <section v-else-if="report" ref="detailPanel" aria-label="当期项目详情">
@@ -543,6 +646,41 @@ watch(
   border-color: #9cbccf;
   text-decoration: none;
 }
+.fresh-toggle {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #b9d7d8;
+  border-radius: 10px;
+  background: #f2f9f9;
+  color: #13555e;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.fresh-toggle:hover:not(:disabled) {
+  background: #e1f2f2;
+}
+.fresh-toggle:active:not(:disabled) {
+  border-color: #0e5a63;
+}
+.fresh-toggle.active {
+  background: #0e5a63;
+  border-color: #0e5a63;
+  color: #ffffff;
+}
+.fresh-toggle.active:hover {
+  background: #0b4a52;
+}
+.fresh-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.fresh-toggle:focus-visible {
+  outline: none;
+  border-color: #154e78;
+  box-shadow: inset 0 0 0 1px #154e78;
+}
 .control {
   gap: 8px;
   font-size: 13px;
@@ -627,6 +765,98 @@ select:focus-visible {
 .state h1 {
   font-size: 24px;
 }
+.dropped-panel {
+  margin-top: 24px;
+  border: 1px solid #d5e1e6;
+  border-radius: 12px;
+  background: #f7fafb;
+}
+.dropped-panel summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 44px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: #213951;
+  font-size: 14px;
+  font-weight: 650;
+  list-style: none;
+  border-radius: 11px;
+}
+.dropped-panel summary::-webkit-details-marker {
+  display: none;
+}
+.dropped-panel summary:hover {
+  background: #edf4f7;
+}
+.dropped-panel summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #154e78;
+}
+.dropped-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--st-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dropped-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 12px;
+  border-top: 1px solid #e2ebf0;
+}
+.dropped-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed #dde6eb;
+  font-size: 13px;
+}
+.dropped-item:last-child {
+  border-bottom: none;
+}
+.dropped-rank {
+  color: #5a7082;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.dropped-repo {
+  color: #16435e;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.dropped-repo:hover,
+.dropped-repo:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dropped-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.dropped-lang {
+  font-size: 12px;
+  color: #4b6173;
+}
+.dropped-cat {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.dropped-stars {
+  font-size: 12px;
+  color: #6b5222;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
 @media (max-width: 620px) {
   .reader {
     padding-top: 12px;
@@ -644,6 +874,12 @@ select:focus-visible {
   }
   .section-head {
     margin-top: 16px;
+  }
+  .dropped-item {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+  .dropped-tags {
+    grid-column: 2 / -1;
   }
 }
 </style>

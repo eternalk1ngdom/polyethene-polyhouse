@@ -116,6 +116,43 @@ class TrendReportServiceTest {
         assertCode(() -> service.window(new TrendWindowQueryDTO("DAILY", null)), ErrorCode.SERVICE_UNAVAILABLE);
     }
 
+    @Test void reportEnrichesPresenceFromPriorSevenDaysAndDegradesGracefullyOnHistoryFailure() throws Exception {
+        var current = TrendFixture.report();
+        LocalDate anchor = current.periodKey();
+        var currentRecord = new TrendReportRecord(current.reportId(), anchor, null, TrendFixture.json().writeValueAsString(current));
+        when(mapper.latest()).thenReturn(currentRecord);
+
+        // 构造昨日快照：仅保留当前第 1 项，模拟第 2 项为新上榜、另有一条昨日退榜项。
+        var yesterdayDate = anchor.minusDays(1);
+        var kept = current.items().getFirst();
+        var dropped = new com.polyethene.polyhouse.model.vo.TrendProjectVO(
+                3, "999", "org/yesterday-gone", "https://github.com/org/yesterday-gone",
+                "gone", "Go", 500L, 80L, 10L, "MIT", false, "CODE_PROJECT",
+                "HAS_LANGUAGE", "AVAILABLE", "AVAILABLE", "NOT_ANALYZED");
+        var yesterday = new com.polyethene.polyhouse.model.vo.TrendReportVO(
+                "22222222-2222-2222-2222-222222222222", "DAILY", yesterdayDate,
+                current.capturedAt().minusSeconds(86400), current.publishedAt().minusSeconds(86400),
+                current.sourceUrl(), false, List.of(kept, dropped));
+        var yesterdayRecord = new TrendReportRecord(yesterday.reportId(), yesterdayDate, null,
+                TrendFixture.json().writeValueAsString(yesterday));
+
+        when(mapper.publishedRange(anchor.minusDays(7), anchor.minusDays(1))).thenReturn(List.of(yesterdayRecord));
+        var enriched = service.report(new TrendReportQueryDTO(null, null));
+        assertThat(enriched.presenceSummary()).isNotNull();
+        assertThat(enriched.presenceSummary().previousDate()).isEqualTo(yesterdayDate);
+        assertThat(enriched.presenceSummary().newCount()).isEqualTo(1);
+        assertThat(enriched.presenceSummary().streakCount()).isEqualTo(1);
+        assertThat(enriched.presenceSummary().droppedItems()).hasSize(1);
+        assertThat(enriched.presenceSummary().droppedItems().getFirst().fullName()).isEqualTo("org/yesterday-gone");
+
+        // 历史查询异常或快照损坏时优雅降级隐藏异动标识，绝不阻断当期日报主阅读。
+        when(mapper.publishedRange(anchor.minusDays(7), anchor.minusDays(1)))
+                .thenThrow(new DataAccessResourceFailureException("history timeout"));
+        var degraded = service.report(new TrendReportQueryDTO(null, null));
+        assertThat(degraded.reportId()).isEqualTo(current.reportId());
+        assertThat(degraded.presenceSummary()).isNull();
+    }
+
     private static void assertCode(Runnable action, ErrorCode expected) {
         assertThatThrownBy(action::run).isInstanceOfSatisfying(BusinessException.class,
                 failure -> assertThat(failure.getErrorCode()).isEqualTo(expected));

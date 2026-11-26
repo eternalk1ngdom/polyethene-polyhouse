@@ -22,20 +22,31 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param insightStatus 区分 ANALYZED、REUSED、STALE 及缺失原因，不伪造 AI 已完成
  * @param insight 当前选用的解读，缺失为 null；旧日报未有此字段也可读取
  * @param insightReason 本次未出新稿的公开原因；历史未记录或已成功时为空
+ * @param presence 当期相对前 7 日已发布快照实时计算的榜上异动信号；归档存储或无前序历史时为 null
  */
 public record TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
                              String description, String primaryLanguage, Long totalStars, Long starsAdded,
                              Long forksCount, String license, Boolean archived, String repoType,
                              String classificationReason, String metadataStatus, String readmeStatus,
                              String insightStatus, TrendInsightVO insight,
-                             @JsonInclude(JsonInclude.Include.NON_NULL) String insightReason) {
+                             @JsonInclude(JsonInclude.Include.NON_NULL) String insightReason,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) TrendPresenceVO presence) {
+    /** 保留既有归档与测试投影，动态异动信号由查询层实时计算而不写入归档 JSON。 */
+    public TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
+                          String description, String primaryLanguage, Long totalStars, Long starsAdded,
+                          Long forksCount, String license, Boolean archived, String repoType,
+                          String classificationReason, String metadataStatus, String readmeStatus,
+                          String insightStatus, TrendInsightVO insight, String insightReason) {
+        this(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage, totalStars, starsAdded, forksCount,
+                license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, insight, insightReason, null);
+    }
     /** 保留既有采集与测试投影，缺失的原因不从历史状态倒推。 */
     public TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
                           String description, String primaryLanguage, Long totalStars, Long starsAdded,
                           Long forksCount, String license, Boolean archived, String repoType,
                           String classificationReason, String metadataStatus, String readmeStatus, String insightStatus, TrendInsightVO insight) {
         this(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage, totalStars, starsAdded, forksCount,
-                license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, insight, null);
+                license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, insight, null, null);
     }
     /** 基础采集仍不依赖 AI，兼容既有内部投影及历史 JSON 缺失解读字段。 */
     public TrendProjectVO(int rankNum, String repositoryId, String fullName, String repoUrl,
@@ -43,14 +54,14 @@ public record TrendProjectVO(int rankNum, String repositoryId, String fullName, 
                            Long forksCount, String license, Boolean archived, String repoType,
                            String classificationReason, String metadataStatus, String readmeStatus, String insightStatus) {
         this(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage, totalStars, starsAdded,
-                forksCount, license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, null);
+                forksCount, license, archived, repoType, classificationReason, metadataStatus, readmeStatus, insightStatus, null, null, null);
     }
 
     /** 更新仓库标识时保留榜单资料及完整度，避免把身份线索当成已补齐资料。 */
     public TrendProjectVO withRepositoryId(String id) {
         return new TrendProjectVO(rankNum, id, fullName, repoUrl, description, primaryLanguage,
                 totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
-                metadataStatus, readmeStatus, insightStatus, insight, insightReason);
+                metadataStatus, readmeStatus, insightStatus, insight, insightReason, presence);
     }
 
     /** 只替换解读投影，保留本次榜单的基础资料，不回写其他日报。 */
@@ -62,6 +73,13 @@ public record TrendProjectVO(int rankNum, String repositoryId, String fullName, 
     public TrendProjectVO withInsight(String status, TrendInsightVO value, String reason) {
         return new TrendProjectVO(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage,
                 totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
-                metadataStatus, readmeStatus, status, value, reason);
+                metadataStatus, readmeStatus, status, value, reason, presence);
+    }
+
+    /** 仅在公开查询返回视图上附加当期异动身份，不修改不可变归档快照。 */
+    public TrendProjectVO withPresence(TrendPresenceVO value) {
+        return new TrendProjectVO(rankNum, repositoryId, fullName, repoUrl, description, primaryLanguage,
+                totalStars, starsAdded, forksCount, license, archived, repoType, classificationReason,
+                metadataStatus, readmeStatus, insightStatus, insight, insightReason, value);
     }
 }
