@@ -20,12 +20,13 @@ import com.polyethene.polyhouse.utils.JwtUtils;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Locale;
 
 /** 只负责屋主发放账号；发号、幂等事实、用户与审计同事务，登录、封禁和审核各自隔离。 */
@@ -40,16 +41,25 @@ public class AccountProvisioningService {
     private final AuthRedisStore sessions;
     private final JwtProperties jwt;
     private final Validator validator;
+    private final Clock clock;
 
-    /** 复用现有数据源、会话和凭据算法，避免出现第二套认证体系。 */
+    /** 兼容既有测试构造，未显式传入时钟时默认使用系统 UTC 时钟。 */
     public AccountProvisioningService(AccountProvisioningMapper provisioning, UserMapper users, AccountAuditMapper audit,
                                       AuthRedisStore sessions, JwtProperties jwt, Validator validator) {
+        this(provisioning, users, audit, sessions, jwt, validator, Clock.systemUTC());
+    }
+
+    /** 复用现有数据源、统一时钟、会话和凭据算法，避免出现第二套认证体系。 */
+    @Autowired
+    public AccountProvisioningService(AccountProvisioningMapper provisioning, UserMapper users, AccountAuditMapper audit,
+                                      AuthRedisStore sessions, JwtProperties jwt, Validator validator, Clock clock) {
         this.provisioning = provisioning;
         this.users = users;
         this.audit = audit;
         this.sessions = sessions;
         this.jwt = jwt;
         this.validator = validator;
+        this.clock = clock;
     }
 
     /** 锁顺序固定为操作者用户行→发号行；不触及其他既有用户，重复请求只返回无密码的创建事实。 */
@@ -121,7 +131,7 @@ public class AccountProvisioningService {
     private User lockOwner(String token) {
         JwtUtils.TokenClaims claims;
         try {
-            claims = JwtUtils.parseAndValidate(token, jwt.signingKey(), Instant.now());
+            claims = JwtUtils.parseAndValidate(token, jwt.signingKey(), clock.instant());
         } catch (JwtException exception) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         } catch (IllegalArgumentException exception) {

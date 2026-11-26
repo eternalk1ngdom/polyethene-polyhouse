@@ -15,11 +15,12 @@ import com.polyethene.polyhouse.utils.JwtUtils;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
-import java.time.Instant;
+import java.time.Clock;
 
 /** 仅处理受控账号列表、封禁/解封和代重置；不介入登录、成长、发号或资料审核。 */
 @Service
@@ -31,15 +32,24 @@ public class AccountManagementService {
     private final AuthRedisStore sessions;
     private final JwtProperties jwt;
     private final Validator validator;
+    private final Clock clock;
 
-    /** 复用既有认证和数据库事务，不引入第二套登录或跨库事务机制。 */
+    /** 兼容既有测试构造，未显式传入时钟时默认使用系统 UTC 时钟。 */
     public AccountManagementService(UserMapper users, AccountManagementMapper management, AuthRedisStore sessions,
                                      JwtProperties jwt, Validator validator) {
+        this(users, management, sessions, jwt, validator, Clock.systemUTC());
+    }
+
+    /** 复用既有认证、统一时钟和数据库事务，不引入第二套登录或跨库事务机制。 */
+    @Autowired
+    public AccountManagementService(UserMapper users, AccountManagementMapper management, AuthRedisStore sessions,
+                                     JwtProperties jwt, Validator validator, Clock clock) {
         this.users = users;
         this.management = management;
         this.sessions = sessions;
         this.jwt = jwt;
         this.validator = validator;
+        this.clock = clock;
     }
 
     /** 最新角色在锁内验证，SQL 同时约束行和计数；只返回最小投影及有限页大小。 */
@@ -152,7 +162,7 @@ public class AccountManagementService {
 
     private JwtUtils.TokenClaims claims(String token) {
         try {
-            return JwtUtils.parseAndValidate(token, jwt.signingKey(), Instant.now());
+            return JwtUtils.parseAndValidate(token, jwt.signingKey(), clock.instant());
         } catch (JwtException exception) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         } catch (IllegalArgumentException exception) {

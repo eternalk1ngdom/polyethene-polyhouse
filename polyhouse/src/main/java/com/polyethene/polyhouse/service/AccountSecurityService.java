@@ -14,11 +14,12 @@ import com.polyethene.polyhouse.utils.JwtUtils;
 import com.polyethene.polyhouse.utils.PasswordUtils;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 
 /** 隔离密码、凭据版本和会话撤销业务，避免将安全事务堆入登录或资料服务。 */
 @Service
@@ -28,15 +29,24 @@ public class AccountSecurityService {
     private final AuthRedisStore sessions;
     private final JwtProperties jwt;
     private final Validator validator;
+    private final Clock clock;
 
-    /** 使用项目已有密钥与会话存储，不生成第二套认证凭据或 Redis 客户端。 */
+    /** 兼容既有测试构造，未显式传入时钟时默认使用系统 UTC 时钟。 */
     public AccountSecurityService(UserMapper users, AccountAuditMapper audit, AuthRedisStore sessions,
                                   JwtProperties jwt, Validator validator) {
+        this(users, audit, sessions, jwt, validator, Clock.systemUTC());
+    }
+
+    /** 使用项目已有密钥、统一时钟与会话存储，不生成第二套认证凭据或 Redis 客户端。 */
+    @Autowired
+    public AccountSecurityService(UserMapper users, AccountAuditMapper audit, AuthRedisStore sessions,
+                                  JwtProperties jwt, Validator validator, Clock clock) {
         this.users = users;
         this.audit = audit;
         this.sessions = sessions;
         this.jwt = jwt;
         this.validator = validator;
+        this.clock = clock;
     }
 
     /**
@@ -50,7 +60,7 @@ public class AccountSecurityService {
         }
         JwtUtils.TokenClaims claims;
         try {
-            claims = JwtUtils.parseAndValidate(token, jwt.signingKey(), Instant.now());
+            claims = JwtUtils.parseAndValidate(token, jwt.signingKey(), clock.instant());
         } catch (JwtException exception) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         } catch (IllegalArgumentException exception) {

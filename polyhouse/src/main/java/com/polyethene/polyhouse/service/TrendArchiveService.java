@@ -10,6 +10,7 @@ import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.model.vo.TrendReportVO;
 import com.polyethene.polyhouse.model.vo.TrendPublicationSummaryVO;
 import com.polyethene.polyhouse.service.trend.GithubTrendingParser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -24,15 +25,24 @@ public class TrendArchiveService {
     private final TrendReportService reports;
     private final ObjectMapper json;
     private final TransactionTemplate transaction;
+    private final Clock clock;
 
-    /** 发布事务独立于网络调用，缩短锁占用；事务超时避免长期阻塞同日更新。 */
+    /** 兼容既有测试构造，未显式传入时钟时默认使用系统 UTC 时钟。 */
     public TrendArchiveService(TrendMapper mapper, TrendReportService reports, ObjectMapper json,
                                 PlatformTransactionManager manager) {
+        this(mapper, reports, json, manager, Clock.systemUTC());
+    }
+
+    /** 发布事务独立于网络调用，缩短锁占用；统一注入时钟便于确定性验证发布时间。 */
+    @Autowired
+    public TrendArchiveService(TrendMapper mapper, TrendReportService reports, ObjectMapper json,
+                                PlatformTransactionManager manager, Clock clock) {
         this.mapper = mapper;
         this.reports = reports;
         this.json = json;
         transaction = new TransactionTemplate(manager);
         transaction.setTimeout(5);
+        this.clock = clock;
     }
 
     /** 屋主查询或重放旧任务时，按归档编号读取，即使同一天已再次发布也可还原本次结果。 */
@@ -63,7 +73,7 @@ public class TrendArchiveService {
         LocalDate date = collection.capturedAt().atZone(ZoneId.of("Asia/Shanghai")).toLocalDate();
         boolean complete = collection.projects().stream().allMatch(project -> "NOT_REQUIRED".equals(project.snapshot().insightStatus())
                 || (project.snapshot().insight() != null && Set.of("ANALYZED", "REUSED").contains(project.snapshot().insightStatus())));
-        var view = new TrendReportVO(publicationId, "DAILY", date, collection.capturedAt(), Instant.now(),
+        var view = new TrendReportVO(publicationId, "DAILY", date, collection.capturedAt(), clock.instant(),
                 GithubTrendingParser.SOURCE, complete, collection.projects().stream().map(TrendCollection.Project::snapshot).toList());
         final String payload;
         try { payload = json.writeValueAsString(view); }
