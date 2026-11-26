@@ -99,12 +99,6 @@ const {
           :note="submissionNote"
           @refresh="refreshJob"
         />
-        <TrendScheduleCard
-          :status="scheduleStatus"
-          :busy="scheduleBusy"
-          :error="scheduleError"
-          @refresh="refreshScheduleStatus"
-        />
         <TrendBriefingControl
           :briefing="briefing"
           :busy="briefingBusy"
@@ -116,6 +110,12 @@ const {
           @generate="generateBriefing"
         />
         <TrendFeeLedger :fees="fees" :busy="feesBusy" :error="feeError" @refresh="refreshFees" />
+        <TrendScheduleCard
+          :status="scheduleStatus"
+          :busy="scheduleBusy"
+          :error="scheduleError"
+          @refresh="refreshScheduleStatus"
+        />
       </template>
     </div>
   </div>

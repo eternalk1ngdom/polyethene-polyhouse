@@ -472,9 +472,6 @@ watch(
                   >{{ item.fullName }}</a
                 >
                 <span class="dropped-tags">
-                  <span v-if="item.primaryLanguage" class="dropped-lang">{{
-                    item.primaryLanguage
-                  }}</span>
                   <span
                     v-if="item.category"
                     class="dropped-cat"
@@ -484,6 +481,9 @@ watch(
                     }"
                     >{{ categoryLabel(item.category) }}</span
                   >
+                  <span v-if="item.primaryLanguage" class="dropped-lang">{{
+                    item.primaryLanguage
+                  }}</span>
                 </span>
                 <span class="dropped-stars">{{
                   item.previousStarsAdded === null

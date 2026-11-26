@@ -243,7 +243,9 @@ export function presenceBadge(
   if (presence.status === 'STREAK' && presence.streakDays >= 2) {
     const rankRise =
       presence.rankDelta !== null && presence.rankDelta >= 3 ? `↑${presence.rankDelta}` : null
-    return { label: `连榜 ${presence.streakDays} 天`, tone: 'streak', rankRise }
+    // 前 7 日全勤加上今日算出 8 天时统一写「连榜 7+ 天」，避免与近 7 日观察窗口认知冲突。
+    const label = presence.streakDays > 7 ? '连榜 7+ 天' : `连榜 ${presence.streakDays} 天`
+    return { label, tone: 'streak', rankRise }
   }
   return null
 }

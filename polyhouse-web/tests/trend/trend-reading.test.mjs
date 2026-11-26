@@ -4,6 +4,7 @@ import {
   collectText,
   compileSfcComponent,
   dataUrl,
+  findAll,
   mountHeadless,
   typeScriptModuleUrl,
 } from '../helpers/test-runtime.mjs'
@@ -126,6 +127,18 @@ test('presenceBadge 与 isNewFacePresence 覆盖 4 类异动身份与连榜降�
       badge: { label: '连榜 2 天', tone: 'streak', rankRise: null },
     },
     {
+      name: '连榜 7 天仍显示精确天数',
+      presence: { status: 'STREAK', streakDays: 7, previousRank: 4, rankDelta: 1 },
+      isNew: false,
+      badge: { label: '连榜 7 天', tone: 'streak', rankRise: null },
+    },
+    {
+      name: '超过 7 天（前 7 日全勤加今日）统一显示连榜 7+ 天避免认知冲突',
+      presence: { status: 'STREAK', streakDays: 8, previousRank: 6, rankDelta: 4 },
+      isNew: false,
+      badge: { label: '连榜 7+ 天', tone: 'streak', rankRise: '↑4' },
+    },
+    {
       name: '无历史基线时返回 null 避免误标',
       presence: null,
       isNew: false,
@@ -182,21 +195,44 @@ test('TrendProjectEntry 正确渲染新面孔、连榜上升与无基线隐藏�
 
   const cases = [
     {
-      name: '空降前 5 展示强提醒徽标',
+      name: '空降前 5 置于标题区，底部元信息区保持分类胶囊在前、语言在后',
       presence: { status: 'NEW_TOP', streakDays: 1, previousRank: null, rankDelta: null },
-      expectText: ['空降前 5'],
+      insight: {
+        category: 'AI_AGENT',
+        definition: '测试定义',
+        painPoint: '痛点',
+        highlights: [],
+        limitations: [],
+        risks: [],
+        trendSignal: null,
+        generatedAt: '2026-11-26T00:00:00Z',
+        model: 'deepseek-flash',
+        ruleVersion: 'v1',
+      },
+      expectTitleText: ['空降前 5'],
+      expectMetaOrder: ['AI 智能体', 'TypeScript'],
+      forbidMetaText: ['空降前 5', '连榜'],
+      expectMetricsText: ['+340'],
       forbidText: ['连榜', '↑'],
     },
     {
-      name: '连榜 4 天且上升 5 位展示连榜天数与上升幅度',
-      presence: { status: 'STREAK', streakDays: 4, previousRank: 7, rankDelta: 5 },
-      expectText: ['连榜 4 天', '↑5'],
-      forbidText: ['新上榜', '空降前 5'],
+      name: '连榜 8 天且上升 5 位降噪置于右侧热度列显示连榜 7+ 天与上升箭头，不混入底部元信息',
+      presence: { status: 'STREAK', streakDays: 8, previousRank: 7, rankDelta: 5 },
+      insight: null,
+      expectTitleText: ['acme/', 'alpha'],
+      expectMetaOrder: ['TypeScript'],
+      forbidMetaText: ['连榜', '↑5'],
+      expectMetricsText: ['+340', '连榜 7+ 天', '↑5'],
+      forbidText: ['新上榜', '空降前 5', '连榜 8 天'],
     },
     {
       name: '无前序历史时不渲染任何异动徽标',
       presence: null,
-      expectText: ['acme/', 'alpha', 'TypeScript'],
+      insight: null,
+      expectTitleText: ['acme/', 'alpha'],
+      expectMetaOrder: ['TypeScript'],
+      forbidMetaText: ['新上榜', '连榜'],
+      expectMetricsText: ['+340'],
       forbidText: ['新上榜', '空降前 5', '重回榜单', '连榜'],
     },
   ]
@@ -204,12 +240,32 @@ test('TrendProjectEntry 正确渲染新面孔、连榜上升与无基线隐藏�
   for (const item of cases) {
     await t.test(item.name, async (st) => {
       const mounted = await mountHeadless(st, Entry, {
-        project: { ...baseProject, presence: item.presence },
+        project: { ...baseProject, insight: item.insight, presence: item.presence },
         href: '/star-tide/2026-11-26/acme/alpha',
       })
       const text = collectText(mounted.root)
-      for (const expected of item.expectText) {
-        assert.ok(text.includes(expected), `应包含 "${expected}"，实际文本：${text}`)
+      const titleNode = findAll(mounted.root, (n) => n.props?.class === 'title-line')[0]
+      const metaNode = findAll(mounted.root, (n) => n.props?.class === 'meta-tags')[0]
+      const metricsNode = findAll(mounted.root, (n) => n.props?.class === 'metrics')[0]
+      assert.ok(titleNode && metaNode && metricsNode, '应存在标题区、元信息区与右侧热度列')
+
+      const titleText = collectText(titleNode)
+      const metaText = collectText(metaNode)
+      const metricsText = collectText(metricsNode)
+      for (const expected of item.expectTitleText) {
+        assert.ok(titleText.includes(expected), `标题区应包含 "${expected}"，实际：${titleText}`)
+      }
+      let cursor = -1
+      for (const expected of item.expectMetaOrder) {
+        const idx = metaText.indexOf(expected)
+        assert.ok(idx > cursor, `底部元信息应按序包含 "${expected}"，实际：${metaText}`)
+        cursor = idx
+      }
+      for (const forbidden of item.forbidMetaText) {
+        assert.ok(!metaText.includes(forbidden), `底部元信息不应包含 "${forbidden}"，实际：${metaText}`)
+      }
+      for (const expected of item.expectMetricsText) {
+        assert.ok(metricsText.includes(expected), `右侧热度列应包含 "${expected}"，实际：${metricsText}`)
       }
       for (const forbidden of item.forbidText) {
         assert.ok(!text.includes(forbidden), `不应包含 "${forbidden}"，实际文本：${text}`)

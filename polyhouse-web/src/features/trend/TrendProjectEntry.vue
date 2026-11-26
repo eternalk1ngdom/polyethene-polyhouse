@@ -18,6 +18,13 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 const badge = computed(() => presenceBadge(props.project.presence))
+/** 强异动（空降前 5 / 新上榜 / 重回榜单）跟在标题末尾凸显黑马；连榜则降噪放右侧热度列。 */
+const highlightBadge = computed(() =>
+  badge.value && badge.value.tone !== 'streak' ? badge.value : null,
+)
+const streakBadge = computed(() =>
+  badge.value && badge.value.tone === 'streak' ? badge.value : null,
+)
 </script>
 <template>
   <article class="entry">
@@ -25,16 +32,24 @@ const badge = computed(() => presenceBadge(props.project.presence))
       String(project.rankNum).padStart(2, '0')
     }}</span>
     <div class="summary">
-      <h2>
-        <a
-          :id="'repo-' + project.fullName"
-          :href="href"
-          @click="emit('open', $event, project.fullName)"
-          ><span class="org">{{ project.fullName.split('/')[0] }}/</span><wbr />{{
-            project.fullName.split('/')[1]
-          }}</a
+      <div class="title-line">
+        <h2>
+          <a
+            :id="'repo-' + project.fullName"
+            :href="href"
+            @click="emit('open', $event, project.fullName)"
+            ><span class="org">{{ project.fullName.split('/')[0] }}/</span><wbr />{{
+              project.fullName.split('/')[1]
+            }}</a
+          >
+        </h2>
+        <span
+          v-if="highlightBadge"
+          class="presence-badge"
+          :class="`presence-${highlightBadge.tone}`"
+          >{{ highlightBadge.label }}</span
         >
-      </h2>
+      </div>
       <p v-if="project.insight || project.description" class="excerpt">
         <span class="origin">{{
           project.insight
@@ -46,20 +61,6 @@ const badge = computed(() => presenceBadge(props.project.presence))
         {{ project.insight?.definition ?? project.description }}
       </p>
       <div class="meta-tags">
-        <span v-if="badge" class="presence-badge" :class="`presence-${badge.tone}`">
-          {{ badge.label }}
-          <span
-            v-if="badge.rankRise"
-            class="rank-rise"
-            :aria-label="`较上期排名上升 ${badge.rankRise.slice(1)} 位`"
-            >{{ badge.rankRise }}</span
-          >
-        </span>
-        <span
-          class="language"
-          :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
-          >{{ project.primaryLanguage ?? '语言未知' }}</span
-        >
         <span
           v-if="project.insight"
           class="category"
@@ -69,12 +70,28 @@ const badge = computed(() => presenceBadge(props.project.presence))
           }"
           >{{ categoryLabel(project.insight.category) }}</span
         >
+        <span
+          class="language"
+          :style="{ '--lang-color': languageColor(project.primaryLanguage) }"
+          >{{ project.primaryLanguage ?? '语言未知' }}</span
+        >
       </div>
     </div>
-    <span class="stars" role="img" :aria-label="`本期新增星标：${trendNumber(project.starsAdded)}`"
-      ><ElIcon aria-hidden="true"><StarFilled /></ElIcon
-      >{{ project.starsAdded === null ? '—' : '+' + trendNumber(project.starsAdded) }}</span
-    >
+    <div class="metrics">
+      <span class="stars" role="img" :aria-label="`本期新增星标：${trendNumber(project.starsAdded)}`"
+        ><ElIcon aria-hidden="true"><StarFilled /></ElIcon
+        >{{ project.starsAdded === null ? '—' : '+' + trendNumber(project.starsAdded) }}</span
+      >
+      <span v-if="streakBadge" class="streak-meta">
+        {{ streakBadge.label }}
+        <span
+          v-if="streakBadge.rankRise"
+          class="rank-rise"
+          :aria-label="`较上期排名上升 ${streakBadge.rankRise.slice(1)} 位`"
+          >{{ streakBadge.rankRise }}</span
+        >
+      </span>
+    </div>
   </article>
 </template>
 <style scoped>
@@ -95,6 +112,12 @@ const badge = computed(() => presenceBadge(props.project.presence))
 .summary {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
 }
 h2 {
   font-size: clamp(18px, 2.4vw, 24px);
@@ -133,7 +156,7 @@ h2 a:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  margin-top: 6px;
+  margin-top: 7px;
 }
 .language {
   display: inline-flex;
@@ -141,6 +164,7 @@ h2 a:focus-visible {
   gap: 6px;
   font-size: 12px;
   color: #41576a;
+  white-space: nowrap;
 }
 .category {
   font-size: 11.5px;
@@ -149,6 +173,8 @@ h2 a:focus-visible {
   border-radius: 999px;
   background: var(--st-pill-bg);
   color: var(--st-pill-ink);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .presence-badge {
   display: inline-flex;
@@ -161,6 +187,8 @@ h2 a:focus-visible {
   border-radius: 999px;
   border: 1px solid transparent;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .presence-new-top {
   background: #fdece7;
@@ -177,11 +205,22 @@ h2 a:focus-visible {
   border-color: #d3c6eb;
   color: #4b3d7a;
 }
-.presence-streak {
-  background: #f1f5f7;
-  border-color: #d9e3e8;
-  color: #566a78;
-  font-weight: 550;
+.metrics {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.streak-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #5b7080;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .rank-rise {
   color: #1f6e58;
@@ -207,6 +246,7 @@ h2 a:focus-visible {
   font-size: 14px;
   padding: 5px 10px;
   border-radius: 9px;
+  white-space: nowrap;
 }
 .stars .el-icon {
   color: #b7791f;
@@ -223,8 +263,9 @@ h2 a:focus-visible {
   .summary {
     display: contents;
   }
-  h2 {
+  .title-line {
     grid-column: 2 / -1;
+    gap: 5px 8px;
   }
   .excerpt {
     grid-column: 2 / -1;
@@ -235,9 +276,17 @@ h2 a:focus-visible {
     align-self: center;
     margin: 0;
   }
-  .stars {
+  .metrics {
     grid-column: 3;
+    align-self: center;
+    gap: 3px;
+  }
+  .stars {
     font-size: 12px;
+    padding: 4px 8px;
+  }
+  .streak-meta {
+    font-size: 11px;
   }
 }
 </style>

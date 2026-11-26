@@ -69,6 +69,7 @@ const cacheHitRate = computed(() => {
         <div class="heldMicros">
           <dt>在途及待核对占用</dt>
           <dd>{{ yuan(fees.heldMicros) }}</dd>
+          <span class="sub-hint">未结清预留暂占安全余额</span>
         </div>
         <div class="remainingMicros">
           <dt>剩余安全可用</dt>
@@ -216,7 +217,7 @@ dt {
 dd {
   margin: 5px 0 0;
   font-weight: 650;
-  font-size: clamp(16px, 2vw, 24px);
+  font-size: clamp(16px, 1.85vw, 22px);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -292,7 +293,7 @@ li {
 li span:last-child {
   color: #475c69;
 }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .amounts,
   .usage-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
