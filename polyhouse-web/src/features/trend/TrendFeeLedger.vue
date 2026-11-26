@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ElButton } from 'element-plus'
 import type { TrendFees } from '../../api/trend'
 import { trendTime } from './presentation'
@@ -11,23 +12,30 @@ interface Props {
 interface Emits {
   refresh: [append?: boolean]
 }
-defineProps<Props>()
+const props = defineProps<Props>()
 defineEmits<Emits>()
-const amounts = [
-  { key: 'accountedMicros', label: '已入账' },
-  { key: 'heldMicros', label: '在途及待核对占用' },
-  { key: 'remainingMicros', label: '剩余可用' },
-  { key: 'budgetMicros', label: '月预算上限' },
-] as const
+
 const formatter = new Intl.NumberFormat('zh-CN', {
   style: 'currency',
   currency: 'CNY',
   minimumFractionDigits: 2,
   maximumFractionDigits: 6,
 })
+const intFormatter = new Intl.NumberFormat('zh-CN')
+
 function yuan(micros: number): string {
   return formatter.format(micros / 1_000_000)
 }
+
+function count(value: number): string {
+  return intFormatter.format(value)
+}
+
+const cacheHitRate = computed(() => {
+  const usage = props.fees?.usage
+  if (!usage || usage.promptTokens <= 0) return '—'
+  return `${Math.round((usage.cacheHitTokens / usage.promptTokens) * 100)}%`
+})
 </script>
 
 <template>
@@ -39,7 +47,7 @@ function yuan(micros: number): string {
           <span v-if="fees?.suspended" class="status-pill warn">已暂停</span>
         </div>
         <p>
-          <template v-if="fees">{{ fees.month }} · </template>应用估算，人民币（CNY）
+          <template v-if="fees">{{ fees.month }} · </template>双口径对账，人民币（CNY）
         </p>
       </div>
       <ElButton :loading="busy" @click="$emit('refresh')">刷新费用</ElButton>
@@ -48,11 +56,53 @@ function yuan(micros: number): string {
     <p v-else-if="!fees && busy" role="status">正在读取费用账本…</p>
     <template v-if="fees">
       <dl class="amounts">
-        <div v-for="amount in amounts" :key="amount.key" :class="amount.key">
-          <dt>{{ amount.label }}</dt>
-          <dd>{{ yuan(fees[amount.key]) }}</dd>
+        <div class="accountedMicros">
+          <dt>安全预算已用</dt>
+          <dd>{{ yuan(fees.accountedMicros) }}</dd>
+          <span class="sub-hint">按高峰全价控制 10 元闸门</span>
+        </div>
+        <div class="estimatedActual">
+          <dt>预计平台实扣</dt>
+          <dd>{{ fees.usage ? yuan(fees.usage.estimatedActualMicros) : '—' }}</dd>
+          <span class="sub-hint">含缓存命中与工作日空闲 5 折，不含法定调休节假日</span>
+        </div>
+        <div class="heldMicros">
+          <dt>在途及待核对占用</dt>
+          <dd>{{ yuan(fees.heldMicros) }}</dd>
+        </div>
+        <div class="remainingMicros">
+          <dt>剩余安全可用</dt>
+          <dd>{{ yuan(fees.remainingMicros) }}</dd>
+          <span class="sub-hint">月上限 {{ yuan(fees.budgetMicros) }}</span>
         </div>
       </dl>
+
+      <section v-if="fees.usage" class="usage-box" aria-label="本月 Token 汇总明细">
+        <h3>本月 Token 汇总明细</h3>
+        <dl class="usage-grid">
+          <div>
+            <dt>已结算调用</dt>
+            <dd>{{ count(fees.usage.settledRequests) }} 次</dd>
+          </div>
+          <div>
+            <dt>输入总计</dt>
+            <dd>{{ count(fees.usage.promptTokens) }}</dd>
+          </div>
+          <div>
+            <dt>缓存命中（命中率）</dt>
+            <dd>{{ count(fees.usage.cacheHitTokens) }}（{{ cacheHitRate }}）</dd>
+          </div>
+          <div>
+            <dt>输出总计</dt>
+            <dd>{{ count(fees.usage.completionTokens) }}</dd>
+          </div>
+        </dl>
+        <p class="reconcile-note">
+          便于直接对照 DeepSeek 控制台用量明细核账；若本地与其他环境共用同一 API
+          Key，平台账单可能高于本应用统计。
+        </p>
+      </section>
+
       <p v-if="fees.conservativeMicros">
         其中 {{ yuan(fees.conservativeMicros) }} 已按保守金额入账。
       </p>
@@ -138,9 +188,14 @@ p {
   margin: 15px 0;
 }
 .amounts div {
+  display: flex;
+  flex-direction: column;
   padding: 14px clamp(10px, 1.6vw, 20px);
   background: #e6eef0;
   border-radius: 10px;
+}
+.amounts .estimatedActual {
+  background: #e2f5f4;
 }
 .amounts .heldMicros {
   background: #faebcf;
@@ -148,8 +203,11 @@ p {
 .amounts .remainingMicros {
   background: #d9ece3;
 }
-.amounts .budgetMicros {
-  background: #e9e7ee;
+.sub-hint {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #48606e;
 }
 dt {
   font-size: 13px;
@@ -161,6 +219,34 @@ dd {
   font-size: clamp(16px, 2vw, 24px);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+.usage-box {
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid #dce6ea;
+  border-radius: 10px;
+  background: #f8fbfc;
+}
+.usage-box h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #213951;
+}
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+.usage-grid dd {
+  font-size: 15px;
+  margin-top: 2px;
+  color: #142f46;
+}
+.reconcile-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #536978;
 }
 details {
   padding: 0 3px 4px;
@@ -207,7 +293,8 @@ li span:last-child {
   color: #475c69;
 }
 @media (max-width: 640px) {
-  .amounts {
+  .amounts,
+  .usage-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

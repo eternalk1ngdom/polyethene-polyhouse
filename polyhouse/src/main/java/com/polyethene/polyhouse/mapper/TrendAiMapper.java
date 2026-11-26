@@ -86,6 +86,14 @@ public interface TrendAiMapper {
     int finish(@Param("id") String id, @Param("state") String state, @Param("charged") long charged,
                @Param("input") int input, @Param("output") int output, @Param("outcome") String outcome);
 
+    /** 记录 017 增量字段（缓存命中拆分与参考平台实扣估算），仅用于屋主双口径对账。 */
+    @Update("""
+        UPDATE tool_trend_ai_request SET cache_hit_tokens=#{cacheHit},cache_miss_tokens=#{cacheMiss},
+        estimated_actual_micros=#{estimatedActualMicros} WHERE id=#{id} AND state='SETTLED'
+        """)
+    int recordCacheUsage(@Param("id") String id, @Param("cacheHit") int cacheHit,
+                         @Param("cacheMiss") int cacheMiss, @Param("estimatedActualMicros") long estimatedActualMicros);
+
     /** 未知结果保留费用和仓库槽；不因超时或重启自动退回预算。 */
     @Update("UPDATE tool_trend_ai_request SET state='UNKNOWN',outcome=#{reason} WHERE id=#{id} AND state='RESERVED'")
     int unknown(@Param("id") String id, @Param("reason") String reason);

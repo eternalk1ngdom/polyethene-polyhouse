@@ -87,6 +87,16 @@ export interface TrendPendingCharge {
   createdAt: string
 }
 
+/** 本月 AI Token 级汇总与参考平台实扣估算，便于对照 DeepSeek 控制台核账。 */
+export interface TrendFeeUsage {
+  settledRequests: number
+  promptTokens: number
+  cacheHitTokens: number
+  cacheMissTokens: number
+  completionTokens: number
+  estimatedActualMicros: number
+}
+
 export interface TrendFees {
   month: string
   budgetMicros: number
@@ -97,6 +107,7 @@ export interface TrendFees {
   suspended: boolean
   pending: TrendPendingCharge[]
   nextAfter: string | null
+  usage: TrendFeeUsage | null
 }
 
 function publicationSummary(value: unknown): TrendPublicationSummary {
@@ -156,6 +167,18 @@ function pending(value: unknown): TrendPendingCharge {
   }
 }
 
+function feeUsage(value: unknown): TrendFeeUsage {
+  const row = object(value)
+  return {
+    settledRequests: whole(row.settledRequests),
+    promptTokens: whole(row.promptTokens),
+    cacheHitTokens: whole(row.cacheHitTokens),
+    cacheMissTokens: whole(row.cacheMissTokens),
+    completionTokens: whole(row.completionTokens),
+    estimatedActualMicros: whole(row.estimatedActualMicros),
+  }
+}
+
 function fees(value: unknown): TrendFees {
   const row = object(value)
   return {
@@ -168,6 +191,7 @@ function fees(value: unknown): TrendFees {
     suspended: truth(row.suspended),
     pending: list(row.pending, 50, pending),
     nextAfter: optional(row.nextAfter, id),
+    usage: optional(row.usage, feeUsage),
   }
 }
 

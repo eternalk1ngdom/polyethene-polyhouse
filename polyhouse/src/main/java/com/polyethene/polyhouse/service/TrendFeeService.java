@@ -11,6 +11,7 @@ import com.polyethene.polyhouse.service.trend.TrendOwnerAuthorization;
 import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -64,9 +65,15 @@ public class TrendFeeService {
             var items = page.stream().limit(request.limit()).map(item -> new TrendPendingChargeVO(item.id(),
                     item.repositoryId(), item.state(), item.reservedMicros(),
                     item.createdAt().toInstant(ZoneOffset.UTC), item.chargeKind())).toList();
+            TrendFeeUsageVO usage;
+            try {
+                usage = fees.usageSummary(month);
+            } catch (BadSqlGrammarException unmigrated) {
+                usage = null;
+            }
             return new TrendFeeVO(month, budget, accounted, held, Math.max(0, budget - accounted - held),
                     summary == null ? 0 : summary.conservativeMicros(), summary != null && summary.suspended(), items,
-                    page.size() > request.limit() ? items.getLast().requestId() : null);
+                    page.size() > request.limit() ? items.getLast().requestId() : null, usage);
         }));
     }
 

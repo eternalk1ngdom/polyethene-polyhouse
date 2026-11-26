@@ -137,10 +137,12 @@ public class TrendBriefingCodec {
             if (body == null || body.length > 256 * 1024) throw invalid();
             var root = json.readTree(body);
             if (root == null || !root.isObject()) throw invalid();
-            int input = tokens(root.path("usage").path("prompt_tokens"));
-            int output = tokens(root.path("usage").path("completion_tokens"));
-            int total = tokens(root.path("usage").path("total_tokens"));
+            var usage = root.path("usage");
+            int input = tokens(usage.path("prompt_tokens"));
+            int output = tokens(usage.path("completion_tokens"));
+            int total = tokens(usage.path("total_tokens"));
             if (input == 0 || (long) input + output != total) throw invalid();
+            var cache = TrendAiPricing.parseCacheTokens(usage, input);
             var choices = root.path("choices");
             var choice = choices.isArray() && choices.size() == 1 ? choices.get(0) : null;
             boolean finished = choice != null && "stop".equals(choice.path("finish_reason").asText())
@@ -148,7 +150,7 @@ public class TrendBriefingCodec {
                     && !choice.path("message").hasNonNull("tool_calls");
             String content = finished && choice.path("message").path("content").isTextual()
                     ? choice.path("message").path("content").asText() : null;
-            return new Envelope(input, output, content);
+            return new Envelope(input, output, cache.hit(), cache.miss(), content);
         } catch (IOException failure) {
             throw invalid();
         }
@@ -366,12 +368,18 @@ public class TrendBriefingCodec {
      * 上游响应信封：用量可信不代表正文合格，正文拒收时仍按实际用量结算。
      * @param input 上游返回输入 token
      * @param output 上游返回输出 token
+     * @param cacheHit 输入缓存命中 token 数（缺省回退 0）
+     * @param cacheMiss 输入缓存未命中 token 数（缺省回退 input）
      * @param content 尚未校验的 JSON 正文，截断或非完成态时为 null
      */
-    public record Envelope(int input, int output, String content) {
+    public record Envelope(int input, int output, int cacheHit, int cacheMiss, String content) {
+        /** 兼容既有 3 参构造：缺省按未命中缓存处理。 */
+        public Envelope(int input, int output, String content) {
+            this(input, output, 0, input, content);
+        }
         /** 不在日志中打印原始模型正文。 */
         @Override public String toString() {
-            return "Envelope[input=" + input + ", output=" + output + "]";
+            return "Envelope[input=" + input + ", output=" + output + ", cacheHit=" + cacheHit + "]";
         }
     }
 

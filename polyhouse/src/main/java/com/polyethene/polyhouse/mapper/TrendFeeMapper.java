@@ -1,6 +1,7 @@
 package com.polyethene.polyhouse.mapper;
 
 import com.polyethene.polyhouse.model.entity.*;
+import com.polyethene.polyhouse.model.vo.TrendFeeUsageVO;
 import org.apache.ibatis.annotations.*;
 import java.util.List;
 
@@ -16,6 +17,28 @@ public interface TrendFeeMapper {
         """)
     @Options(timeout = 3)
     TrendFeeMonthRecord month(@Param("month") String month);
+
+    /** 汇总当月已结算单仓与简报请求的 Token 用量与参考平台实扣估算，旧行空列自动按未命中/保守额回退。 */
+    @Select("""
+        SELECT
+            COUNT(*) AS settled_requests,
+            COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+            COALESCE(SUM(COALESCE(cache_hit_tokens, 0)), 0) AS cache_hit_tokens,
+            COALESCE(SUM(COALESCE(cache_miss_tokens, prompt_tokens, 0)), 0) AS cache_miss_tokens,
+            COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+            COALESCE(SUM(COALESCE(estimated_actual_micros, charged_micros, 0)), 0) AS estimated_actual_micros
+        FROM (
+            SELECT prompt_tokens, cache_hit_tokens, cache_miss_tokens, completion_tokens, estimated_actual_micros, charged_micros
+            FROM tool_trend_ai_request
+            WHERE month_key=#{month} AND state='SETTLED' AND outcome IN ('VALID_OUTPUT','INVALID_OUTPUT')
+            UNION ALL
+            SELECT prompt_tokens, cache_hit_tokens, cache_miss_tokens, completion_tokens, estimated_actual_micros, charged_micros
+            FROM tool_trend_briefing_request
+            WHERE month_key=#{month} AND state='SETTLED' AND outcome IN ('VALID_OUTPUT','INVALID_OUTPUT')
+        ) u
+        """)
+    @Options(timeout = 3)
+    TrendFeeUsageVO usageSummary(@Param("month") String month);
 
     /** 有界keyset页：合并单仓与简报待核对请求，不读取解读JSON、输入指纹或任何原始请求材料。 */
     @Select("""

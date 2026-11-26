@@ -5,7 +5,11 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.TrendAiProperties;
 import com.polyethene.polyhouse.mapper.TrendAiMapper;
 import com.polyethene.polyhouse.model.entity.*;
+import com.polyethene.polyhouse.service.trend.TrendAiPricing;
 import com.polyethene.polyhouse.service.trend.TrendInsightCodec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -18,6 +22,7 @@ import java.util.Objects;
 /** 持久账本先预留后调用，结算与缓存发布同事务；不负责网络或身份推断。 */
 @Service
 public class TrendAiLedger {
+    private static final Logger LOGGER = LoggerFactory.getLogger(TrendAiLedger.class);
     private final TrendAiMapper mapper;
     private final TrendAiProperties settings;
     private final Clock clock;
@@ -72,11 +77,16 @@ public class TrendAiLedger {
 
     /** 已知用量即使输出非法也需要结算；缓存仅在结构验证成功时更新。 */
     public void settle(String id, int input, int output, String payload) {
-        complete(id, input, output, payload, false);
+        complete(id, input, output, 0, input, payload, false);
+    }
+
+    /** 已知用量与缓存命中拆分时同时记录参考平台实扣估算；安全闸门仍严格按保守高峰口径结算。 */
+    public void settle(String id, int input, int output, int cacheHit, int cacheMiss, String payload) {
+        complete(id, input, output, cacheHit, cacheMiss, payload, false);
     }
 
     /** 只有能够证明尚未发送的失败可退回预留，不允许用网络超时调用此方法。 */
-    public void cancelBeforeSend(String id) { complete(id, 0, 0, null, true); }
+    public void cancelBeforeSend(String id) { complete(id, 0, 0, 0, 0, null, true); }
 
     /** 无响应保持未知；晚到的用量违约即使请求已人工关闭也须暂停原月，不能被终结状态掩盖。 */
     public void unknown(String id, boolean usageExceeded) {
@@ -122,7 +132,7 @@ public class TrendAiLedger {
         });
     }
 
-    private void complete(String id, int input, int output, String payload, boolean cancelled) {
+    private void complete(String id, int input, int output, int cacheHit, int cacheMiss, String payload, boolean cancelled) {
         transaction.executeWithoutResult(status -> {
             var request = mapper.request(id);
             if (request == null) throw conflict();
@@ -132,13 +142,23 @@ public class TrendAiLedger {
             if ("SETTLED".equals(current.state()) || "CANCELLED".equals(current.state())) return;
             if (cancelled && !"RESERVED".equals(current.state())) throw conflict();
             if (!id.equals(cache.activeRequest()) || input < 0 || input > current.inputBound()
-                    || output < 0 || output > current.outputBound()) throw conflict();
+                    || output < 0 || output > current.outputBound()
+                    || cacheHit < 0 || cacheMiss < 0 || (long) cacheHit + cacheMiss != input) throw conflict();
             long charged = cost(input, output, current.inputRate(), current.outputRate());
             if (charged > current.reservedMicros() || payload != null && payload.length() > 16_384) throw conflict();
             if (mapper.settle(current.monthKey(), current.reservedMicros(), charged) != 1
                     || mapper.finish(id, cancelled ? "CANCELLED" : "SETTLED", charged, input, output,
                     cancelled ? "NOT_SENT" : payload == null ? "INVALID_OUTPUT" : "VALID_OUTPUT") != 1
                     || mapper.release(current.repositoryId(), id, payload) != 1) throw conflict();
+            if (!cancelled) {
+                long estimated = TrendAiPricing.estimateActualMicros(cacheHit, cacheMiss, output,
+                        current.inputRate(), current.outputRate(), clock.instant(), charged);
+                try {
+                    mapper.recordCacheUsage(id, cacheHit, cacheMiss, estimated);
+                } catch (BadSqlGrammarException unmigrated) {
+                    LOGGER.debug("017 缓存命中列尚未迁移，跳过参考实扣写入：request={}", id);
+                }
+            }
         });
     }
 

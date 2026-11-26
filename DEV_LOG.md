@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-26（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.24.md](docs/dev-log/v1.0-dev.24.md)。
+更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.24.md](docs/dev-log/v1.0-dev.24.md)。
 
 ## 当前焦点
 
-- **已立项待实施（dev.24）**：[星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](docs/plans/startide-delta-automation-billing.md)（3 个闭环设计口径均已获用户批准，待新会话从 `dev` 开短期分支实施）。
+- **短期分支待合入（dev.24）**：[星潮异动、自动拉取与费用对账](docs/plans/startide-delta-automation-billing.md) 3 个闭环已在 `feat/startide-delta-automation-billing` 验收完成，待确认推送合入 `dev`；云端与 `015`/`017` 迁移另行授权。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

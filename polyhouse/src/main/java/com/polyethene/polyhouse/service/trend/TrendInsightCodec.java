@@ -107,10 +107,12 @@ public class TrendInsightCodec {
             if (body == null || body.length > 256 * 1024) throw invalid();
             var root = json.readTree(body);
             if (root == null || !root.isObject()) throw invalid();
-            int input = tokens(root.path("usage").path("prompt_tokens"));
-            int output = tokens(root.path("usage").path("completion_tokens"));
-            int total = tokens(root.path("usage").path("total_tokens"));
+            var usage = root.path("usage");
+            int input = tokens(usage.path("prompt_tokens"));
+            int output = tokens(usage.path("completion_tokens"));
+            int total = tokens(usage.path("total_tokens"));
             if (input == 0 || (long)input + output != total) throw invalid();
+            var cache = TrendAiPricing.parseCacheTokens(usage, input);
             var choices = root.path("choices");
             var choice = choices.isArray() && choices.size() == 1 ? choices.get(0) : null;
             boolean finished = choice != null && "stop".equals(choice.path("finish_reason").asText())
@@ -118,7 +120,7 @@ public class TrendInsightCodec {
                     && !choice.path("message").hasNonNull("tool_calls");
             String content = finished && choice.path("message").path("content").isTextual()
                     ? choice.path("message").path("content").asText() : null;
-            return new Envelope(input, output, content);
+            return new Envelope(input, output, cache.hit(), cache.miss(), content);
         } catch (java.io.IOException failure) { throw invalid(); }
     }
 
@@ -255,11 +257,17 @@ public class TrendInsightCodec {
      * 用量可信不表示内容合格，内容校验失败仍应结算。
      * @param input 输入用量
      * @param output 输出用量
+     * @param cacheHit 输入缓存命中 token 数（缺省回退 0）
+     * @param cacheMiss 输入缓存未命中 token 数（缺省回退 input）
      * @param content 尚未验证的 JSON 字符串，可能为空
      */
-    public record Envelope(int input, int output, String content) {
+    public record Envelope(int input, int output, int cacheHit, int cacheMiss, String content) {
+        /** 兼容既有 3 参构造：缺省按未命中缓存处理。 */
+        public Envelope(int input, int output, String content) {
+            this(input, output, 0, input, content);
+        }
         /** 不记录原始模型内容。 */
-        @Override public String toString() { return "Envelope[input=" + input + ", output=" + output + "]"; }
+        @Override public String toString() { return "Envelope[input=" + input + ", output=" + output + ", cacheHit=" + cacheHit + "]"; }
     }
 
     /** 已收到用量的内容校验失败，原因只取程序内的固定代码和字段名。 */

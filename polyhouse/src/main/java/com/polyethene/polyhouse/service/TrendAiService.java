@@ -153,14 +153,22 @@ public class TrendAiService {
             final TrendInsightVO insight;
             try { insight = codec.insight(envelope.content(), project.readmeVersion(), settings.model(), clock.instant()); }
             catch (TrendInsightCodec.OutputRejected failure) {
-                ledger.settle(id, envelope.input(), envelope.output(), null);
+                settleUsage(id, envelope, null);
                 LOGGER.warn("AI 解读未通过校验：请求编号={}，原因={}", id, failure.reason());
                 return fallback(project, previous, "INVALID_OUTPUT");
             }
-            ledger.settle(id, envelope.input(), envelope.output(), codec.encode(insight));
+            settleUsage(id, envelope, codec.encode(insight));
             return result(project, insight, "ANALYZED");
         } catch (BusinessException | DataAccessException failure) {
             return fallback(project, previous, "UNAVAILABLE");
+        }
+    }
+
+    private void settleUsage(String id, TrendInsightCodec.Envelope envelope, String payload) {
+        if (envelope.cacheHit() == 0 && envelope.cacheMiss() == envelope.input()) {
+            ledger.settle(id, envelope.input(), envelope.output(), payload);
+        } else {
+            ledger.settle(id, envelope.input(), envelope.output(), envelope.cacheHit(), envelope.cacheMiss(), payload);
         }
     }
 

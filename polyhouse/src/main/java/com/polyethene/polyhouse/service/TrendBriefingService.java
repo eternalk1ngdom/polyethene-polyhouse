@@ -196,7 +196,7 @@ public class TrendBriefingService {
             try {
                 content = codec.parse(envelope.content(), input.allowedReposByLowerName());
             } catch (TrendBriefingCodec.OutputRejected failure) {
-                settleSafely(requestId, envelope.input(), envelope.output(), null);
+                settleSafely(requestId, envelope.input(), envelope.output(), envelope.cacheHit(), envelope.cacheMiss(), null);
                 LOGGER.warn("7 日风口简报未通过校验：请求编号={}，原因={}", requestId, failure.reason());
                 return new TrendBriefingGenerateVO("INVALID_OUTPUT", true, toView(input, readBriefing(anchorDate)));
             }
@@ -205,7 +205,7 @@ public class TrendBriefingService {
             var stats = input.stats();
             var payload = new TrendBriefingLedger.SettlementPayload(stats.windowStart(), stats.windowEnd(),
                     stats.coveredDays(), stats.sampleStatus(), codec.encode(content), generatedAt);
-            settleSafely(requestId, envelope.input(), envelope.output(), payload);
+            settleSafely(requestId, envelope.input(), envelope.output(), envelope.cacheHit(), envelope.cacheMiss(), payload);
             TrendBriefingRecord latest = readBriefing(anchorDate);
             return new TrendBriefingGenerateVO("GENERATED", true,
                     latest != null && latest.payload() != null ? toView(input, latest)
@@ -329,9 +329,14 @@ public class TrendBriefingService {
         }
     }
 
-    private void settleSafely(String requestId, int input, int output, TrendBriefingLedger.SettlementPayload payload) {
+    private void settleSafely(String requestId, int input, int output, int cacheHit, int cacheMiss,
+                              TrendBriefingLedger.SettlementPayload payload) {
         try {
-            ledger.settle(requestId, input, output, payload);
+            if (cacheHit == 0 && cacheMiss == input) {
+                ledger.settle(requestId, input, output, payload);
+            } else {
+                ledger.settle(requestId, input, output, cacheHit, cacheMiss, payload);
+            }
         } catch (DataAccessException | TransactionException failure) {
             LOGGER.warn("风口简报结算入库失败，原预留需待核对：请求编号={}", requestId);
             throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE);
