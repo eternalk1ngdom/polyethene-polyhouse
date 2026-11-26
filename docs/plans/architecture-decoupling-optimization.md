@@ -1,6 +1,6 @@
 # 聚妙屋架构解耦止血与 AI 协作降噪计划
 
-创建时间：2026-11-25（Asia/Shanghai）。状态：**全部 2 批次共 4 项均已完成实施与验证（分支 `chore/architecture-decoupling-hardening`），待确认合回 `dev`**。  
+创建时间：2026-11-25（Asia/Shanghai）。状态：**已完成并快进合入 `dev`（含全部 2 批次共 4 项）**。  
 依据文档：[架构解耦与 AI 协作友好度专项诊断报告](../design/architecture-decoupling-assessment.md)（基线 `dev` @ `5118cfc`）。
 
 ## 一、立项必要性判断与范围边界

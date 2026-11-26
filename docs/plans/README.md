@@ -4,7 +4,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [架构解耦止血与 AI 协作降噪计划](architecture-decoupling-optimization.md) | 全部 2 批次 4 项（P0 跨端数量硬编码解耦 + 后端 4 处时钟注入统一，P1 拆分 `api/trend.ts` + 清理 21 行 `AvatarService` 空壳）已在短期分支 `chore/architecture-decoupling-hardening` 完成并验证，待确认合回 `dev` | [dev.22](../dev-log/v1.0-dev.22.md) |
+| [架构解耦止血与 AI 协作降噪计划](architecture-decoupling-optimization.md) | 已完成并快进合入 `dev`（全部 2 批次 4 项：跨端数量硬编码解耦、后端 4 处时钟注入统一、拆分 `api/trend.ts`、清理 21 行 `AvatarService` 空壳） | [dev.22](../dev-log/v1.0-dev.22.md) |
 | [项目架构解耦与可维护性专项评估计划](architecture-decoupling-assessment.md) | 已完成（基线 `dev` @ `5118cfc`，只读未改代码）；诊断报告已归档至[架构解耦评估报告](../design/architecture-decoupling-assessment.md) | [dev.22](../dev-log/v1.0-dev.22.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 已完成并合入本地 `dev`（阶段 A～C 与 D1/D2 全部收口，测试红线已并入 `AGENTS.md`；`#16` 远端 Pages 首轮发布与远端推送待另行确认） | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已完成编码、真实验收并合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
