@@ -48,10 +48,12 @@ const {
   dates,
   earliestDate,
   latestDate,
+  loadedMonths,
   loadingMonth,
   monthError,
   loadMonth,
   resolveAdjacentDate,
+  ensureDateAvailable,
   windowStats,
   windowBriefing,
   windowError,
@@ -345,11 +347,14 @@ watch(
             :latest-date="effectiveLatestDate"
             :earliest-date="earliestDate"
             :available-dates="availableDates"
+            :loaded-months="loadedMonths"
+            :resolve-date="ensureDateAvailable"
             :loading-month="loadingMonth"
             :month-error="monthError"
             :highlight-range="windowHighlightRange"
             aria-label="日报日期"
             unit-label="期有日报"
+            item-noun="日报"
             empty-month-text="本月暂无日报"
             @update:model-value="selectDate"
             @month-change="loadMonth"
@@ -610,7 +615,7 @@ watch(
   align-items: center;
 }
 .toolbar {
-  gap: 10px 18px;
+  gap: 10px 12px;
   flex-wrap: wrap;
   padding: 16px 0;
   border-bottom: 1px solid #dce6ea;

@@ -4,10 +4,12 @@
  *
  * 适用场景：星潮日报、账单回溯、成长记录等“离散有值归档”导航。
  * 核心能力：
- * 1. 三段式复合导航条（[ ‹ ] [ 日历图标 日期 · 最新 ▾ ] [ › ]），高频翻期免弹层一步直达；
- * 2. 桌面端轻浮层 Popover + 手机端（≤640px）底部抽屉 Bottom Sheet；
- * 3. 头部分离式年/月有界速选（[ 2026 年 ▾ ] [ 11 月 ▾ ]）：单年归档自动退化为静态年份文本，多年仅渲染真实有归档年份；
- * 4. 仅允许点选有内容的日期，缺采/无内容日置灰且禁用，空月按需提供“回到最新月”兜底；
+ * 1. 范式 A 紧凑一体化触发器（[ ‹ ] [ 2026-11-27 📅 ] [ › ]），宽度 100% 恒定零抖动，
+ *    支持键盘直输日期回车跳转（多分隔符/8 位纯数字宽容解析 + 4 类分级拦截与一键修复）与点选日历双模式融合；
+ * 2. 桌面端轻浮层 Popover（右边缘自动防溢出）+ 手机端（≤640px）底部抽屉 Bottom Sheet（外层防误弹软键盘）；
+ * 3. 无噪自适应导航：单期隐藏外层翻期箭头，单月隐藏头部翻月箭头并将标题退化为静态「YYYY 年 M 月」，
+ *    跨多月/多年自动激活分离式年/月胶囊与翻页箭头；全域禁用态统一采用平静 cursor: default；
+ * 4. 仅允许点选有内容的日期，支持 loadedMonths 区分未加载与空月，避免跨月闪现误导文案；
  * 5. 可选区间高亮带（highlightRange）与快捷跳转胶囊（shortcuts），支持完整键盘方向键与 Esc 焦点还原。
  *
  * 复用示例：
@@ -16,13 +18,15 @@
  *   :latest-date="latestDate"
  *   :earliest-date="earliestDate"
  *   :available-dates="availableDateSet"
+ *   :loaded-months="loadedMonths"
+ *   :resolve-date="ensureDateAvailable"
  *   :highlight-range="windowRange"
- *   :shortcuts="[{ label: '最新一期', value: '' }]"
+ *   item-noun="日报"
  *   @month-change="loadMonth"
  *   @step="handleStep"
  * />
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { ElIcon } from 'element-plus'
 import { ArrowDown, ArrowLeft, ArrowRight, Calendar, Close } from '@element-plus/icons-vue'
 import {
@@ -41,6 +45,12 @@ import {
   type CalendarDayCell,
   type DateRange,
 } from '../core/calendar'
+import {
+  useArchiveDateInput,
+  type ArchiveDateResolveResult,
+} from './archive-date-picker/useArchiveDateInput'
+
+export type { ArchiveDateResolveResult }
 
 /** 快捷跳转胶囊配置项 */
 export interface ArchiveDateShortcut {
@@ -62,6 +72,10 @@ export interface ArchiveDatePickerProps {
   earliestDate?: string | null
   /** 当前已知有归档内容的日期集合或列表 */
   availableDates: ReadonlySet<string> | readonly string[]
+  /** 已完整加载到本地缓存的自然月集合（YYYY-MM），用于区分“尚未拉取”与“确实无内容” */
+  loadedMonths?: ReadonlySet<string> | null
+  /** 手动输入日期跨未加载月时的异步核验回调 */
+  resolveDate?: ((isoDate: string) => Promise<ArchiveDateResolveResult>) | null
   /** 当前展示月份是否正在加载 */
   loadingMonth?: boolean
   /** 当前展示月份加载失败提示（非空时底栏展示原位重试） */
@@ -70,7 +84,7 @@ export interface ArchiveDatePickerProps {
   highlightRange?: DateRange | null
   /** 可选快捷跳转胶囊列表 */
   shortcuts?: readonly ArchiveDateShortcut[]
-  /** 是否展示左右快速切期箭头（默认 true） */
+  /** 是否展示左右快速切期箭头（默认 true；整站仅 1 期时仍会自动隐藏） */
   showStepButtons?: boolean
   /** 是否禁用整个选择器 */
   disabled?: boolean
@@ -80,6 +94,8 @@ export interface ArchiveDatePickerProps {
   emptyHint?: string
   /** 底栏当月有内容天数的量词描述（默认“期有内容”） */
   unitLabel?: string
+  /** 手输缺采提示的内容名词（默认“内容”，如星潮传“日报”构成“当日暂无日报”） */
+  itemNoun?: string
   /** 底栏当月无任何归档内容时的克制提示文案（默认“本月暂无内容”） */
   emptyMonthText?: string
   /** 可选覆写：是否允许点击“上一期”按钮 */
@@ -91,6 +107,8 @@ export interface ArchiveDatePickerProps {
 const props = withDefaults(defineProps<ArchiveDatePickerProps>(), {
   latestDate: null,
   earliestDate: null,
+  loadedMonths: null,
+  resolveDate: null,
   loadingMonth: false,
   monthError: '',
   highlightRange: null,
@@ -100,6 +118,7 @@ const props = withDefaults(defineProps<ArchiveDatePickerProps>(), {
   ariaLabel: '归档日期选择',
   emptyHint: '暂无日期',
   unitLabel: '期有内容',
+  itemNoun: '内容',
   emptyMonthText: '本月暂无内容',
   canStepPrev: null,
   canStepNext: null,
@@ -118,12 +137,23 @@ const emit = defineEmits<{
 
 type PanelMode = 'days' | 'months' | 'years'
 
+const PANEL_WIDTH_PX = 324
+const VIEWPORT_EDGE_GAP_PX = 12
+const COMPACT_MEDIA_QUERY = '(max-width: 640px)'
+
+const feedbackId = `adp-feedback-${useId()}`
 const rootRef = ref<HTMLElement>()
-const triggerBtnRef = ref<HTMLButtonElement>()
+const inputRef = ref<HTMLInputElement>()
+const calendarToggleRef = ref<HTMLButtonElement>()
 const panelRef = ref<HTMLElement>()
 
 const open = ref(false)
 const panelMode = ref<PanelMode>('days')
+const alignRight = ref(false)
+const isCompactViewport = ref(false)
+
+let compactMediaList: MediaQueryList | null = null
+let outsideListenerActive = false
 
 /** 当前实际生效的锚点日期：优先 modelValue，空串时回退 latestDate */
 const activeDate = computed(() => {
@@ -132,18 +162,15 @@ const activeDate = computed(() => {
   return ''
 })
 
-/** 是否正处于最新一期（用于在触发器上展示“最新”微标签） */
+/** 是否正处于最新一期（仅写入无障碍标签与 title，不撑宽触发器） */
 const isShowingLatest = computed(() => {
   if (!props.latestDate) return !props.modelValue
   if (!props.modelValue) return true
   return props.modelValue === props.latestDate
 })
 
-/** 触发器主文案 */
-const displayDateText = computed(() => {
-  if (activeDate.value) return activeDate.value
-  return props.emptyHint
-})
+/** 触发器主展示文本（无日期时回退占位文案） */
+const displayDateText = computed(() => (activeDate.value ? activeDate.value : props.emptyHint))
 
 /** 推导初始展示月份 */
 function resolveInitialMonth(): string {
@@ -171,7 +198,30 @@ watch(activeDate, (nextDate) => {
 })
 
 const viewParts = computed(() => parseYearMonth(viewYearMonth.value) ?? { year: 2026, month: 1 })
+const earliestYearMonth = computed(() => extractYearMonth(props.earliestDate))
 const latestYearMonth = computed(() => extractYearMonth(props.latestDate))
+
+/** 当明确双边界指向同一期时，整站仅有 1 期，外层左右翻期箭头自动隐藏。 */
+const isSinglePeriodArchive = computed(() =>
+  Boolean(
+    props.earliestDate &&
+      props.latestDate &&
+      parseIsoDate(props.earliestDate) &&
+      parseIsoDate(props.latestDate) &&
+      props.earliestDate === props.latestDate,
+  ),
+)
+
+const renderStepButtons = computed(() => props.showStepButtons && !isSinglePeriodArchive.value)
+
+/** 当明确双边界落在同一自然月时，归档仅覆盖 1 个月，头部退化为静态标题并隐藏左右翻月箭头。 */
+const isSingleMonthArchive = computed(() =>
+  Boolean(
+    earliestYearMonth.value &&
+      latestYearMonth.value &&
+      earliestYearMonth.value === latestYearMonth.value,
+  ),
+)
 
 const monthGrid = computed(() =>
   buildMonthGrid(viewYearMonth.value, {
@@ -183,21 +233,27 @@ const monthGrid = computed(() =>
   }),
 )
 
+const isViewMonthLoaded = computed(
+  () => !props.loadedMonths || props.loadedMonths.has(viewYearMonth.value),
+)
+
+const showMonthLoadingState = computed(
+  () => props.loadingMonth || (!isViewMonthLoaded.value && !props.monthError),
+)
+
 const prevMonthYm = computed(() => shiftMonth(viewYearMonth.value, -1))
 const nextMonthYm = computed(() => shiftMonth(viewYearMonth.value, 1))
 
 const canGoPrevMonth = computed(() => {
   if (!prevMonthYm.value) return false
-  if (!props.earliestDate) return true
-  const earliestYm = extractYearMonth(props.earliestDate)
-  return !earliestYm || prevMonthYm.value >= earliestYm
+  if (!earliestYearMonth.value) return true
+  return prevMonthYm.value >= earliestYearMonth.value
 })
 
 const canGoNextMonth = computed(() => {
   if (!nextMonthYm.value) return false
-  if (!props.latestDate) return true
-  const latestYm = extractYearMonth(props.latestDate)
-  return !latestYm || nextMonthYm.value <= latestYm
+  if (!latestYearMonth.value) return true
+  return nextMonthYm.value <= latestYearMonth.value
 })
 
 const selectableYears = computed(() =>
@@ -209,11 +265,19 @@ const selectableYears = computed(() =>
   }),
 )
 
-/** 仅当归档跨度超过 1 个年份时才激活年份下拉胶囊，单年退化为静态年份文本。 */
+/** 仅当归档跨度超过 1 个年份时激活年份下拉胶囊，单年退化为静态文本。 */
 const canPickYear = computed(() => selectableYears.value.length > 1)
+/** 仅当归档非单月时激活月份下拉胶囊，单月退化为静态文本。 */
+const canPickMonth = computed(() => !isSingleMonthArchive.value)
 
 watch(canPickYear, (allowed) => {
   if (!allowed && panelMode.value === 'years') {
+    panelMode.value = 'days'
+  }
+})
+
+watch(canPickMonth, (allowed) => {
+  if (!allowed && panelMode.value === 'months') {
     panelMode.value = 'days'
   }
 })
@@ -242,10 +306,27 @@ const canGoHeaderNext = computed(() => {
   return false
 })
 
-/** 仅在翻到非最新月份且当月无内容时按需显示“回到最新月”兜底入口，平时隐藏不占地。 */
+/** 两侧翻页均永远不可用时直接隐藏头部左右箭头，消除无意义占位与禁止光标噪点。 */
+const showHeaderNav = computed(() => canGoHeaderPrev.value || canGoHeaderNext.value)
+
+const headerPrevTitle = computed(() => {
+  if (panelMode.value === 'months') {
+    return canGoPrevYear.value ? '上一年' : '已是归档最早年份'
+  }
+  return canGoPrevMonth.value ? '上个月' : '已是归档最早月份'
+})
+
+const headerNextTitle = computed(() => {
+  if (panelMode.value === 'months') {
+    return canGoNextYear.value ? '下一年' : '已是归档最新年份'
+  }
+  return canGoNextMonth.value ? '下个月' : '已是归档最新月份'
+})
+
+/** 仅在翻到非最新已加载空月时按需显示“回到最新月”兜底入口，平时隐藏不占地。 */
 const showBackToLatestMonth = computed(
   () =>
-    !props.loadingMonth &&
+    !showMonthLoadingState.value &&
     !props.monthError &&
     monthGrid.value.availableCount === 0 &&
     latestYearMonth.value !== null &&
@@ -253,10 +334,14 @@ const showBackToLatestMonth = computed(
 )
 
 const knownPrevDate = computed(() =>
-  activeDate.value ? findAdjacentAvailableDate(activeDate.value, props.availableDates, 'prev') : null,
+  activeDate.value
+    ? findAdjacentAvailableDate(activeDate.value, props.availableDates, 'prev')
+    : null,
 )
 const knownNextDate = computed(() =>
-  activeDate.value ? findAdjacentAvailableDate(activeDate.value, props.availableDates, 'next') : null,
+  activeDate.value
+    ? findAdjacentAvailableDate(activeDate.value, props.availableDates, 'next')
+    : null,
 )
 
 const prevStepEnabled = computed(() => {
@@ -309,14 +394,67 @@ function setViewMonth(targetYm: string) {
   }
 }
 
+const {
+  draftText,
+  feedback: inputFeedback,
+  resolving: inputResolving,
+  updateDraft,
+  resetDraft,
+  submitInput,
+  handleBlur: handleInputBlur,
+  applyFeedbackAction,
+} = useArchiveDateInput({
+  getActiveDate: () => activeDate.value,
+  getEarliestDate: () => props.earliestDate,
+  getLatestDate: () => props.latestDate,
+  getAvailableDates: () => props.availableDates,
+  getLoadedMonths: () => props.loadedMonths,
+  getResolveDate: () => props.resolveDate,
+  getItemNoun: () => props.itemNoun,
+  onCommit: (isoDate) => {
+    emit('update:modelValue', isoDate)
+    const ym = extractYearMonth(isoDate)
+    if (ym && ym !== viewYearMonth.value) {
+      viewYearMonth.value = ym
+      emit('monthChange', ym)
+    }
+    if (open.value) closePanel(false)
+  },
+  onLocateMonth: (ym) => {
+    if (open.value) {
+      panelMode.value = 'days'
+      setViewMonth(ym)
+    }
+  },
+})
+
+/** 按视口右侧可用宽度动态决定 Popover 对齐方向，防止放置在工具栏右侧时溢出屏幕。 */
+function updatePopoverAlignment() {
+  if (isCompactViewport.value || typeof window === 'undefined') {
+    alignRight.value = false
+    return
+  }
+  const root = rootRef.value
+  if (!root || typeof root.getBoundingClientRect !== 'function') {
+    alignRight.value = false
+    return
+  }
+  const rect = root.getBoundingClientRect()
+  const overflowRight = rect.left + PANEL_WIDTH_PX > window.innerWidth - VIEWPORT_EDGE_GAP_PX
+  const fitsOnLeft = rect.right >= PANEL_WIDTH_PX + VIEWPORT_EDGE_GAP_PX
+  alignRight.value = overflowRight && fitsOnLeft
+}
+
 function openPanel() {
   if (props.disabled) return
   const targetYm = extractYearMonth(activeDate.value) ?? resolveInitialMonth()
   viewYearMonth.value = targetYm
   panelMode.value = 'days'
+  updatePopoverAlignment()
   open.value = true
   emit('monthChange', targetYm)
   void nextTick(() => {
+    updatePopoverAlignment()
     focusActiveDayCell()
   })
 }
@@ -327,8 +465,8 @@ function closePanel(restoreFocus: boolean) {
   panelMode.value = 'days'
   if (restoreFocus) {
     void nextTick(() => {
-      if (typeof triggerBtnRef.value?.focus === 'function') {
-        triggerBtnRef.value.focus()
+      if (typeof calendarToggleRef.value?.focus === 'function') {
+        calendarToggleRef.value.focus()
       }
     })
   }
@@ -339,9 +477,62 @@ function togglePanel() {
   else openPanel()
 }
 
+function onInputChange(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  updateDraft(target?.value ?? '')
+}
+
+function onInputClick() {
+  // 手机端点击触发器优先打开底部抽屉浏览月历，避免误弹软键盘遮挡屏幕。
+  if (isCompactViewport.value && !props.disabled) {
+    openPanel()
+  }
+}
+
+function onInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    updatePopoverAlignment()
+    void submitInput()
+    return
+  }
+  if (event.key === 'Escape') {
+    if (inputFeedback.value || draftText.value !== activeDate.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      resetDraft()
+      return
+    }
+    if (open.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      closePanel(false)
+    }
+    return
+  }
+  if (event.altKey && event.key === 'ArrowDown') {
+    event.preventDefault()
+    if (!open.value) openPanel()
+  }
+}
+
+function onSheetInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    void submitInput()
+  } else if (event.key === 'Escape') {
+    if (inputFeedback.value || draftText.value !== activeDate.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      resetDraft()
+    }
+  }
+}
+
 function handleStep(direction: 'prev' | 'next') {
   const enabled = direction === 'prev' ? prevStepEnabled.value : nextStepEnabled.value
   if (!enabled) return
+  resetDraft()
   const target = direction === 'prev' ? knownPrevDate.value : knownNextDate.value
   if (target) {
     emit('update:modelValue', target)
@@ -356,12 +547,14 @@ function handleStep(direction: 'prev' | 'next') {
 
 function selectDay(cell: CalendarDayCell) {
   if (!cell.available || props.disabled) return
+  resetDraft()
   emit('update:modelValue', cell.date)
   closePanel(true)
 }
 
 function selectShortcut(shortcut: ArchiveDateShortcut) {
   if (shortcut.disabled || props.disabled) return
+  resetDraft()
   emit('update:modelValue', shortcut.value)
   closePanel(true)
 }
@@ -396,6 +589,7 @@ function toggleYearPicker() {
 }
 
 function toggleMonthPicker() {
+  if (!canPickMonth.value) return
   if (panelMode.value === 'months') {
     panelMode.value = 'days'
     void nextTick(() => focusActiveDayCell())
@@ -492,70 +686,168 @@ function onPanelKeydown(event: KeyboardEvent) {
 }
 
 function onOutsidePointerDown(event: PointerEvent) {
-  if (!open.value) return
   const target = event.target as Node | null
   if (target && typeof rootRef.value?.contains === 'function' && rootRef.value.contains(target)) {
     return
   }
-  closePanel(false)
+  if (open.value) closePanel(false)
+  if (inputFeedback.value) resetDraft()
+}
+
+function bindOutsideListener() {
+  if (outsideListenerActive || typeof document === 'undefined') return
+  document.addEventListener('pointerdown', onOutsidePointerDown)
+  outsideListenerActive = true
+}
+
+function unbindOutsideListener() {
+  if (!outsideListenerActive || typeof document === 'undefined') return
+  document.removeEventListener('pointerdown', onOutsidePointerDown)
+  outsideListenerActive = false
+}
+
+// 仅在浮层或输入报错条展开时挂载全局 pointerdown 监听，收起立即解绑实现零常驻开销。
+watch(
+  [open, () => Boolean(inputFeedback.value)],
+  ([isOpen, hasFeedback]) => {
+    if (isOpen || hasFeedback) bindOutsideListener()
+    else unbindOutsideListener()
+  },
+  { immediate: true },
+)
+
+function handleCompactMediaChange(event: MediaQueryListEvent) {
+  isCompactViewport.value = event.matches
 }
 
 onMounted(() => {
-  if (typeof document !== 'undefined') {
-    document.addEventListener('pointerdown', onOutsidePointerDown)
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    compactMediaList = window.matchMedia(COMPACT_MEDIA_QUERY)
+    isCompactViewport.value = compactMediaList.matches
+    if (typeof compactMediaList.addEventListener === 'function') {
+      compactMediaList.addEventListener('change', handleCompactMediaChange)
+    }
   }
 })
 
 onBeforeUnmount(() => {
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('pointerdown', onOutsidePointerDown)
+  unbindOutsideListener()
+  if (compactMediaList && typeof compactMediaList.removeEventListener === 'function') {
+    compactMediaList.removeEventListener('change', handleCompactMediaChange)
   }
+  compactMediaList = null
 })
 </script>
 
 <template>
   <div ref="rootRef" class="adp-root" :class="{ 'adp-open': open, 'adp-disabled': disabled }">
-    <div class="adp-trigger-group" role="group" :aria-label="ariaLabel">
+    <div
+      class="adp-trigger-group"
+      :class="{ 'is-invalid': Boolean(inputFeedback), 'is-solo': !renderStepButtons }"
+      role="group"
+      :aria-label="ariaLabel"
+    >
       <button
-        v-if="showStepButtons"
+        v-if="renderStepButtons"
         type="button"
         class="adp-step-btn adp-step-prev"
         aria-label="上一有内容期"
+        :title="prevStepEnabled ? '上一有内容期' : '已是归档最早一期'"
         :disabled="!prevStepEnabled"
         @click="handleStep('prev')"
       >
         <ElIcon aria-hidden="true"><ArrowLeft /></ElIcon>
       </button>
 
-      <button
-        ref="triggerBtnRef"
-        type="button"
-        class="adp-main-btn"
-        :class="{ 'adp-solo': !showStepButtons }"
-        :disabled="disabled"
-        :aria-expanded="open"
-        aria-haspopup="dialog"
-        :aria-label="`${ariaLabel}：当前 ${displayDateText}${isShowingLatest ? '，最新一期' : ''}`"
-        @click="togglePanel"
-      >
-        <ElIcon class="adp-cal-icon" aria-hidden="true"><Calendar /></ElIcon>
-        <span class="adp-date-text">{{ displayDateText }}</span>
-        <span v-if="isShowingLatest && activeDate" class="adp-latest-pill">最新</span>
-        <ElIcon class="adp-caret-icon" :class="{ rotated: open }" aria-hidden="true">
-          <ArrowDown />
-        </ElIcon>
-      </button>
+      <div class="adp-input-shell">
+        <input
+          ref="inputRef"
+          type="text"
+          class="adp-date-input"
+          inputmode="numeric"
+          autocomplete="off"
+          spellcheck="false"
+          :value="draftText"
+          :placeholder="emptyHint"
+          :readonly="isCompactViewport"
+          :disabled="disabled"
+          :aria-label="`${ariaLabel}：当前 ${displayDateText}${isShowingLatest ? '，最新一期' : ''}`"
+          :title="
+            isCompactViewport
+              ? `当前 ${displayDateText}${isShowingLatest ? '（最新一期）' : ''}，点击打开日历`
+              : `当前 ${displayDateText}${isShowingLatest ? '（最新一期）' : ''}，可输入日期后按回车直达`
+          "
+          :aria-invalid="inputFeedback ? 'true' : undefined"
+          :aria-describedby="inputFeedback ? feedbackId : undefined"
+          @input="onInputChange"
+          @click="onInputClick"
+          @keydown="onInputKeydown"
+          @blur="handleInputBlur"
+        />
+
+        <button
+          ref="calendarToggleRef"
+          type="button"
+          class="adp-cal-btn"
+          :class="{ 'is-open': open }"
+          :disabled="disabled"
+          :aria-expanded="open"
+          aria-haspopup="dialog"
+          :aria-label="`${ariaLabel}：打开日历，当前 ${displayDateText}${isShowingLatest ? '，最新一期' : ''}`"
+          :title="open ? '收起日历' : '打开日历'"
+          @click="togglePanel"
+        >
+          <ElIcon class="adp-cal-icon" aria-hidden="true"><Calendar /></ElIcon>
+        </button>
+      </div>
 
       <button
-        v-if="showStepButtons"
+        v-if="renderStepButtons"
         type="button"
         class="adp-step-btn adp-step-next"
         aria-label="下一有内容期"
+        :title="nextStepEnabled ? '下一有内容期' : '已是最新一期'"
         :disabled="!nextStepEnabled"
         @click="handleStep('next')"
       >
         <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
       </button>
+    </div>
+
+    <div
+      v-if="!open && (inputResolving || inputFeedback)"
+      :id="feedbackId"
+      class="adp-feedback-popover"
+      :class="{ 'is-align-right': alignRight, 'is-resolving': inputResolving && !inputFeedback }"
+      :role="inputFeedback ? 'alert' : 'status'"
+      aria-live="polite"
+    >
+      <template v-if="inputResolving && !inputFeedback">
+        <span class="adp-feedback-msg">正在核验该日期归档…</span>
+      </template>
+      <template v-else-if="inputFeedback">
+        <span class="adp-feedback-msg">{{ inputFeedback.message }}</span>
+        <div class="adp-feedback-actions">
+          <button
+            v-if="inputFeedback.actionLabel"
+            type="button"
+            class="adp-feedback-action-btn"
+            @pointerdown.prevent
+            @click="applyFeedbackAction"
+          >
+            {{ inputFeedback.actionLabel }}
+          </button>
+          <button
+            type="button"
+            class="adp-feedback-reset-btn"
+            aria-label="还原当前日期"
+            @pointerdown.prevent
+            @click="resetDraft"
+          >
+            还原
+          </button>
+        </div>
+      </template>
     </div>
 
     <div v-if="open" class="adp-backdrop" aria-hidden="true" @click="closePanel(true)" />
@@ -564,12 +856,75 @@ onBeforeUnmount(() => {
       v-if="open"
       ref="panelRef"
       class="adp-panel"
+      :class="{ 'is-align-right': alignRight }"
       role="dialog"
       aria-modal="true"
       :aria-label="`${ariaLabel}面板`"
       @keydown="onPanelKeydown"
     >
       <div class="adp-sheet-handle" aria-hidden="true" />
+
+      <div class="adp-sheet-input-bar">
+        <input
+          type="text"
+          class="adp-sheet-input"
+          inputmode="numeric"
+          autocomplete="off"
+          spellcheck="false"
+          :value="draftText"
+          placeholder="输入日期，如 2026-11-24"
+          :disabled="disabled"
+          aria-label="手动输入日期直达"
+          :aria-invalid="inputFeedback ? 'true' : undefined"
+          :aria-describedby="inputFeedback ? feedbackId : undefined"
+          @input="onInputChange"
+          @keydown="onSheetInputKeydown"
+        />
+        <button
+          type="button"
+          class="adp-sheet-submit-btn"
+          :disabled="disabled || inputResolving"
+          @click="void submitInput()"
+        >
+          {{ inputResolving ? '核验中' : '直达' }}
+        </button>
+      </div>
+
+      <div
+        v-if="inputFeedback || inputResolving"
+        :id="feedbackId"
+        class="adp-panel-feedback"
+        :class="{ 'is-resolving': inputResolving && !inputFeedback }"
+        :role="inputFeedback ? 'alert' : 'status'"
+        aria-live="polite"
+      >
+        <template v-if="inputResolving && !inputFeedback">
+          <span class="adp-feedback-msg">正在核验该日期归档…</span>
+        </template>
+        <template v-else-if="inputFeedback">
+          <span class="adp-feedback-msg">{{ inputFeedback.message }}</span>
+          <div class="adp-feedback-actions">
+            <button
+              v-if="inputFeedback.actionLabel"
+              type="button"
+              class="adp-feedback-action-btn"
+              @pointerdown.prevent
+              @click="applyFeedbackAction"
+            >
+              {{ inputFeedback.actionLabel }}
+            </button>
+            <button
+              type="button"
+              class="adp-feedback-reset-btn"
+              aria-label="还原当前日期"
+              @pointerdown.prevent
+              @click="resetDraft"
+            >
+              还原
+            </button>
+          </div>
+        </template>
+      </div>
 
       <div v-if="shortcuts.length" class="adp-shortcuts" role="group" aria-label="快捷日期跳转">
         <button
@@ -591,9 +946,11 @@ onBeforeUnmount(() => {
 
       <div class="adp-header">
         <button
+          v-if="showHeaderNav"
           type="button"
           class="adp-nav-btn"
           :aria-label="panelMode === 'months' ? '上一年' : '上个月'"
+          :title="headerPrevTitle"
           :disabled="!canGoHeaderPrev"
           @click="shiftHeader(-1)"
         >
@@ -601,57 +958,66 @@ onBeforeUnmount(() => {
         </button>
 
         <div class="adp-header-controls">
-          <button
-            v-if="canPickYear"
-            type="button"
-            class="adp-header-pill adp-year-pill"
-            :class="{ 'is-active': panelMode === 'years' }"
-            :aria-expanded="panelMode === 'years'"
-            :aria-label="
-              panelMode === 'years'
-                ? `收起年份选择，返回月历，当前 ${viewParts.year} 年`
-                : `选择年份，当前 ${viewParts.year} 年`
-            "
-            @click="toggleYearPicker"
-          >
-            <span>{{ viewParts.year }} 年</span>
-            <ElIcon
-              class="adp-title-caret"
-              :class="{ rotated: panelMode === 'years' }"
-              aria-hidden="true"
+          <span v-if="!canPickYear && !canPickMonth" class="adp-header-static">
+            {{ viewParts.year }} 年 {{ viewParts.month }} 月
+          </span>
+          <template v-else>
+            <button
+              v-if="canPickYear"
+              type="button"
+              class="adp-header-pill adp-year-pill"
+              :class="{ 'is-active': panelMode === 'years' }"
+              :aria-expanded="panelMode === 'years'"
+              :aria-label="
+                panelMode === 'years'
+                  ? `收起年份选择，返回月历，当前 ${viewParts.year} 年`
+                  : `选择年份，当前 ${viewParts.year} 年`
+              "
+              @click="toggleYearPicker"
             >
-              <ArrowDown />
-            </ElIcon>
-          </button>
-          <span v-else class="adp-year-static">{{ viewParts.year }} 年</span>
+              <span>{{ viewParts.year }} 年</span>
+              <ElIcon
+                class="adp-title-caret"
+                :class="{ rotated: panelMode === 'years' }"
+                aria-hidden="true"
+              >
+                <ArrowDown />
+              </ElIcon>
+            </button>
+            <span v-else class="adp-year-static">{{ viewParts.year }} 年</span>
 
-          <button
-            type="button"
-            class="adp-header-pill adp-month-pill"
-            :class="{ 'is-active': panelMode === 'months' }"
-            :aria-expanded="panelMode === 'months'"
-            :aria-label="
-              panelMode === 'months'
-                ? `收起月份选择，返回月历，当前 ${viewParts.month} 月`
-                : `选择月份，当前 ${viewParts.month} 月`
-            "
-            @click="toggleMonthPicker"
-          >
-            <span>{{ viewParts.month }} 月</span>
-            <ElIcon
-              class="adp-title-caret"
-              :class="{ rotated: panelMode === 'months' }"
-              aria-hidden="true"
+            <button
+              v-if="canPickMonth"
+              type="button"
+              class="adp-header-pill adp-month-pill"
+              :class="{ 'is-active': panelMode === 'months' }"
+              :aria-expanded="panelMode === 'months'"
+              :aria-label="
+                panelMode === 'months'
+                  ? `收起月份选择，返回月历，当前 ${viewParts.month} 月`
+                  : `选择月份，当前 ${viewParts.month} 月`
+              "
+              @click="toggleMonthPicker"
             >
-              <ArrowDown />
-            </ElIcon>
-          </button>
+              <span>{{ viewParts.month }} 月</span>
+              <ElIcon
+                class="adp-title-caret"
+                :class="{ rotated: panelMode === 'months' }"
+                aria-hidden="true"
+              >
+                <ArrowDown />
+              </ElIcon>
+            </button>
+            <span v-else class="adp-year-static">{{ viewParts.month }} 月</span>
+          </template>
         </div>
 
         <button
+          v-if="showHeaderNav"
           type="button"
           class="adp-nav-btn"
           :aria-label="panelMode === 'months' ? '下一年' : '下个月'"
+          :title="headerNextTitle"
           :disabled="!canGoHeaderNext"
           @click="shiftHeader(1)"
         >
@@ -675,7 +1041,11 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <div class="adp-days-grid" role="grid" :aria-label="`${viewParts.year} 年 ${viewParts.month} 月日历`">
+        <div
+          class="adp-days-grid"
+          role="grid"
+          :aria-label="`${viewParts.year} 年 ${viewParts.month} 月日历`"
+        >
           <button
             v-for="cell in monthGrid.cells"
             :key="cell.date"
@@ -705,7 +1075,12 @@ onBeforeUnmount(() => {
         </div>
       </template>
 
-      <div v-else-if="panelMode === 'months'" class="adp-pick-grid" role="grid" aria-label="选择月份">
+      <div
+        v-else-if="panelMode === 'months'"
+        class="adp-pick-grid"
+        role="grid"
+        aria-label="选择月份"
+      >
         <button
           v-for="item in monthPickerItems"
           :key="item.yearMonth"
@@ -739,7 +1114,7 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="adp-footer" role="status" aria-live="polite">
-        <template v-if="loadingMonth">
+        <template v-if="showMonthLoadingState">
           <span class="adp-status-text">正在读取本月归档…</span>
         </template>
         <template v-else-if="monthError">
@@ -762,7 +1137,9 @@ onBeforeUnmount(() => {
         <template v-else>
           <span class="adp-status-text">
             本月 {{ monthGrid.availableCount }} {{ unitLabel }}
-            <template v-if="monthGrid.missingCount > 0"> · 缺采 {{ monthGrid.missingCount }} 天</template>
+            <template v-if="monthGrid.missingCount > 0">
+              · 缺采 {{ monthGrid.missingCount }} 天</template
+            >
           </span>
         </template>
       </footer>
@@ -785,6 +1162,8 @@ onBeforeUnmount(() => {
   --adp-ink-muted: #5a7082;
   --adp-ink-disabled: #9db0be;
   --adp-error: #b42318;
+  --adp-error-soft: #fef3f2;
+  --adp-error-border: #f3c4c0;
 
   position: relative;
   display: inline-flex;
@@ -801,17 +1180,70 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: var(--adp-surface);
   overflow: hidden;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+/* 复合控件由外框承担单一连续焦点轮廓，避免与内部原生输入框直角轮廓叠加。 */
+.adp-trigger-group:focus-within {
+  border-color: var(--adp-border-strong);
+  box-shadow: inset 0 0 0 1px var(--adp-border-strong);
+}
+
+.adp-trigger-group.is-invalid {
+  border-color: var(--adp-error);
+}
+
+.adp-trigger-group.is-invalid:focus-within {
+  border-color: var(--adp-error);
+  box-shadow: inset 0 0 0 1px var(--adp-error);
+}
+
+.adp-input-shell {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.adp-date-input {
+  width: 96px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 2px 0 9px;
+  border: none;
+  background: transparent;
+  color: var(--adp-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.adp-date-input::placeholder {
+  color: var(--adp-ink-muted);
+  font-weight: 500;
+}
+
+/* 外层 .adp-trigger-group:focus-within 已提供连续焦点外框，仅对此内部 input 收窄默认轮廓。 */
+.adp-date-input:focus,
+.adp-date-input:focus-visible {
+  outline: none;
+}
+
+.adp-date-input:disabled {
+  color: var(--adp-ink-disabled);
+  cursor: default;
 }
 
 .adp-step-btn,
-.adp-main-btn {
+.adp-cal-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 44px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--adp-ink);
+  color: var(--adp-ink-muted);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
@@ -820,9 +1252,8 @@ onBeforeUnmount(() => {
 }
 
 .adp-step-btn {
-  width: 40px;
+  width: 34px;
   flex: 0 0 auto;
-  color: var(--adp-ink-muted);
 }
 
 .adp-step-prev {
@@ -835,36 +1266,37 @@ onBeforeUnmount(() => {
   border-radius: 0 9px 9px 0;
 }
 
-.adp-main-btn {
-  gap: 7px;
-  padding: 0 12px;
-  min-width: 0;
-  white-space: nowrap;
+.adp-cal-btn {
+  width: 34px;
+  flex: 0 0 auto;
+  color: var(--adp-accent);
 }
 
-.adp-main-btn.adp-solo {
-  border-radius: 9px;
+.adp-cal-btn.is-open {
+  background: var(--adp-accent-soft);
 }
 
 .adp-step-btn:hover:not(:disabled),
-.adp-main-btn:hover:not(:disabled) {
+.adp-cal-btn:hover:not(:disabled) {
   background: var(--adp-surface-hover);
   color: var(--adp-ink);
 }
 
 .adp-step-btn:active:not(:disabled),
-.adp-main-btn:active:not(:disabled) {
+.adp-cal-btn:active:not(:disabled) {
   border-color: var(--adp-border-strong);
 }
 
+/* 到达正常数据边界的禁用态采用平静 cursor: default，避免刺眼禁止图标。 */
 .adp-step-btn:disabled,
-.adp-main-btn:disabled {
+.adp-cal-btn:disabled {
   color: var(--adp-ink-disabled);
-  cursor: not-allowed;
+  opacity: 0.65;
+  cursor: default;
 }
 
 .adp-step-btn:focus-visible,
-.adp-main-btn:focus-visible,
+.adp-cal-btn:focus-visible,
 .adp-nav-btn:focus-visible,
 .adp-header-pill:focus-visible,
 .adp-close-btn:focus-visible,
@@ -872,40 +1304,108 @@ onBeforeUnmount(() => {
 .adp-day-cell:focus-visible,
 .adp-pick-cell:focus-visible,
 .adp-retry-btn:focus-visible,
-.adp-latest-jump-btn:focus-visible {
+.adp-latest-jump-btn:focus-visible,
+.adp-feedback-action-btn:focus-visible,
+.adp-feedback-reset-btn:focus-visible,
+.adp-sheet-submit-btn:focus-visible {
   outline: none;
   border-color: var(--adp-border-strong);
   box-shadow: inset 0 0 0 1px var(--adp-border-strong);
 }
 
 .adp-cal-icon {
-  color: var(--adp-accent);
   font-size: 15px;
   flex-shrink: 0;
 }
 
-.adp-date-text {
-  letter-spacing: -0.01em;
+.adp-feedback-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 42;
+  min-width: 248px;
+  max-width: min(340px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--adp-error-border);
+  border-radius: 10px;
+  background: var(--adp-error-soft);
+  color: var(--adp-error);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 10px 26px rgba(20, 47, 70, 0.12);
 }
 
-.adp-latest-pill {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--adp-accent-soft);
-  color: var(--adp-accent);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.4;
+.adp-feedback-popover.is-align-right {
+  left: auto;
+  right: 0;
 }
 
-.adp-caret-icon {
+.adp-feedback-popover.is-resolving,
+.adp-panel-feedback.is-resolving {
+  border-color: var(--adp-border);
+  background: var(--adp-surface-muted);
   color: var(--adp-ink-muted);
-  font-size: 13px;
-  transition: transform 0.16s ease;
 }
 
-.adp-caret-icon.rotated {
-  transform: rotate(180deg);
+.adp-panel-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--adp-error-border);
+  border-radius: 10px;
+  background: var(--adp-error-soft);
+  color: var(--adp-error);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.adp-feedback-msg {
+  font-weight: 600;
+}
+
+.adp-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.adp-feedback-action-btn,
+.adp-feedback-reset-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.adp-feedback-action-btn {
+  background: var(--adp-accent);
+  color: #ffffff;
+}
+
+.adp-feedback-action-btn:hover {
+  background: var(--adp-accent-hover);
+}
+
+.adp-feedback-reset-btn {
+  background: var(--adp-surface);
+  border-color: var(--adp-border);
+  color: var(--adp-ink-muted);
+}
+
+.adp-feedback-reset-btn:hover {
+  background: var(--adp-surface-hover);
+  color: var(--adp-ink);
 }
 
 .adp-backdrop {
@@ -927,7 +1427,16 @@ onBeforeUnmount(() => {
   overscroll-behavior: contain;
 }
 
+.adp-panel.is-align-right {
+  left: auto;
+  right: 0;
+}
+
 .adp-sheet-handle {
+  display: none;
+}
+
+.adp-sheet-input-bar {
   display: none;
 }
 
@@ -967,7 +1476,7 @@ onBeforeUnmount(() => {
 
 .adp-shortcut-btn:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .adp-header {
@@ -1008,7 +1517,8 @@ onBeforeUnmount(() => {
 
 .adp-nav-btn:disabled {
   color: var(--adp-ink-disabled);
-  cursor: not-allowed;
+  opacity: 0.65;
+  cursor: default;
 }
 
 .adp-header-controls {
@@ -1020,6 +1530,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.adp-header-static,
 .adp-year-static {
   display: inline-flex;
   align-items: center;
@@ -1140,7 +1651,7 @@ onBeforeUnmount(() => {
 
 .adp-day-cell.is-missing {
   color: var(--adp-ink-disabled);
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .adp-day-cell.is-available:hover:not(.is-selected) {
@@ -1233,7 +1744,7 @@ onBeforeUnmount(() => {
   background: var(--adp-surface-muted);
   border-color: transparent;
   color: var(--adp-ink-disabled);
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .adp-footer {
@@ -1296,6 +1807,16 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .adp-step-btn,
+  .adp-cal-btn {
+    width: 44px;
+  }
+
+  .adp-date-input {
+    width: 102px;
+    cursor: pointer;
+  }
+
   .adp-backdrop {
     display: block;
     position: fixed;
@@ -1304,7 +1825,8 @@ onBeforeUnmount(() => {
     background: rgba(15, 34, 51, 0.36);
   }
 
-  .adp-panel {
+  .adp-panel,
+  .adp-panel.is-align-right {
     position: fixed;
     left: 0;
     right: 0;
@@ -1330,6 +1852,57 @@ onBeforeUnmount(() => {
     background: #c7d6de;
   }
 
+  .adp-sheet-input-bar {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .adp-sheet-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--adp-border);
+    border-radius: 10px;
+    background: var(--adp-surface);
+    color: var(--adp-ink);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .adp-sheet-input:focus {
+    outline: none;
+    border-color: var(--adp-border-strong);
+    box-shadow: inset 0 0 0 1px var(--adp-border-strong);
+  }
+
+  .adp-sheet-submit-btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid var(--adp-accent);
+    border-radius: 10px;
+    background: var(--adp-accent);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 650;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .adp-sheet-submit-btn:hover:not(:disabled) {
+    background: var(--adp-accent-hover);
+  }
+
+  .adp-sheet-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   .adp-close-btn {
     display: inline-flex;
     width: 44px;
@@ -1341,6 +1914,7 @@ onBeforeUnmount(() => {
     height: 44px;
   }
 
+  .adp-header-static,
   .adp-year-static,
   .adp-header-pill {
     min-height: 44px;
@@ -1350,7 +1924,9 @@ onBeforeUnmount(() => {
     padding: 0 10px;
   }
 
-  .adp-latest-jump-btn {
+  .adp-latest-jump-btn,
+  .adp-feedback-action-btn,
+  .adp-feedback-reset-btn {
     min-height: 36px;
     padding: 0 10px;
   }
@@ -1367,13 +1943,15 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .adp-trigger-group,
   .adp-step-btn,
-  .adp-main-btn,
+  .adp-cal-btn,
   .adp-header-pill,
   .adp-title-caret,
-  .adp-caret-icon,
   .adp-day-cell,
-  .adp-latest-jump-btn {
+  .adp-latest-jump-btn,
+  .adp-feedback-action-btn,
+  .adp-feedback-reset-btn {
     transition: none;
   }
 }
