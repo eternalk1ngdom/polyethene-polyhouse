@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.28.md](docs/dev-log/v1.0-dev.28.md)。
+更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.29.md](docs/dev-log/v1.0-dev.29.md)。
 
 ## 当前焦点
 
-- **dev.28 已合 `dev` 并同步 `origin/dev`**：客户端断连 `AsyncRequestNotUsableException` 静默记 `DEBUG`；前端按方案 B 移除费用卡片与请求（保留后端 10 元硬闸门与 `/api/manage/trend/fees`），前后端静默验收与 8080/5173 四视口实测全绿。
+- **dev.29 已在短期分支 `style/startide-owner-header` 完成本地提交（待确认合入 `dev` 与推送）**：星潮发布台落地纯 CSS 晨雾弥散柔光三段均衡报头并清理退休位图 `startide-tide-atlas.webp`，前端 608/608 与双态五视口/首页巡检全绿。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
@@ -18,9 +18,9 @@
 
 | 阶段 | 已完成摘要 |
 | --- | --- |
+| [dev.28](docs/dev-log/v1.0-dev.28.md) | 客户端断连异常静默处理与方案 B 移除前端费用卡片（已合 `dev` 并推 `origin/dev` `a912171`） |
 | [dev.27](docs/dev-log/v1.0-dev.27.md) | 星潮纯前端晨雾页头、斜体日期水印与彩色日历图标（已合 `dev` 并推 `origin/dev` `a082a9c`） |
 | [dev.26](docs/dev-log/v1.0-dev.26.md) | 可复用归档日历组件、星潮接入、范式 A 手输融合与单月静默收口（已合 `dev`） |
 | [dev.25](docs/dev-log/v1.0-dev.25.md) | 发布台并发 429 根治、日报动静分离、急停开关与 `017/018` 真库验收（`3fe6fb3`） |
-| [dev.24](docs/dev-log/v1.0-dev.24.md) | 星潮新面孔/退榜区、自动采集状态、7 日简报自动生成与双口径对账（已合 `dev`） |
 
-更早阶段（dev.23 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。
+更早阶段（dev.24 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。

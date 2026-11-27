@@ -47,33 +47,36 @@ const {
       <RouterLink :to="starTide.route" class="back">
         <ElIcon aria-hidden="true"><Back /></ElIcon> 返回星潮日报
       </RouterLink>
-      <header class="masthead">
-        <div class="mast-copy">
-          <span class="wordmark" lang="en">StarTide</span>
-          <h1>星潮发布台</h1>
-          <template v-if="allowed">
-            <p id="update-hint">更新今天的 GitHub 日报。启用 AI 解读时可能产生费用。</p>
-            <ElButton
-              class="publish"
-              type="primary"
-              :icon="Refresh"
-              :loading="jobBusy"
-              :disabled="active || waiting"
-              aria-describedby="update-hint"
-              @click="submit"
-            >
-              {{
-                waiting
-                  ? '更新冷却中'
-                  : active
-                    ? '任务进行中'
-                    : intent
-                      ? '继续同一次更新'
-                      : '更新本期日报'
-              }}
-            </ElButton>
-          </template>
+      <header class="masthead" :class="{ 'has-actions': allowed }">
+        <div class="mast-main">
+          <h1>星潮发布台 <em lang="en">StarTide</em></h1>
+          <p v-if="allowed" id="update-hint" class="mast-sub">
+            更新今天的 GitHub 日报。启用 AI 解读时可能产生费用。
+          </p>
+          <p v-else class="mast-sub">GitHub 开源日报与近 7 日风口简报 · 屋主控制台</p>
         </div>
+        <div v-if="allowed" class="mast-actions">
+          <ElButton
+            class="publish"
+            type="primary"
+            :icon="Refresh"
+            :loading="jobBusy"
+            :disabled="active || waiting"
+            aria-describedby="update-hint"
+            @click="submit"
+          >
+            {{
+              waiting
+                ? '更新冷却中'
+                : active
+                  ? '任务进行中'
+                  : intent
+                    ? '继续同一次更新'
+                    : '更新本期日报'
+            }}
+          </ElButton>
+        </div>
+        <span class="mast-watermark" lang="en" aria-hidden="true">Console</span>
       </header>
       <p v-if="user.status === 'checking'" class="gate" role="status">正在核对登录状态…</p>
       <section v-else-if="!allowed" class="gate" aria-labelledby="owner-gate">
@@ -142,31 +145,101 @@ const {
   text-underline-offset: 3px;
 }
 .masthead {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 28px;
+  width: 100%;
+  min-height: clamp(132px, 12.5vw, 146px);
+  padding: clamp(22px, 2.6vw, 32px) clamp(22px, 3.6vw, 40px);
   overflow: hidden;
   border-radius: 16px;
-  background: #cadbe8 url('../assets/startide-tide-atlas.webp') no-repeat right bottom / auto 100%;
+  border: 1px solid rgba(178, 202, 219, 0.72);
+  /* 晨雾弥散柔光（控制台略沉稳版）：与星潮阅读页同源的纯 CSS 冰蓝与淡琥珀柔和过渡，零位图。 */
+  background:
+    radial-gradient(
+      64% 142% at 8% 6%,
+      rgba(162, 204, 232, 0.72) 0%,
+      rgba(162, 204, 232, 0.26) 48%,
+      transparent 76%
+    ),
+    radial-gradient(
+      46% 124% at 90% 18%,
+      rgba(246, 214, 166, 0.46) 0%,
+      rgba(246, 214, 166, 0.13) 52%,
+      transparent 78%
+    ),
+    radial-gradient(54% 114% at 56% 108%, rgba(192, 222, 226, 0.46) 0%, transparent 74%),
+    linear-gradient(118deg, #e5f0f8 0%, #f1f6fa 54%, #f9f5ec 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
-.mast-copy {
-  padding: clamp(20px, 3.5vw, 38px);
-  background: linear-gradient(90deg, #cadbe8 30%, rgba(202, 219, 232, 0.97) 41%, transparent 70%);
+.mast-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
-.wordmark {
+.masthead h1 {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  color: var(--st-ink-deep);
   font:
-    italic 22px/1.2 Georgia,
+    700 clamp(25px, 3.6vw, 44px)/1.12 'Songti SC',
+    'STSong',
+    'Noto Serif SC',
+    Georgia,
     serif;
+  letter-spacing: -0.015em;
 }
-h1 {
+.masthead h1 em {
+  color: #345872;
   font:
-    700 clamp(34px, 4vw, 53px)/1.14 Georgia,
-    'Songti SC',
-    SimSun,
+    italic 400 clamp(15px, 1.8vw, 22px)/1 Georgia,
     serif;
-  margin: 5px 0 0;
+  letter-spacing: 0.01em;
 }
-.mast-copy p {
-  margin: 12px 0 14px;
-  font-size: 14px;
-  line-height: 1.55;
+.mast-sub {
+  margin: 0;
+  color: #466072;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.015em;
+}
+.mast-actions {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.mast-watermark {
+  position: absolute;
+  right: clamp(22px, 3.6vw, 40px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  color: rgba(20, 47, 70, 0.072);
+  font:
+    italic 400 clamp(40px, 5.2vw, 64px)/0.9 Georgia,
+    'Times New Roman',
+    serif;
+  letter-spacing: -0.02em;
+}
+/* 屋主已登录态将水印移入主按钮左侧留白带，避免按钮与水印互相压盖。 */
+.masthead.has-actions .mast-watermark {
+  right: clamp(204px, 21vw, 236px);
+  font-size: clamp(34px, 4.6vw, 60px);
+  color: rgba(20, 47, 70, 0.068);
 }
 .publish {
   --el-button-bg-color: #173e55;
@@ -178,8 +251,9 @@ h1 {
   --el-button-disabled-bg-color: #546d75;
   --el-button-disabled-border-color: #546d75;
   min-height: 44px;
-  padding-inline: 19px;
-  border-radius: 9px;
+  padding-inline: 20px;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 .gate {
   margin: 24px 0;
@@ -196,11 +270,38 @@ h1 {
     width: calc(100% - 28px);
   }
   .masthead {
-    background-size: auto 120px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    min-height: 0;
+    padding: 18px 18px 20px;
+    border-radius: 14px;
   }
-  .mast-copy {
-    padding: 20px 18px 64px;
-    background: linear-gradient(180deg, #d7e7e4 calc(100% - 105px), transparent calc(100% - 50px));
+  .mast-main {
+    gap: 6px;
+  }
+  .masthead h1 {
+    gap: 2px 10px;
+  }
+  .mast-sub {
+    font-size: 12.5px;
+  }
+  .mast-actions {
+    width: 100%;
+  }
+  .mast-watermark {
+    right: 14px;
+    top: auto;
+    bottom: 6px;
+    transform: none;
+    font-size: clamp(24px, 7.6vw, 34px);
+    color: rgba(20, 47, 70, 0.05);
+  }
+  .masthead.has-actions .mast-watermark {
+    right: 16px;
+    bottom: 22px;
+    font-size: clamp(26px, 8vw, 38px);
+    color: rgba(20, 47, 70, 0.065);
   }
 }
 </style>
