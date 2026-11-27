@@ -1,0 +1,100 @@
+# 可复用归档日历选择器与星潮日期体验升级计划（dev.26）
+
+> 所属阶段：[v1.0-dev.26.md](../dev-log/v1.0-dev.26.md) · 状态：**已立项待新会话确认视觉细节后实施** · 工作分支：`feat/reusable-archive-date-picker`（基于 `dev` `3fe6fb3`）
+
+---
+
+## 1. 背景与目标
+
+当前星潮页采用原生 `<select>` 下拉框搭配「更早日期」分页按钮（每次最多加载 30 期）。当归档积累到数月乃至跨年（100～1000+ 期）时，读者既难以快速跨月/跨年检索，也无法直观看出哪些日期有内容、哪些日期缺采。
+
+本计划目标：
+1. **升级星潮日期选择体验**：借鉴 GitHub Archive / Linear / Notion 等现代产品的前沿交互，实现**美观、高频顺手、防盲点 404、桌面与手机双端优雅**的归档日历导航。
+2. **沉淀为项目级可复用前端资产**：将纯日历算法与无业务耦合的归档日历组件分别沉淀至 `polyhouse-web/src/core/calendar.ts` 与 `polyhouse-web/src/components/ArchiveDatePicker.vue`，供未来账单回溯、成长记录、其他日更/归档工具零修改复用。
+
+---
+
+## 2. 关键架构纠偏与设计原则
+
+1. **不能只改前端，必须补极轻量的后端按月查询能力**：
+   - 现有 `GET /api/trend/periods` 为游标倒序分页（`limit <= 30`）且受 `/api/trend/*` 限流保护（`60次/分、突发12、并发2`）。若历史达 365+ 天，纯前端跳转去年某月将被迫连续翻页十余次并触发 429。
+   - **决策**：向下兼容地扩展 `GET /api/trend/periods`，支持可选 `month=YYYY-MM` 参数：单次主键范围查询该月有发布的日期（最多 31 条），并附带可选归档边界 `earliestDate` / `latestDate`（基于日期索引 `MIN/MAX` 毫秒级返回）。前端按月内存缓存，翻月仅 1 次请求，彻底淘汰「更早日期」按钮。
+2. **做“聚焦型归档日历公共组件”，不造万能重型 DatePicker 轮子**：
+   - 常规表单输入继续用 Element Plus `ElDatePicker`；本项目公共资产聚焦**离散有值归档场景**（高密度展示哪天有数据、禁用无数据日期、一键跳上/下有值期、按月懒加载与主题色定制）。
+   - 严格遵守 `AGENTS.md` 铁律 7：日历 42 格生成、北京时间字符串计算（绝不依赖 `new Date('YYYY-MM-DD')` 本地时区解析）、闰年/跨年、有值邻期查找与区间高亮判定全部放入纯 TS `src/core/calendar.ts`，零 DOM/Vue 依赖。
+3. **前沿交互与无障碍底线并重（铁律 8）**：
+   - 严格遵守键盘 Tab / Enter / Esc / 方向键导航、单一连续焦点外框、移动端触控热区 ≥ 40×40px 且零横向溢出。
+
+---
+
+## 3. 前沿视觉与交互方案（待新窗口简短确认偏好）
+
+### 3.1 触发器：三段式复合导航条（80% 高频场景免弹层一步直达）
+```text
+[ ‹ ]  [ 📅 2026-11-27 · 最新 ▾ ]  [ › ]
+```
+- **左/右箭头（`‹` / `›`）**：直接跳转**上一个/下一个真实有数据的归档日**（自动跳过缺采日；在最早/最新边界时禁用态清晰）。
+- **中间主胶囊**：展示当前选中日期 + 语义微标签（如 `最新`）；点击打开归档日历面板。
+- **对比现有工具栏**：移除原有的原生 `<select>` 与「更早日期」按钮，工具栏更简洁，各断点折行更清爽。
+
+### 3.2 日历面板：桌面轻浮层 Popover + 手机适配弹层
+- **顶栏**：
+  - 左侧：快捷跳转胶囊（如 `最新一期`、`近 7 日前`，由调用方通过 props 配置，不写死星潮业务）；
+  - 年月切换头：`‹` **[ `2026 年 11 月 ▾` ]** `›`；点击年月标题就地切换为 **「12 个月 / 年份速选网格」**，跨年跳转最多 2 次点击。
+- **主体（周一～周日 7 列 × 6 行标准网格）**：
+  - **有内容日期**：清晰深色数字 + 底部细小主题色圆点；Hover 底色加深、Active 原边框加深（遵守铁律 8）。
+  - **无内容 / 缺采日期**：浅灰弱化 + 不可点击 + `aria-disabled="true"`（绝不盲点出 404）。
+  - **当前选中日**：主题深色实心胶囊高亮。
+  - **最新一期日**：柔和细描边区分。
+  - **区间高亮带（可选通用能力 `highlightRange`）**：星潮切到「近 7 日风向」时，自动用极淡海雾蓝背景带连结锚点日及其前 6 天，让读者一眼看清 7 日窗口覆盖与缺采分布；未来周报/区间分析模块可直接复用。
+- **底栏**：显示当月统计（如 `本月 24 期有日报 · 缺采 3 天`）、加载中微态或加载失败原位「重试」按钮。
+- **移动端（`≤ 640px`）**：弹层自动转为**底部抽屉 Sheet（或居中宽弹层）**，避免窄屏贴边裁切，日历格触控区域宽敞。
+
+### 3.3 公共组件契约（零业务耦合，主题可换肤）
+- **纯内核**：`polyhouse-web/src/core/calendar.ts`
+  - 导出：`parseIsoDate` / `formatIsoDate` / `shiftMonth` / `buildMonthGrid` / `findAdjacentAvailableDate` / `isDateInRange` 等纯函数（全部基于纯整数年月日计算，免疫跨时区偏移）。
+- **公共组件**：`polyhouse-web/src/components/ArchiveDatePicker.vue`
+  - **Props（严格 TS `interface`）**：
+    - `modelValue: string`（当前选中 `YYYY-MM-DD`，空串代表默认最新）
+    - `latestDate?: string | null`、`earliestDate?: string | null`
+    - `availableDates: ReadonlySet<string> | readonly string[]`（或按月字典）
+    - `loadingMonth?: boolean`、`monthError?: string`
+    - `highlightRange?: { start: string; end: string } | null`（可选区间浅底高亮）
+    - `shortcuts?: readonly ArchiveDateShortcut[]`（可选快捷按钮列表）
+    - `showStepButtons?: boolean`（默认 `true`，控制是否展示左右切期箭头）
+    - `ariaLabel?: string`、`emptyHint?: string`、`disabled?: boolean`
+  - **Emits**：`update:modelValue`、`monthChange`（`yearMonth: string`）、`retryMonth`、`step`（`'prev' | 'next'`）
+  - **换肤变量**：通过 `--adp-accent`、`--adp-accent-soft`、`--adp-border`、`--adp-ink` 等 CSS 变量定制（默认中性优雅海蓝，星潮及其他工具按需覆盖）。
+
+---
+
+## 4. 后端最小增量契约（100% 向下兼容）
+
+- **改动范围**（仅 4 个后端文件 + 对应测试，**零数据库迁移**，复用现有 `tool_trend_daily(period_date)` 主键索引）：
+  - `TrendPeriodsQueryDTO`：新增可选 `@Pattern(regexp = "[0-9]{4}-(0[1-9]|1[0-2])") String month`；当 `month` 与 `before` 同时传入时拒绝 `400 INVALID_PARAMETER`。
+  - `TrendMapper`：新增 `periodsInMonth(LocalDate start, LocalDate end)` 与 `periodBounds()`（单条 `SELECT MIN(period_date), MAX(period_date) FROM tool_trend_daily WHERE report_id IS NOT NULL`，走主键覆盖索引，毫秒级响应）。
+  - `TrendPeriodsVO`：追加可选字段 `earliestDate`、`latestDate`（保留旧 3 参构造器向下兼容）。
+  - `TrendReportService.periods(...)`：传入 `month` 时返回该月所有已发布日期（最多 31 条，`nextBefore = null`）及全局最早/最晚边界；不传 `month` 时完全沿用原游标分页逻辑，并附带最早/最晚边界。
+
+---
+
+## 5. 分步实施闭环（建议新窗口按 B1 → B2 → B3 推进）
+
+1. **闭环 B1（后端按月日历接口 + 纯 TS 日历内核 `src/core/calendar.ts`）**
+   - 落地 `GET /api/trend/periods?month=YYYY-MM` 与 `earliestDate/latestDate` 边界，补齐后端单测与 `TrendArchiveIntegrationTest` 真实隔离库验证；
+   - 落地 `polyhouse-web/src/core/calendar.ts` 及完备的表驱动单测（闰年 2 月 29 日、跨年、周一首列对齐、跨月翻页边界、缺采日跳期、7 日区间判定）并验 ESLint `core/` 隔离规则通过。
+2. **闭环 B2（可复用公共组件 `ArchiveDatePicker.vue` + 全场景组件测试）**
+   - 实现三段式复合触发器、桌面 Popover + 手机底部抽屉/宽弹层、年月双层速选网格、区间高亮带、加载/报错原位重试与完整键盘导航；
+   - 补齐 `polyhouse-web/tests/common/archive-date-picker.test.mjs`（表驱动覆盖有值/无值禁点、左右跳期、跨月懒加载、快捷跳转、键盘 Esc/方向键与焦点还原）；
+   - 补充一份简洁的复用说明（或在组件顶部注释 + 示例）方便后续模块直接接入。
+3. **闭环 B3（星潮阅读页接入替换 + 全局真机多视口巡检）**
+   - 升级 `useTrendEdition.ts` 为按月缓存 + 邻期解析（含 429 冷却与取消隔离），在 `TrendView.vue` 替换旧 `<select>` 与「更早日期」按钮，并在「近 7 日风向」视图接入 7 日范围高亮带；
+   - 宿主机真实浏览器按 `1280 / 900 / 768 / 620 / 375px` 实测日报页、近 7 日风向页、跨月/跨年切换、键盘 Tab/方向键/Esc 焦点、手机抽屉体验与弱网/429 降级，验收后由屋主审批合入 `dev`。
+
+---
+
+## 6. 新窗口开场待确认的 3 个小细节
+
+1. **触发器是否采用三段式**（`[ ‹ ] [ 📅 2026-11-27 · 最新 ▾ ] [ › ]`），还是仅保留单个日期胶囊（点开弹层选）？
+2. **手机端（≤640px）面板形态**：选底部抽屉（Bottom Sheet，拇指最顺手）还是居中模态弹窗？
+3. **「近 7 日风向」视图联动**：是否启用“日历上用浅色带连结标出当前 7 日统计窗口”的视觉提示？

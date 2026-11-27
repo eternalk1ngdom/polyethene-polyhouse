@@ -1,10 +1,10 @@
 # 聚妙屋：当前状态与日志索引
 
-更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.25.md](docs/dev-log/v1.0-dev.25.md)。
+更新时间：2026-11-27（Asia/Shanghai）。**v1.0 开发中。** 当前阶段：[v1.0-dev.26.md](docs/dev-log/v1.0-dev.26.md)。
 
 ## 当前焦点
 
-- **已收口待批合 `dev`（dev.25）**：[星潮精修、缺陷根治与全局巡检](docs/plans/startide-dev24-polish-and-bugfix.md)（分支 `feat/startide-delta-automation-billing`，P1～P3 已完成并通过隔离库与真机巡检，待屋主确认合 `dev`）。
+- **已立项待实施（dev.26）**：[可复用归档日历选择器与星潮日期体验升级](docs/plans/reusable-archive-date-picker.md)（分支 `feat/reusable-archive-date-picker`，新窗口确认交互细节后按 B1～B3 推进）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
@@ -18,9 +18,9 @@
 
 | 阶段 | 已完成摘要 |
 | --- | --- |
-| [dev.24](docs/dev-log/v1.0-dev.24.md) | 星潮榜单新面孔与退榜区、发布台自动采集状态与 7 日简报自动生成、AI 双口径对账与 `017` 迁移（本地分支待修巡检） |
+| [dev.25](docs/dev-log/v1.0-dev.25.md) | 星潮发布台并发 429 与待确认根治、日报动静分离与四卡统一、真机巡检、急停开关与 `017/018` 真库验收（已推 `origin/dev` `3fe6fb3`） |
+| [dev.24](docs/dev-log/v1.0-dev.24.md) | 星潮榜单新面孔与退榜区、发布台自动采集状态与 7 日简报自动生成、AI 双口径对账与 `017` 迁移（已随 dev.25 合 `dev`） |
 | [dev.23](docs/dev-log/v1.0-dev.23.md) | 上下文瘦身、冷热归档与永久钉选区、静默脚本/体检哨兵与 `AGENTS.md` 黄金基线锁定（已合 `dev`） |
 | [dev.22](docs/dev-log/v1.0-dev.22.md) | 架构解耦 6 维只读诊断与轻量优化 4 项收口并同步 `origin/dev` |
-| [dev.21](docs/dev-log/v1.0-dev.21.md) | 仓库维护 10 项修复、测试体系升级 A～D、测试红线并入 `AGENTS.md` |
 
-更早阶段（dev.20 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。
+更早阶段（dev.21 ～ dev.1）及早期环境备忘完整保留于 [历史阶段总归档](docs/dev-log/ARCHIVE.md)（按需查阅，不删历史）；阶段号/提交/历史测试不等于正式发布。

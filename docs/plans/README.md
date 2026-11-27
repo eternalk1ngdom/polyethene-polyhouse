@@ -6,8 +6,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [星潮 dev.24 体验精修、缺陷根治与全局巡检](startide-dev24-polish-and-bugfix.md) | 待新会话确认方案并实施（根治发布台并发 429/待确认、重排日报标签与发布台卡片、真机全局巡检与 `017` 隔离库验收） | [dev.25](../dev-log/v1.0-dev.25.md) |
-| [星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](startide-delta-automation-billing.md) | 3 个闭环已在 `feat/startide-delta-automation-billing` 完成初版实现与离线验收；真机反馈问题与全局巡检已转入 `dev.25` | [dev.24](../dev-log/v1.0-dev.24.md) |
+| [可复用归档日历选择器与星潮日期体验升级](reusable-archive-date-picker.md) | 已立项待新会话确认交互细节后实施（后端按月日历接口 + 纯 TS 内核 + `ArchiveDatePicker` 公共组件 + 星潮接入） | [dev.26](../dev-log/v1.0-dev.26.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 本地 `dev` 已收口（阶段 A～C 与 D1/D2）；`#16` 远端 Pages 双作业首轮发布验收与推送待确认 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
@@ -21,6 +20,8 @@
 
 | 计划 | 收口状态 | 所属阶段 |
 | --- | --- | --- |
+| [星潮 dev.24 体验精修、缺陷根治与全局巡检](startide-dev24-polish-and-bugfix.md) | P1～P3 与每日自动采集急停开关已全部完成并快进合入 `dev`、同步 `origin/dev`（`3fe6fb3`） | [dev.25](../dev-log/v1.0-dev.25.md) |
+| [星潮榜单异动、自动拉取显性化与 AI 费用双口径对账](startide-delta-automation-billing.md) | 3 个闭环及 `017` 迁移已随 `dev.25` 联合巡检通过并合入 `dev`、`origin/dev` | [dev.24](../dev-log/v1.0-dev.24.md) |
 | [上下文与 Token 降本瘦身专项计划](context-token-optimization.md) | 已完成并快进合入 `dev`、同步 `origin/dev`（双文档治理、冷热归档、体检与宪法哨兵、静默脚本加固） | [dev.23](../dev-log/v1.0-dev.23.md) |
 | [架构解耦止血与 AI 协作降噪计划](architecture-decoupling-optimization.md) | 已完成并快进合入 `dev`、同步 `origin/dev`（全部 2 批次 4 项） | [dev.22](../dev-log/v1.0-dev.22.md) |
 | [项目架构解耦与可维护性专项评估计划](architecture-decoupling-assessment.md) | 已完成只读诊断，报告归档至[架构解耦评估报告](../design/architecture-decoupling-assessment.md) | [dev.22](../dev-log/v1.0-dev.22.md) |
