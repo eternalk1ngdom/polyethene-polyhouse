@@ -6,8 +6,8 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [归档日历二期精修：防折行、手动输入融合与架构优化](archive-date-picker-v2-refinement.md) | 计划书已定稿（待确认 2 项细节后在 `feat/reusable-archive-date-picker` 下一轮实施） | [dev.26](../dev-log/v1.0-dev.26.md) |
-| [可复用归档日历选择器与星潮日期体验升级](reusable-archive-date-picker.md) | B1～B4 已完成（`1415e94`），后续精修与架构优化转入[二期精修计划](archive-date-picker-v2-refinement.md)后统一合入 `dev` | [dev.26](../dev-log/v1.0-dev.26.md) |
+| [归档日历二期精修：防折行、手动输入融合与架构优化](archive-date-picker-v2-refinement.md) | 已按默认推荐项完成 C1～C3 落地与前端/本机巡检验收（分支 `feat/reusable-archive-date-picker`），待屋主确认合入 `dev` | [dev.26](../dev-log/v1.0-dev.26.md) |
+| [可复用归档日历选择器与星潮日期体验升级](reusable-archive-date-picker.md) | B1～B4 及[二期精修](archive-date-picker-v2-refinement.md) C1～C3 均已完成，待屋主确认统一合入 `dev` | [dev.26](../dev-log/v1.0-dev.26.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 本地 `dev` 已收口（阶段 A～C 与 D1/D2）；`#16` 远端 Pages 双作业首轮发布验收与推送待确认 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
