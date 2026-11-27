@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **dev.28 已验待合 `dev`**（`fix/client-abort-and-fee-cleanup`，基线 `a082a9c`）：客户端断连 `AsyncRequestNotUsableException` 静默记 `DEBUG`；前端按方案 B 移除费用卡片与请求（保留后端 10 元硬闸门与 `/api/manage/trend/fees`），前后端静默验收与 8080/5173 四视口实测全绿。
+- **dev.28 已合 `dev` 并同步 `origin/dev`**：客户端断连 `AsyncRequestNotUsableException` 静默记 `DEBUG`；前端按方案 B 移除费用卡片与请求（保留后端 10 元硬闸门与 `/api/manage/trend/fees`），前后端静默验收与 8080/5173 四视口实测全绿。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
