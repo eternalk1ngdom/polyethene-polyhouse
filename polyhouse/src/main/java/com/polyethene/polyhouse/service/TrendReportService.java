@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeParseException;
@@ -124,16 +125,25 @@ public class TrendReportService {
         return TrendPresenceCalculator.enrich(current, priorViews);
     }
 
-    /** 多取一项判断是否还有下一页，不靠空页猜测，也不计算全表 COUNT。 */
+    /** 支持游标分页与按月查询两种有界模式（互斥），并附带全局最早/最晚日期边界，不计算全表 COUNT。 */
     public TrendPeriodsVO periods(TrendPeriodsQueryDTO request) {
         requireEnabled();
         if (!"DAILY".equals(request.periodType()) || request.limit() < 1 || request.limit() > 30) throw invalid();
+        if (request.month() != null && request.before() != null) throw invalid();
+        YearMonth month = yearMonth(request.month());
         LocalDate before = date(request.before());
         try {
+            var bounds = mapper.periodBounds();
+            LocalDate earliest = bounds == null ? null : bounds.earliestDate();
+            LocalDate latest = bounds == null ? null : bounds.latestDate();
+            if (month != null) {
+                var monthDates = mapper.periodsInMonth(month.atDay(1), month.atEndOfMonth());
+                return new TrendPeriodsVO("DAILY", monthDates == null ? List.of() : monthDates, null, earliest, latest);
+            }
             var dates = mapper.periods(before, request.limit() + 1);
             boolean more = dates.size() > request.limit();
             var page = dates.subList(0, Math.min(dates.size(), request.limit()));
-            return new TrendPeriodsVO("DAILY", page, more ? page.getLast() : null);
+            return new TrendPeriodsVO("DAILY", page, more ? page.getLast() : null, earliest, latest);
         } catch (DataAccessException failure) { throw unavailable(); }
     }
 
@@ -198,6 +208,16 @@ public class TrendReportService {
             return parsed;
         }
         catch (DateTimeParseException failure) { throw invalid(); }
+    }
+
+    private static YearMonth yearMonth(String value) {
+        if (value == null) return null;
+        if (!value.matches("[0-9]{4}-(0[1-9]|1[0-2])")) throw invalid();
+        try {
+            var parsed = YearMonth.parse(value);
+            if (parsed.getYear() < 1000) throw invalid();
+            return parsed;
+        } catch (DateTimeParseException failure) { throw invalid(); }
     }
 
     private static BusinessException invalid() { return new BusinessException(ErrorCode.INVALID_PARAMETER); }

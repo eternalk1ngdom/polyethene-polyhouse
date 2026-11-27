@@ -46,6 +46,9 @@ class TrendControllerTest {
                 .andExpect(jsonPath("$.data.items[0].insightStatus").value("NOT_ANALYZED"))
                 .andExpect(jsonPath("$.data.items[0].readmeText").doesNotExist());
         mvc.perform(get("/api/trend/periods")).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+        mvc.perform(get("/api/trend/periods?month=2026-11")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.items").isEmpty());
         mvc.perform(get("/api/trend/window")).andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.windowDays").value(7))
@@ -65,7 +68,11 @@ class TrendControllerTest {
             "/api/trend/briefing?periodKey=bad",
             "/api/trend/periods?limit=31",
             "/api/trend/periods?limit=0",
-            "/api/trend/periods?before=bad"
+            "/api/trend/periods?before=bad",
+            "/api/trend/periods?month=2026-13",
+            "/api/trend/periods?month=2026-00",
+            "/api/trend/periods?month=2026-1",
+            "/api/trend/periods?month=bad"
     })
     void rejectsUnsupportedCycleMalformedDateAndUnboundedPageBeforeService(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));

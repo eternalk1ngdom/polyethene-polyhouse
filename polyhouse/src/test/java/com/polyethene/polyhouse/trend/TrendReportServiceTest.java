@@ -5,6 +5,7 @@ import com.polyethene.polyhouse.common.exception.BusinessException;
 import com.polyethene.polyhouse.config.TrendProperties;
 import com.polyethene.polyhouse.mapper.TrendMapper;
 import com.polyethene.polyhouse.model.dto.*;
+import com.polyethene.polyhouse.model.entity.TrendPeriodBounds;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import com.polyethene.polyhouse.service.TrendReportService;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class TrendReportServiceTest {
     @Test void latestMissingIs404WhileHistoryCanBeEmpty() {
         assertCode(() -> service.report(new TrendReportQueryDTO(null, null)), ErrorCode.NOT_FOUND);
         when(mapper.periods(null, 15)).thenReturn(List.of());
-        assertThat(service.periods(new TrendPeriodsQueryDTO(null, null, null)).items()).isEmpty();
+        assertThat(service.periods(new TrendPeriodsQueryDTO(null, null, null, null)).items()).isEmpty();
     }
 
     @ParameterizedTest(name = "拒绝非法日报日期参数：{0}")
@@ -39,10 +40,41 @@ class TrendReportServiceTest {
     @Test void keysetPageHasExclusiveCursorAndNoUnboundedCount() {
         LocalDate today = LocalDate.of(2026, 11, 16);
         when(mapper.periods(today, 3)).thenReturn(List.of(today.minusDays(1), today.minusDays(2), today.minusDays(3)));
-        var result = service.periods(new TrendPeriodsQueryDTO(null, today.toString(), 2));
+        when(mapper.periodBounds()).thenReturn(new TrendPeriodBounds(LocalDate.of(2026, 10, 1), today));
+        var result = service.periods(new TrendPeriodsQueryDTO(null, today.toString(), 2, null));
         assertThat(result.items()).containsExactly(today.minusDays(1), today.minusDays(2));
         assertThat(result.nextBefore()).isEqualTo(today.minusDays(2));
+        assertThat(result.earliestDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(result.latestDate()).isEqualTo(today);
         verify(mapper).periods(today, 3);
+    }
+
+    @Test void monthQueryReturnsAllPublishedDaysInMonthWithBoundsAndNullCursor() {
+        var bounds = new TrendPeriodBounds(LocalDate.of(2026, 1, 15), LocalDate.of(2026, 11, 27));
+        when(mapper.periodBounds()).thenReturn(bounds);
+        when(mapper.periodsInMonth(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 2, 29)))
+                .thenReturn(List.of(LocalDate.of(2024, 2, 29), LocalDate.of(2024, 2, 14)));
+        var result = service.periods(new TrendPeriodsQueryDTO("DAILY", null, null, "2024-02"));
+        assertThat(result.items()).containsExactly(LocalDate.of(2024, 2, 29), LocalDate.of(2024, 2, 14));
+        assertThat(result.nextBefore()).isNull();
+        assertThat(result.earliestDate()).isEqualTo(LocalDate.of(2026, 1, 15));
+        assertThat(result.latestDate()).isEqualTo(LocalDate.of(2026, 11, 27));
+        verify(mapper).periodsInMonth(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 2, 29));
+        verify(mapper, never()).periods(any(), anyInt());
+    }
+
+    @ParameterizedTest(name = "拒绝非法或互斥的按月查询参数：before={0}, month={1}")
+    @CsvSource(value = {
+            "2026-11-16, 2026-11",
+            "null, 2026-13",
+            "null, 2026-00",
+            "null, 0000-01",
+            "null, 2026-1",
+            "null, bad"
+    }, nullValues = "null")
+    void rejectsMutuallyExclusiveOrMalformedMonthQueryBeforeDatabase(String before, String month) {
+        assertCode(() -> service.periods(new TrendPeriodsQueryDTO("DAILY", before, 14, month)), ErrorCode.INVALID_PARAMETER);
+        verifyNoInteractions(mapper);
     }
 
     @Test void disabledOrUnavailableStorageReturnsSafe503() {

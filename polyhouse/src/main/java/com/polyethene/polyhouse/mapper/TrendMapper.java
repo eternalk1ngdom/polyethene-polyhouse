@@ -1,5 +1,6 @@
 package com.polyethene.polyhouse.mapper;
 
+import com.polyethene.polyhouse.model.entity.TrendPeriodBounds;
 import com.polyethene.polyhouse.model.entity.TrendReportRecord;
 import org.apache.ibatis.annotations.*;
 
@@ -74,6 +75,24 @@ public interface TrendMapper {
         """)
     @Options(timeout = 3)
     List<LocalDate> periods(@Param("before") LocalDate before, @Param("limit") int limit);
+
+    /** 按月范围查询已发布日期（单月最多 31 条），走 period_date 主键索引。 */
+    @Select("""
+        SELECT period_date FROM tool_trend_daily
+        WHERE report_id IS NOT NULL AND period_date BETWEEN #{start} AND #{end}
+        ORDER BY period_date DESC
+        """)
+    @Options(timeout = 3)
+    List<LocalDate> periodsInMonth(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    /** 读取已发布日报的全局最早与最晚日期边界，走主键索引聚合。 */
+    @Select("""
+        SELECT MIN(period_date) AS earliest_date, MAX(period_date) AS latest_date
+        FROM tool_trend_daily
+        WHERE report_id IS NOT NULL
+        """)
+    @Options(timeout = 3)
+    TrendPeriodBounds periodBounds();
 
     /** 按当前公开指针读取指定闭区间内的已发布日报，同日重发只保留最新版本，用于近 7 日确定性统计。 */
     @Select("""

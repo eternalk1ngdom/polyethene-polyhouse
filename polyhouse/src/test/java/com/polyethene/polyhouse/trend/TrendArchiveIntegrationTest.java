@@ -74,7 +74,7 @@ class TrendArchiveIntegrationTest {
         assertThat(reports.report(new TrendReportQueryDTO(null, "2026-11-16")).reportId()).isEqualTo(second);
         assertThat(mapper.findVersion(first).payload()).doesNotContain("private internal material");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tool_trend_report_version", Integer.class)).isEqualTo(2);
-        assertThat(reports.periods(new TrendPeriodsQueryDTO(null, null, null)).items()).containsExactly(LocalDate.of(2026, 11, 16));
+        assertThat(reports.periods(new TrendPeriodsQueryDTO(null, null, null, null)).items()).containsExactly(LocalDate.of(2026, 11, 16));
     }
 
     @Test void failedOrStaleUpdatesLeavePublishedVersionUntouched() {
@@ -119,11 +119,33 @@ class TrendArchiveIntegrationTest {
         archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-14T02:00:00Z"));
         archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-15T02:00:00Z"));
         assertThat(reports.report(new TrendReportQueryDTO(null, null)).periodKey()).isEqualTo(LocalDate.of(2026, 11, 16));
-        var first = reports.periods(new TrendPeriodsQueryDTO(null, null, 2));
+        var first = reports.periods(new TrendPeriodsQueryDTO(null, null, 2, null));
         assertThat(first.items()).containsExactly(LocalDate.of(2026, 11, 16), LocalDate.of(2026, 11, 15));
-        var next = reports.periods(new TrendPeriodsQueryDTO(null, first.nextBefore().toString(), 2));
+        var next = reports.periods(new TrendPeriodsQueryDTO(null, first.nextBefore().toString(), 2, null));
         assertThat(next.items()).containsExactly(LocalDate.of(2026, 11, 14));
         assertThat(next.nextBefore()).isNull();
+        assertThat(first.earliestDate()).isEqualTo(LocalDate.of(2026, 11, 14));
+        assertThat(first.latestDate()).isEqualTo(LocalDate.of(2026, 11, 16));
+    }
+
+    @Test void monthQueryReturnsOnlyPublishedDaysOfTargetMonthAndGlobalBounds() {
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-10-31T02:00:00Z"));
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-02T02:00:00Z"));
+        archive.publish(UUID.randomUUID().toString(), TrendFixture.collection("2026-11-16T02:00:00Z"));
+        // 插入一个未发布草稿占位行，确认按月查询与边界聚合均只统计 report_id IS NOT NULL 的已发布期。
+        jdbc.update("INSERT INTO tool_trend_daily(period_date, report_id) VALUES (?, NULL)", LocalDate.of(2026, 11, 20));
+        jdbc.update("INSERT INTO tool_trend_daily(period_date, report_id) VALUES (?, NULL)", LocalDate.of(2026, 9, 1));
+
+        var nov = reports.periods(new TrendPeriodsQueryDTO("DAILY", null, null, "2026-11"));
+        assertThat(nov.items()).containsExactly(LocalDate.of(2026, 11, 16), LocalDate.of(2026, 11, 2));
+        assertThat(nov.nextBefore()).isNull();
+        assertThat(nov.earliestDate()).isEqualTo(LocalDate.of(2026, 10, 31));
+        assertThat(nov.latestDate()).isEqualTo(LocalDate.of(2026, 11, 16));
+
+        var emptyMonth = reports.periods(new TrendPeriodsQueryDTO("DAILY", null, null, "2026-08"));
+        assertThat(emptyMonth.items()).isEmpty();
+        assertThat(emptyMonth.earliestDate()).isEqualTo(LocalDate.of(2026, 10, 31));
+        assertThat(emptyMonth.latestDate()).isEqualTo(LocalDate.of(2026, 11, 16));
     }
 
     @Test void windowStatsUsesOnlyCurrentPublishedVersionPerDayAndExposesGaps() {
