@@ -3,13 +3,13 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
 import { Back, TopRight } from '@element-plus/icons-vue'
-import tideAtlas from '../assets/startide-tide-atlas.webp'
 import { isTrendDate } from '../api/trend'
 import ArchiveDatePicker from '../components/ArchiveDatePicker.vue'
 import { starTide } from '../config/starTide'
 import { buildTrailingDateRange } from '../core/calendar'
 import { useUserStore } from '../stores/useUserStore'
 import {
+  buildTrendHeaderMeta,
   categoryCounts,
   categoryLabel,
   categoryTone,
@@ -71,6 +71,22 @@ const windowHighlightRange = computed(() => {
   if (!isWindowView.value || !anchorDate.value) return null
   return buildTrailingDateRange(anchorDate.value, 7)
 })
+/** 页头实时展示的有效锚点日期：风向视图跟随窗口锚点，日报视图跟随已加载期号。 */
+const headerDate = computed(() => {
+  const candidate = isWindowView.value
+    ? (windowStats.value?.anchorDate ?? anchorDate.value)
+    : (report.value?.periodKey ?? anchorDate.value)
+  return isTrendDate(candidate) ? candidate : ''
+})
+/** 页头左侧克制副文与右侧斜体日期水印。 */
+const headerMeta = computed(() =>
+  buildTrendHeaderMeta({
+    isWindowView: isWindowView.value,
+    date: headerDate.value,
+    windowStart: windowStats.value?.windowStart ?? windowHighlightRange.value?.start ?? null,
+    windowEnd: windowStats.value?.anchorDate ?? windowHighlightRange.value?.end ?? null,
+  }),
+)
 const language = computed(() => (typeof route.query.lang === 'string' ? route.query.lang : ''))
 const category = computed<TrendCategoryFilter | ''>(() =>
   isTrendCategoryFilter(route.query.cat) ? route.query.cat : '',
@@ -317,9 +333,15 @@ watch(
   <div class="reader">
     <div class="sheet">
       <template v-if="directory">
-        <header class="cover">
-          <img :src="tideAtlas" alt="" width="2800" height="560" />
-          <h1>星潮 <em lang="en">StarTide</em></h1>
+        <header class="cover" :class="{ 'is-window': isWindowView }">
+          <div class="cover-main">
+            <h1>星潮 <em lang="en">StarTide</em></h1>
+            <p class="cover-sub">{{ headerMeta.subtitle }}</p>
+          </div>
+          <div v-if="headerMeta.watermark" class="cover-watermark" aria-hidden="true">
+            <span class="cover-watermark-eyebrow">{{ headerMeta.watermark.eyebrow }}</span>
+            <span class="cover-watermark-day">{{ headerMeta.watermark.dayMark }}</span>
+          </div>
         </header>
         <div class="toolbar">
           <div class="view-switch" role="group" aria-label="星潮阅读视图">
@@ -567,45 +589,127 @@ watch(
   margin: auto;
 }
 .cover {
-  --scene-height: clamp(92px, min(20vw, 24vh), 224px);
   position: relative;
   isolation: isolate;
-  display: grid;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   width: 100%;
-  min-height: var(--scene-height);
+  min-height: clamp(108px, 14vw, 152px);
+  padding: clamp(20px, 2.8vw, 32px) clamp(20px, 3.6vw, 40px);
   overflow: hidden;
-  border-radius: 14px;
-  background: var(--st-sky);
+  border-radius: 16px;
+  border: 1px solid rgba(190, 210, 224, 0.62);
+  /* 晨雾弥散柔光：纯 CSS 多层冰蓝与淡琥珀柔和过渡，零位图、零杂乱线条。 */
+  background:
+    radial-gradient(
+      62% 138% at 8% 4%,
+      rgba(176, 214, 238, 0.66) 0%,
+      rgba(176, 214, 238, 0.22) 48%,
+      transparent 76%
+    ),
+    radial-gradient(
+      48% 126% at 88% 16%,
+      rgba(250, 220, 172, 0.56) 0%,
+      rgba(250, 220, 172, 0.16) 52%,
+      transparent 78%
+    ),
+    radial-gradient(
+      52% 112% at 54% 108%,
+      rgba(202, 230, 228, 0.42) 0%,
+      transparent 72%
+    ),
+    linear-gradient(118deg, #ecf4fa 0%, #f5f8fb 52%, #fbf7ef 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  transition: background 0.25s ease;
 }
-.cover img {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  /* 5:1 全景原画锚定右下角：宽屏无缝铺满，窄屏自然收起左侧余白而完整保留右侧星月山海。 */
-  object-fit: cover;
-  object-position: right bottom;
+.cover.is-window {
+  background:
+    radial-gradient(
+      58% 132% at 12% 10%,
+      rgba(176, 218, 232, 0.62) 0%,
+      rgba(176, 218, 232, 0.2) 50%,
+      transparent 76%
+    ),
+    radial-gradient(
+      52% 128% at 84% 88%,
+      rgba(248, 218, 168, 0.52) 0%,
+      rgba(248, 218, 168, 0.15) 54%,
+      transparent 78%
+    ),
+    radial-gradient(
+      54% 112% at 52% 0%,
+      rgba(202, 228, 238, 0.44) 0%,
+      transparent 74%
+    ),
+    linear-gradient(122deg, #ebf4f8 0%, #f4f8fb 50%, #faf6ee 100%);
+}
+.cover-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 .cover h1 {
   margin: 0;
-  padding-inline-start: clamp(16px, 3.5vw, 38px);
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 16px;
-  color: #142f46;
+  gap: 4px 14px;
+  color: var(--st-ink-deep);
   font:
-    700 clamp(36px, 5vw, 62px)/1.1 'Songti SC',
+    700 clamp(32px, 4.4vw, 52px)/1.08 'Songti SC',
     'STSong',
     'Noto Serif SC',
     Georgia,
     serif;
+  letter-spacing: -0.015em;
 }
 .cover h1 em {
+  color: #345872;
   font:
-    italic 400 clamp(18px, 2.3vw, 28px)/1 Georgia,
+    italic 400 clamp(17px, 2vw, 25px)/1 Georgia,
     serif;
+  letter-spacing: 0.01em;
+}
+.cover-sub {
+  margin: 0;
+  color: #486274;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.cover-watermark {
+  position: absolute;
+  right: clamp(18px, 3.6vw, 40px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.cover-watermark-eyebrow {
+  color: rgba(20, 47, 70, 0.22);
+  font:
+    italic 500 clamp(10px, 1vw, 12px)/1 Georgia,
+    serif;
+  letter-spacing: 0.22em;
+}
+.cover-watermark-day {
+  color: rgba(20, 47, 70, 0.085);
+  font:
+    italic 400 clamp(48px, 7.2vw, 88px)/0.86 Georgia,
+    'Times New Roman',
+    serif;
+  letter-spacing: -0.03em;
 }
 .toolbar,
 .control,
@@ -881,17 +985,39 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+@media (max-width: 640px) {
+  .cover {
+    min-height: 98px;
+    padding: 18px 18px;
+    border-radius: 14px;
+  }
+  .cover-main {
+    gap: 6px;
+  }
+  .cover h1 {
+    gap: 2px 10px;
+  }
+  .cover-sub {
+    font-size: 12px;
+  }
+  .cover-watermark {
+    right: 14px;
+    top: auto;
+    bottom: 10px;
+    transform: none;
+    gap: 2px;
+  }
+  .cover-watermark-day {
+    font-size: clamp(38px, 12vw, 52px);
+    color: rgba(20, 47, 70, 0.07);
+  }
+}
 @media (max-width: 620px) {
   .reader {
     padding-top: 12px;
   }
   .sheet {
     width: calc(100% - 28px);
-  }
-  .cover h1 {
-    flex-direction: column;
-    gap: 1px;
-    padding-bottom: 6px;
   }
   .toolbar {
     gap: 6px 12px;

@@ -28,7 +28,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { ElIcon } from 'element-plus'
-import { ArrowDown, ArrowLeft, ArrowRight, Calendar, Close } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight, Close } from '@element-plus/icons-vue'
 import {
   WEEKDAY_LABELS_MONDAY_FIRST,
   buildMonthGrid,
@@ -772,7 +772,30 @@ onBeforeUnmount(() => {
           :title="open ? '收起日历' : '打开日历'"
           @click="togglePanel"
         >
-          <ElIcon class="adp-cal-icon" aria-hidden="true"><Calendar /></ElIcon>
+          <!-- 彩色撕页日历图标：跨平台矢量一致呈现经典红顶白页 📅 辨识度，且避免系统 emoji 印死旧日期 -->
+          <span class="adp-cal-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" focusable="false">
+              <rect
+                x="2.25"
+                y="4"
+                width="15.5"
+                height="13.75"
+                rx="3"
+                fill="#ffffff"
+                stroke="#b4c6d4"
+                stroke-width="1.25"
+              />
+              <path d="M2.25 7a3 3 0 0 1 3-3h9.5a3 3 0 0 1 3 3v1.6H2.25V7Z" fill="#e2574c" />
+              <rect x="5.75" y="2" width="2" height="3.6" rx="1" fill="#4f677a" />
+              <rect x="12.25" y="2" width="2" height="3.6" rx="1" fill="#4f677a" />
+              <rect x="4.8" y="10.3" width="2.3" height="2" rx="0.6" fill="#7d95a8" />
+              <rect x="8.85" y="10.3" width="2.3" height="2" rx="0.6" fill="#7d95a8" />
+              <rect x="12.9" y="10.3" width="2.3" height="2" rx="0.6" fill="#e2574c" />
+              <rect x="4.8" y="13.6" width="2.3" height="2" rx="0.6" fill="#7d95a8" />
+              <rect x="8.85" y="13.6" width="2.3" height="2" rx="0.6" fill="#7d95a8" />
+              <rect x="12.9" y="13.6" width="2.3" height="2" rx="0.6" fill="#b7c8d6" />
+            </svg>
+          </span>
         </button>
 
         <input
@@ -1314,8 +1337,16 @@ onBeforeUnmount(() => {
 }
 
 .adp-cal-icon {
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+}
+
+.adp-cal-btn:disabled .adp-cal-icon {
+  filter: grayscale(0.45);
 }
 
 .adp-feedback-popover {

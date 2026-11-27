@@ -37,7 +37,6 @@ const makeIcon = (name) => ({ name, render: () => h('svg', { 'data-icon': name }
 export const ArrowDown = makeIcon('ArrowDown')
 export const ArrowLeft = makeIcon('ArrowLeft')
 export const ArrowRight = makeIcon('ArrowRight')
-export const Calendar = makeIcon('Calendar')
 export const Close = makeIcon('Close')
 `)
 

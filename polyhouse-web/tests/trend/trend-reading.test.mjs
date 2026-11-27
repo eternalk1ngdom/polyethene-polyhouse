@@ -273,3 +273,65 @@ test('TrendProjectEntry 正确渲染新面孔、连榜上升与无基线隐藏�
     })
   }
 })
+
+test('buildTrendHeaderMeta 完整适配开源日报与近 7 日风向两视图及跨年/空期号边界', async (t) => {
+  const { buildTrendHeaderMeta } = presentation
+  const cases = [
+    {
+      name: '开源日报带有效日期：输出期号副文与年份+月日水印',
+      input: { isWindowView: false, date: '2026-11-27' },
+      expected: {
+        subtitle: '开源日报 · 2026-11-27 期',
+        watermark: { eyebrow: '2026', dayMark: '11.27' },
+      },
+    },
+    {
+      name: '开源日报尚未加载日期：降级纯视图名且不渲染水印',
+      input: { isWindowView: false, date: '' },
+      expected: {
+        subtitle: '开源日报',
+        watermark: null,
+      },
+    },
+    {
+      name: '近 7 日风向同年窗口：右侧日期省去年份且水印标明 7D',
+      input: {
+        isWindowView: true,
+        date: '2026-11-27',
+        windowStart: '2026-11-21',
+        windowEnd: '2026-11-27',
+      },
+      expected: {
+        subtitle: '近 7 日风向 · 2026-11-21 — 11-27',
+        watermark: { eyebrow: '7D · 2026', dayMark: '11.27' },
+      },
+    },
+    {
+      name: '近 7 日风向跨年窗口：完整保留起止年份避免跨年歧义',
+      input: {
+        isWindowView: true,
+        date: '2027-01-03',
+        windowStart: '2026-12-28',
+        windowEnd: '2027-01-03',
+      },
+      expected: {
+        subtitle: '近 7 日风向 · 2026-12-28 — 2027-01-03',
+        watermark: { eyebrow: '7D · 2027', dayMark: '01.03' },
+      },
+    },
+    {
+      name: '近 7 日风向尚无窗口区间：优雅回退视图名并保留锚点水印',
+      input: { isWindowView: true, date: '2026-11-27', windowStart: null, windowEnd: null },
+      expected: {
+        subtitle: '近 7 日风向',
+        watermark: { eyebrow: '7D · 2026', dayMark: '11.27' },
+      },
+    },
+  ]
+
+  for (const item of cases) {
+    await t.test(item.name, () => {
+      assert.deepEqual(buildTrendHeaderMeta(item.input), item.expected)
+    })
+  }
+})

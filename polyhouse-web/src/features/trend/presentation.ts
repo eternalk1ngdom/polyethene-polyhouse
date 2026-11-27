@@ -210,6 +210,57 @@ export function shortTrendDate(isoDate: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? isoDate.slice(5) : isoDate
 }
 
+/** 星潮页头日期水印结构。 */
+export interface TrendHeaderWatermark {
+  /** 右侧水印上方极淡眉标（年份或 7D · 年份）。 */
+  eyebrow: string
+  /** 右侧大号斜体月日数字（MM.DD）。 */
+  dayMark: string
+}
+
+/** 星潮页头纯前端元数据展示模型。 */
+export interface TrendHeaderMeta {
+  /** 左侧克制副文（适配开源日报与近 7 日风向两视图及实时期号/区间）。 */
+  subtitle: string
+  /** 右侧极淡大号斜体日期水印；尚无有效日期时为 null。 */
+  watermark: TrendHeaderWatermark | null
+}
+
+/**
+ * 推导星潮阅读页纯前端页头的副文与右侧斜体日期水印。
+ * 仅解析标准 YYYY-MM-DD 文本，避免受浏览器本地时区偏移。
+ */
+export function buildTrendHeaderMeta(options: {
+  isWindowView: boolean
+  date: string
+  windowStart?: string | null
+  windowEnd?: string | null
+}): TrendHeaderMeta {
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(options.date)
+  const watermark: TrendHeaderWatermark | null = isoMatch
+    ? {
+        eyebrow: options.isWindowView ? `7D · ${isoMatch[1]}` : isoMatch[1]!,
+        dayMark: `${isoMatch[2]}.${isoMatch[3]}`,
+      }
+    : null
+
+  if (options.isWindowView) {
+    const start = options.windowStart ?? ''
+    const end = options.windowEnd ?? ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end)) {
+      const sameYear = start.slice(0, 4) === end.slice(0, 4)
+      const rangeText = sameYear ? `${start} — ${shortTrendDate(end)}` : `${start} — ${end}`
+      return { subtitle: `近 7 日风向 · ${rangeText}`, watermark }
+    }
+    return { subtitle: '近 7 日风向', watermark }
+  }
+
+  return {
+    subtitle: isoMatch ? `开源日报 · ${options.date} 期` : '开源日报',
+    watermark,
+  }
+}
+
 /** 榜上异动身份徽标展示模型。 */
 export interface TrendPresenceBadge {
   label: string
