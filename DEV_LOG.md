@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **已立项待实施（dev.25）**：[星潮精修、缺陷根治与全局巡检](docs/plans/startide-dev24-polish-and-bugfix.md)（分支 `feat/startide-delta-automation-billing`，新窗口确认方案、修并发 429 等缺陷并真机巡检后合 `dev`）。
+- **已收口待批合 `dev`（dev.25）**：[星潮精修、缺陷根治与全局巡检](docs/plans/startide-dev24-polish-and-bugfix.md)（分支 `feat/startide-delta-automation-billing`，P1～P3 已完成并通过隔离库与真机巡检，待屋主确认合 `dev`）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

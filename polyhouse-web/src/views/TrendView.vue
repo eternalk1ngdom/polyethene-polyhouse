@@ -877,9 +877,17 @@ select:focus-visible {
   }
   .dropped-item {
     grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .dropped-stars {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    white-space: nowrap;
   }
   .dropped-tags {
     grid-column: 2 / -1;
+    grid-row: 2;
   }
 }
 </style>
