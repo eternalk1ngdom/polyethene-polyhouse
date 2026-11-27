@@ -4,7 +4,7 @@
  *
  * 适用场景：星潮日报、账单回溯、成长记录等“离散有值归档”导航。
  * 核心能力：
- * 1. 范式 A 紧凑一体化触发器（[ ‹ ] [ 2026-11-27 📅 ] [ › ]），宽度 100% 恒定零抖动，
+ * 1. 范式 A 紧凑一体化触发器（[ ‹ ] [ 📅 2026-11-27 ] [ › ]），宽度 100% 恒定零抖动，
  *    支持键盘直输日期回车跳转（多分隔符/8 位纯数字宽容解析 + 4 类分级拦截与一键修复）与点选日历双模式融合；
  * 2. 桌面端轻浮层 Popover（右边缘自动防溢出）+ 手机端（≤640px）底部抽屉 Bottom Sheet（外层防误弹软键盘）；
  * 3. 无噪自适应导航：单期隐藏外层翻期箭头，单月隐藏头部翻月箭头并将标题退化为静态「YYYY 年 M 月」，
@@ -760,6 +760,21 @@ onBeforeUnmount(() => {
       </button>
 
       <div class="adp-input-shell">
+        <button
+          ref="calendarToggleRef"
+          type="button"
+          class="adp-cal-btn"
+          :class="{ 'is-open': open }"
+          :disabled="disabled"
+          :aria-expanded="open"
+          aria-haspopup="dialog"
+          :aria-label="`${ariaLabel}：打开日历，当前 ${displayDateText}${isShowingLatest ? '，最新一期' : ''}`"
+          :title="open ? '收起日历' : '打开日历'"
+          @click="togglePanel"
+        >
+          <ElIcon class="adp-cal-icon" aria-hidden="true"><Calendar /></ElIcon>
+        </button>
+
         <input
           ref="inputRef"
           type="text"
@@ -784,21 +799,6 @@ onBeforeUnmount(() => {
           @keydown="onInputKeydown"
           @blur="handleInputBlur"
         />
-
-        <button
-          ref="calendarToggleRef"
-          type="button"
-          class="adp-cal-btn"
-          :class="{ 'is-open': open }"
-          :disabled="disabled"
-          :aria-expanded="open"
-          aria-haspopup="dialog"
-          :aria-label="`${ariaLabel}：打开日历，当前 ${displayDateText}${isShowingLatest ? '，最新一期' : ''}`"
-          :title="open ? '收起日历' : '打开日历'"
-          @click="togglePanel"
-        >
-          <ElIcon class="adp-cal-icon" aria-hidden="true"><Calendar /></ElIcon>
-        </button>
       </div>
 
       <button
@@ -1208,7 +1208,7 @@ onBeforeUnmount(() => {
   width: 96px;
   min-width: 0;
   min-height: 44px;
-  padding: 0 2px 0 9px;
+  padding: 0 9px 0 2px;
   border: none;
   background: transparent;
   color: var(--adp-ink);
