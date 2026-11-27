@@ -16,6 +16,7 @@ const jobStates = ['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'INTER
 const jobPhases = ['QUEUED', 'COLLECTING', 'ANALYZING', 'PUBLISHING', 'DONE'] as const
 const scheduleTodayStatuses = [
   'DISABLED',
+  'PAUSED',
   'WAITING_WINDOW',
   'RUNNING',
   'PUBLISHED_AUTO',
@@ -32,6 +33,7 @@ export interface TrendScheduleStatus {
   moduleEnabled: boolean
   jobsEnabled: boolean
   scheduleEnabled: boolean
+  schedulePaused: boolean
   briefingAutoEnabled: boolean
   aiReady: boolean
   dailyTime: string
@@ -219,6 +221,10 @@ function scheduleStatus(value: unknown): TrendScheduleStatus {
     moduleEnabled: truth(row.moduleEnabled),
     jobsEnabled: truth(row.jobsEnabled),
     scheduleEnabled: truth(row.scheduleEnabled),
+    schedulePaused:
+      row.schedulePaused === undefined || row.schedulePaused === null
+        ? false
+        : truth(row.schedulePaused),
     briefingAutoEnabled: truth(row.briefingAutoEnabled),
     aiReady: truth(row.aiReady),
     dailyTime: text(row.dailyTime),
@@ -245,4 +251,17 @@ export function getTrendScheduleStatus(
   signal?: AbortSignal,
 ): Promise<TrendScheduleStatus> {
   return apiRequest({ url: '/manage/trend/jobs/schedule', signal }, scheduleStatus, token)
+}
+
+/** 屋主人工急停或恢复每日自动采集；仅在服务端总闸开启时生效。 */
+export function setTrendSchedulePaused(
+  token: string,
+  paused: boolean,
+  signal?: AbortSignal,
+): Promise<TrendScheduleStatus> {
+  return apiRequest(
+    { url: '/manage/trend/jobs/schedule/pause', method: 'POST', data: { paused }, signal },
+    scheduleStatus,
+    token,
+  )
 }

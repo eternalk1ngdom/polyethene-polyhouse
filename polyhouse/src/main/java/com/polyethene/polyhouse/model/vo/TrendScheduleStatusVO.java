@@ -13,9 +13,10 @@ import java.util.List;
  * @param dailyTime 每日计划采集时间（北京时间 HH:mm）
  * @param retryDelayMinutes 首次采集失败后的补偿延迟分钟数
  * @param todayDate 数据库时钟换算的当前北京日期
- * @param todayStatus 今日自动受理状态码：DISABLED / WAITING_WINDOW / RUNNING / PUBLISHED_AUTO / PUBLISHED_MANUAL / RETRY_PENDING / FAILED / MISSED_WINDOW
+ * @param todayStatus 今日自动受理状态码：DISABLED / PAUSED / WAITING_WINDOW / RUNNING / PUBLISHED_AUTO / PUBLISHED_MANUAL / RETRY_PENDING / FAILED / MISSED_WINDOW
  * @param todayPublished 今日是否已有已发布日报
  * @param recentJobs 最近 5 条任务记录（区分 SCHEDULED 与 MANUAL）
+ * @param schedulePaused 是否已被屋主人工急停暂停（仅在服务端总闸开启时生效）
  */
 public record TrendScheduleStatusVO(
         boolean moduleEnabled,
@@ -28,9 +29,27 @@ public record TrendScheduleStatusVO(
         LocalDate todayDate,
         String todayStatus,
         boolean todayPublished,
-        List<TrendJobVO> recentJobs) {
+        List<TrendJobVO> recentJobs,
+        boolean schedulePaused) {
     /** 冻结最近任务列表，防止调用方修改响应视图。 */
     public TrendScheduleStatusVO {
         recentJobs = recentJobs == null ? List.of() : List.copyOf(recentJobs);
+    }
+
+    /** 兼容旧 11 参构造：默认未处于人工急停状态。 */
+    public TrendScheduleStatusVO(
+            boolean moduleEnabled,
+            boolean jobsEnabled,
+            boolean scheduleEnabled,
+            boolean briefingAutoEnabled,
+            boolean aiReady,
+            String dailyTime,
+            int retryDelayMinutes,
+            LocalDate todayDate,
+            String todayStatus,
+            boolean todayPublished,
+            List<TrendJobVO> recentJobs) {
+        this(moduleEnabled, jobsEnabled, scheduleEnabled, briefingAutoEnabled, aiReady, dailyTime,
+                retryDelayMinutes, todayDate, todayStatus, todayPublished, recentJobs, false);
     }
 }

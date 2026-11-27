@@ -25,6 +25,7 @@ const {
   feesBusy,
   briefingBusy,
   scheduleBusy,
+  scheduleToggling,
   briefingGenerating,
   jobError,
   feeError,
@@ -40,6 +41,7 @@ const {
   refreshFees,
   refreshBriefing,
   refreshScheduleStatus,
+  toggleSchedulePaused,
   generateBriefing,
 } = useTrendOwner()
 </script>
@@ -113,8 +115,10 @@ const {
         <TrendScheduleCard
           :status="scheduleStatus"
           :busy="scheduleBusy"
+          :toggling="scheduleToggling"
           :error="scheduleError"
           @refresh="refreshScheduleStatus"
+          @toggle-pause="toggleSchedulePaused"
         />
       </template>
     </div>

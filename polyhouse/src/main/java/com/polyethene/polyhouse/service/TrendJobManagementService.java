@@ -55,6 +55,17 @@ public class TrendJobManagementService {
         } catch (DataAccessException | TransactionException failure) { throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE); }
     }
 
+    /** 屋主人工急停或恢复每日自动采集；复核最新会话后在同事务内写单槽并返回最新只读视图。 */
+    public TrendScheduleStatusVO setSchedulePaused(TrendSchedulePauseDTO request, String token) {
+        validate(request);
+        try {
+            return transaction.execute(status -> {
+                owners.lockSession(token);
+                return store.setSchedulePaused(Boolean.TRUE.equals(request.paused()));
+            });
+        } catch (DataAccessException | TransactionException failure) { throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE); }
+    }
+
     private void validate(Object request) {
         if (request == null || !validator.validate(request).isEmpty()) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }

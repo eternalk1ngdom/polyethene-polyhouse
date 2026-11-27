@@ -1,25 +1,36 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ElButton } from 'element-plus'
+import { computed, ref } from 'vue'
+import { ElButton, ElDialog } from 'element-plus'
 import type { TrendJob, TrendScheduleStatus, TrendScheduleTodayStatus } from '../../api/trend'
 import { trendTime } from './presentation'
 
 interface Props {
   status: TrendScheduleStatus | null
   busy: boolean
+  toggling?: boolean
   error: string
 }
 interface Emits {
   refresh: []
+  togglePause: [paused: boolean]
 }
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+const confirmAction = ref<'pause' | 'resume' | null>(null)
+const dialogVisible = computed({
+  get: () => confirmAction.value !== null,
+  set: (value: boolean) => {
+    if (!value) confirmAction.value = null
+  },
+})
 
 const todayLabels: Record<
   TrendScheduleTodayStatus,
   { text: string; tone: string; pill: 'ready' | 'active' | 'warn' | 'idle' }
 > = {
   DISABLED: { text: '自动采集未开启', tone: 'muted', pill: 'idle' },
+  PAUSED: { text: '屋主已暂停', tone: 'warn', pill: 'warn' },
   WAITING_WINDOW: { text: '等待今日采集窗口', tone: 'info', pill: 'active' },
   RUNNING: { text: '今日自动采集进行中', tone: 'info', pill: 'active' },
   PUBLISHED_AUTO: { text: '今日已自动发布', tone: 'ok', pill: 'ready' },
@@ -42,6 +53,18 @@ const pillMeta = computed(() => {
   if (!props.status) return { text: props.busy ? '读取中' : '暂未读取', pill: 'idle' as const }
   return todayLabels[props.status.todayStatus]
 })
+
+function requestToggle(): void {
+  if (!props.status?.scheduleEnabled || props.toggling) return
+  confirmAction.value = props.status.schedulePaused ? 'resume' : 'pause'
+}
+
+function confirmToggle(): void {
+  if (!confirmAction.value) return
+  const nextPaused = confirmAction.value === 'pause'
+  confirmAction.value = null
+  emit('togglePause', nextPaused)
+}
 </script>
 
 <template>
@@ -53,10 +76,21 @@ const pillMeta = computed(() => {
           <span class="status-pill" :class="pillMeta.pill">{{ pillMeta.text }}</span>
         </div>
         <p class="subtitle">
-          后端定时受理与 GitHub Actions 唤醒共用单槽与 10 元月预算红线；本卡仅作只读展示。
+          后端定时受理与 GitHub Actions 唤醒共用单槽与 10 元月预算红线；服务端总闸开启时支持屋主紧急暂停。
         </p>
       </div>
-      <ElButton :loading="busy" @click="emit('refresh')">刷新状态</ElButton>
+      <div class="actions">
+        <ElButton :loading="busy" :disabled="toggling" @click="emit('refresh')">刷新状态</ElButton>
+        <ElButton
+          v-if="status?.scheduleEnabled"
+          :type="status.schedulePaused ? 'primary' : 'warning'"
+          :plain="!status.schedulePaused"
+          :loading="toggling"
+          @click="requestToggle"
+        >
+          {{ status.schedulePaused ? '恢复自动采集' : '暂停自动采集' }}
+        </ElButton>
+      </div>
     </header>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -66,11 +100,34 @@ const pillMeta = computed(() => {
       <div class="grid">
         <div class="metric">
           <span class="label">每日自动日报</span>
-          <strong class="value" :class="status.scheduleEnabled ? 'tone-ok' : 'tone-muted'">
-            {{ status.scheduleEnabled ? '已开启' : '未开启' }}
+          <strong
+            class="value"
+            :class="
+              !status.scheduleEnabled
+                ? 'tone-muted'
+                : status.schedulePaused
+                  ? 'tone-warn'
+                  : 'tone-ok'
+            "
+          >
+            {{
+              !status.scheduleEnabled
+                ? '未开启'
+                : status.schedulePaused
+                  ? '屋主已暂停'
+                  : '已开启'
+            }}
           </strong>
           <span class="hint">
-            北京时间 {{ status.dailyTime }}（补偿 +{{ status.retryDelayMinutes }} 分钟）
+            <template v-if="!status.scheduleEnabled">
+              由服务端配置控制，防本地调试误扣费
+            </template>
+            <template v-else-if="status.schedulePaused">
+              已人工急停，随时可恢复；不影响手动更新
+            </template>
+            <template v-else>
+              北京时间 {{ status.dailyTime }}（补偿 +{{ status.retryDelayMinutes }} 分钟）
+            </template>
           </span>
         </div>
 
@@ -113,6 +170,32 @@ const pillMeta = computed(() => {
         </ul>
       </div>
     </template>
+
+    <ElDialog
+      v-model="dialogVisible"
+      :title="confirmAction === 'pause' ? '确认暂停每日自动采集？' : '确认恢复每日自动采集？'"
+      width="min(440px, calc(100vw - 32px))"
+      :close-on-click-modal="false"
+    >
+      <p v-if="confirmAction === 'pause'" class="confirm-copy">
+        暂停后，系统将不再自动触发每日 GitHub 日报采集与 7 日风口简报生成；正在执行中的任务不受影响，已发布的日报仍可正常阅读，你也可以随时手动点「更新本期日报」或在此恢复自动采集。
+      </p>
+      <p v-else-if="confirmAction === 'resume'" class="confirm-copy">
+        恢复后，系统将在后续北京时间 {{ status?.dailyTime ?? '06:30' }} 采集窗口自动恢复运行，不会补跑今天已经错过的采集窗口。
+      </p>
+      <template #footer>
+        <div class="dialog-actions">
+          <ElButton @click="dialogVisible = false">取消</ElButton>
+          <ElButton
+            :type="confirmAction === 'pause' ? 'warning' : 'primary'"
+            :loading="toggling"
+            @click="confirmToggle"
+          >
+            {{ confirmAction === 'pause' ? '确认暂停' : '确认恢复' }}
+          </ElButton>
+        </div>
+      </template>
+    </ElDialog>
   </section>
 </template>
 
@@ -130,6 +213,22 @@ const pillMeta = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px 16px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.confirm-copy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #354b59;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .title-row {
   display: flex;

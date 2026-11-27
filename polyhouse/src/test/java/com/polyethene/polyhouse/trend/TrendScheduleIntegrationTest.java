@@ -184,6 +184,43 @@ class TrendScheduleIntegrationTest {
         try (var connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) { migrate(connection, "014_trend_schedule.sql"); }
     }
 
+    @Test void migration018KillSwitchBlocksAutomaticSchedulePreservesManualAndRollsBackCleanly() throws Exception {
+        // 1. 未迁移 018 时：只读状态安全回退为未暂停，写暂停返回明确 503。
+        assertThat(store.scheduleStatus().schedulePaused()).isFalse();
+        assertThatThrownBy(() -> store.setSchedulePaused(true))
+                .isInstanceOfSatisfying(com.polyethene.polyhouse.common.exception.BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(com.polyethene.polyhouse.common.constant.ErrorCode.SERVICE_UNAVAILABLE));
+
+        // 2. 执行 018 正向迁移：人工急停阻断定时窗口受理，但不影响屋主手动更新；恢复后定时窗口重新生效。
+        try (var connection = DriverManager.getConnection(sandbox.url, sandbox.user, sandbox.password)) {
+            migrate(connection, "018_trend_schedule_pause.sql");
+        }
+        try {
+            var paused = store.setSchedulePaused(true);
+            assertThat(paused.schedulePaused()).isTrue();
+            assertThat(paused.todayStatus()).isEqualTo("PAUSED");
+            assertThat(store.scheduleDue()).isNull();
+
+            // 手动更新不受自动采集急停影响。
+            String manualId = UUID.randomUUID().toString();
+            assertThat(store.submit(manualId, TrendFixture.owner()).accepted()).isTrue();
+            var manualRunning = store.claim();
+            store.fail(manualRunning, false);
+
+            // 恢复自动采集后，过冷却期在下一天窗口可正常自动受理。
+            var resumed = store.setSchedulePaused(false);
+            assertThat(resumed.schedulePaused()).isFalse();
+            now.set(START.plusDays(1));
+            var autoJob = store.scheduleDue();
+            assertThat(autoJob).isNotNull();
+            assertThat(scheduled.byJob(autoJob.id()).periodDate()).isEqualTo(LocalDate.of(2026, 11, 17));
+        } finally {
+            // 3. 逆序回退 018 还原随机库基线。
+            jdbc.execute("ALTER TABLE tool_trend_job_slot DROP COLUMN schedule_paused");
+        }
+        assertThat(store.scheduleStatus().schedulePaused()).isFalse();
+    }
+
     private TrendJobStore service(TrendScheduleProperties settings) {
         return new TrendJobStore(jobs, owners, archive, new TrendProperties(true, null), new TrendJobProperties(true), TrendAiFixture.settings(), manager, settings, scheduled);
     }

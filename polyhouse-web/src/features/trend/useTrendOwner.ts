@@ -7,6 +7,7 @@ import {
   getTrendJob,
   getTrendScheduleStatus,
   isTrendId,
+  setTrendSchedulePaused,
   submitTrendJob,
   type TrendBriefing,
   type TrendBriefingGenerateOutcome,
@@ -43,6 +44,7 @@ export function useTrendOwner() {
   const feesBusy = ref(false)
   const briefingBusy = ref(false)
   const scheduleBusy = ref(false)
+  const scheduleToggling = ref(false)
   const briefingGenerating = ref(false)
   const jobError = ref('')
   const feeError = ref('')
@@ -84,6 +86,7 @@ export function useTrendOwner() {
     feesBusy.value = false
     briefingBusy.value = false
     scheduleBusy.value = false
+    scheduleToggling.value = false
     briefingGenerating.value = false
     jobError.value = ''
     feeError.value = ''
@@ -394,6 +397,32 @@ export function useTrendOwner() {
     }
   }
 
+  async function toggleSchedulePaused(paused: boolean): Promise<boolean> {
+    const current = session
+    if (!current || scheduleToggling.value || Date.now() < scheduleWaitUntil.value) return false
+    scheduleToggling.value = true
+    scheduleError.value = ''
+    try {
+      const result = await runManaged(current, () =>
+        setTrendSchedulePaused(current.token, paused, current.requests.signal),
+      )
+      if (!result || session !== current) return false
+      scheduleStatus.value = result
+      return true
+    } catch (failure: unknown) {
+      if (session !== current) return false
+      if (failure instanceof ApiError && failure.status === 429) {
+        scheduleWaitUntil.value = Date.now() + (failure.retryAfterSeconds ?? 5) * 1000
+      }
+      scheduleError.value =
+        (failure instanceof ApiError && failure.message) ||
+        (paused ? '暂时无法暂停自动采集，请稍后重试。' : '暂时无法恢复自动采集，请稍后重试。')
+      return false
+    } finally {
+      if (session === current) scheduleToggling.value = false
+    }
+  }
+
   /**
    * 登录初始化编排：公开只读简报可并行加载，3 个管理读接口严格串行（并发=1），
    * 为屋主在进页瞬间点击「更新本期日报」或「生成简报」预留 1 个实时并发槽位。
@@ -440,6 +469,7 @@ export function useTrendOwner() {
     feesBusy,
     briefingBusy,
     scheduleBusy,
+    scheduleToggling,
     briefingGenerating,
     jobError,
     feeError,
@@ -455,6 +485,7 @@ export function useTrendOwner() {
     refreshFees,
     refreshBriefing,
     refreshScheduleStatus,
+    toggleSchedulePaused,
     generateBriefing,
   }
 }

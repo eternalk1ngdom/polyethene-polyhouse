@@ -37,16 +37,23 @@ class TrendJobControllerTest {
         when(jobs.submit(any(), any())).thenReturn(new TrendJobSubmissionVO(true, false, job()));
         when(jobs.query(any(), any())).thenReturn(job());
         when(jobs.scheduleStatus(any())).thenReturn(scheduleStatus());
+        when(jobs.setSchedulePaused(any(), any())).thenReturn(pausedScheduleStatus());
         mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().is(role == UserRoleEnum.OWNER ? 202 : 403));
         mvc.perform(get("/api/manage/trend/jobs").param("jobId", ID).header("Authorization", "Bearer fixture"))
                 .andExpect(status().is(role == UserRoleEnum.OWNER ? 200 : 403));
         var scheduleResult = mvc.perform(get("/api/manage/trend/jobs/schedule").header("Authorization", "Bearer fixture"))
                 .andExpect(status().is(role == UserRoleEnum.OWNER ? 200 : 403));
+        var pauseResult = mvc.perform(post("/api/manage/trend/jobs/schedule/pause").header("Authorization", "Bearer fixture")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"paused\":true}"))
+                .andExpect(status().is(role == UserRoleEnum.OWNER ? 200 : 403));
         if (role == UserRoleEnum.OWNER) {
             scheduleResult.andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.data.todayStatus").value("WAITING_WINDOW"))
                     .andExpect(jsonPath("$.data.recentJobs[0].trigger").value("MANUAL"));
+            pauseResult.andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.data.todayStatus").value("PAUSED"))
+                    .andExpect(jsonPath("$.data.schedulePaused").value(true));
         }
         if (role != UserRoleEnum.OWNER) verifyNoInteractions(jobs);
     }
@@ -54,10 +61,15 @@ class TrendJobControllerTest {
     @Test void anonymousAndInitialOwnerCannotReachBusiness() throws Exception {
         mvc.perform(post("/api/manage/trend/jobs").contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/manage/trend/jobs/schedule")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/manage/trend/jobs/schedule/pause").contentType(MediaType.APPLICATION_JSON).content("{\"paused\":true}"))
+                .andExpect(status().isUnauthorized());
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, true));
         mvc.perform(post("/api/manage/trend/jobs").header("Authorization", "Bearer fixture").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
         mvc.perform(get("/api/manage/trend/jobs/schedule").header("Authorization", "Bearer fixture"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
+        mvc.perform(post("/api/manage/trend/jobs/schedule/pause").header("Authorization", "Bearer fixture")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"paused\":true}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(40301));
         verifyNoInteractions(jobs);
     }
@@ -75,6 +87,9 @@ class TrendJobControllerTest {
     @Test void malformedJobIdQueryFailsBeforeService() throws Exception {
         when(auth.getCurrentUser("fixture")).thenReturn(profile(UserRoleEnum.OWNER, false));
         mvc.perform(get("/api/manage/trend/jobs").param("jobId", "bad").header("Authorization", "Bearer fixture"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/manage/trend/jobs/schedule/pause").header("Authorization", "Bearer fixture")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(jobs);
     }
@@ -102,6 +117,10 @@ class TrendJobControllerTest {
     private static TrendScheduleStatusVO scheduleStatus() {
         return new TrendScheduleStatusVO(true, true, true, true, true, "06:30", 45,
                 java.time.LocalDate.of(2026, 11, 26), "WAITING_WINDOW", false, java.util.List.of(job()));
+    }
+    private static TrendScheduleStatusVO pausedScheduleStatus() {
+        return new TrendScheduleStatusVO(true, true, true, true, true, "06:30", 45,
+                java.time.LocalDate.of(2026, 11, 26), "PAUSED", false, java.util.List.of(job()), true);
     }
     private static UserProfileVO profile(UserRoleEnum role, boolean initial) {
         return new UserProfileVO("42", "fixture", "测试", null, role, "0", 1, "0", initial);

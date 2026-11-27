@@ -60,6 +60,7 @@ function makeSchedule(patch = {}) {
     moduleEnabled: true,
     jobsEnabled: true,
     scheduleEnabled: true,
+    schedulePaused: false,
     briefingAutoEnabled: true,
     aiReady: true,
     dailyTime: '06:30',
@@ -135,6 +136,8 @@ async function setupOwnerHarness(t, initialUser) {
       submitTrendJob: async () => ({ accepted: true, replayed: false, job: makeJob() }),
       getTrendFees: async () => makeFees(),
       getTrendScheduleStatus: async () => makeSchedule(),
+      setTrendSchedulePaused: async (_t, paused) =>
+        makeSchedule({ schedulePaused: paused, todayStatus: paused ? 'PAUSED' : 'WAITING_WINDOW' }),
       getTrendBriefing: async () => makeBriefing(),
       generateTrendBriefing: async () => ({
         outcome: 'REUSED',
@@ -181,6 +184,11 @@ async function setupOwnerHarness(t, initialUser) {
     }
     export function getTrendScheduleStatus(token, signal) {
       return managed('getTrendScheduleStatus', () => h().handlers.getTrendScheduleStatus(token, signal))
+    }
+    export function setTrendSchedulePaused(token, paused, signal) {
+      return managed('setTrendSchedulePaused', () =>
+        h().handlers.setTrendSchedulePaused(token, paused, signal),
+      )
     }
     export function getTrendBriefing(anchorDate, signal) {
       h().calls.push('getTrendBriefing')

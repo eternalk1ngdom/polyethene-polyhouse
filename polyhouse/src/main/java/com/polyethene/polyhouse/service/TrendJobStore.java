@@ -10,6 +10,7 @@ import com.polyethene.polyhouse.model.vo.*;
 import com.polyethene.polyhouse.service.trend.*;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -102,6 +103,7 @@ public class TrendJobStore {
             if (!local.toLocalDate().equals(checkedLocal.toLocalDate()) || checkedDelta < expectedStart || checkedDelta >= expectedStart + 10) return null;
             now = checkedNow;
             // 单槽所有读取与后续写入使用同一事务，等待超时会安全拒绝而不排外部请求。
+            if (isSchedulePausedSafe()) return null;
             var day = local.toLocalDate();
             if (recover(slot, now) != null || scheduled.lockAttempt(day, attempt) != null || scheduled.published(day)) return null;
             if (slot.lastAcceptedAt() != null && now.isBefore(slot.lastAcceptedAt().plusSeconds(60))) return null;
@@ -148,13 +150,14 @@ public class TrendJobStore {
             var local = now.toInstant(ZoneOffset.UTC).atZone(ZoneId.of("Asia/Shanghai"));
             var today = local.toLocalDate();
             boolean scheduleEnabled = module.enabled() && jobs.enabled() && schedule.ready() && scheduled != null;
+            boolean schedulePaused = scheduleEnabled && isSchedulePausedSafe();
             boolean todayPublished = scheduled != null && scheduled.published(today);
             var recentRecords = mapper.recent(RECENT_JOBS_LIMIT);
             // 最近 5 条任务列表只展示触发来源、状态与时间，避免无谓读取并反序列化 5 份完整日报 JSON。
             List<TrendJobVO> recentJobs = recentRecords == null ? List.of()
                     : recentRecords.stream().map(record -> view(record, false)).toList();
 
-            String todayStatus = resolveTodayStatus(scheduleEnabled, todayPublished, today, local, recentRecords);
+            String todayStatus = resolveTodayStatus(scheduleEnabled, schedulePaused, todayPublished, today, local, recentRecords);
             return new TrendScheduleStatusVO(
                     module.enabled(),
                     jobs.enabled(),
@@ -166,11 +169,41 @@ public class TrendJobStore {
                     today,
                     todayStatus,
                     todayPublished,
-                    recentJobs);
+                    recentJobs,
+                    schedulePaused);
         });
     }
 
-    private String resolveTodayStatus(boolean scheduleEnabled, boolean todayPublished, LocalDate today,
+    /**
+     * 屋主人工急停或恢复每日自动采集；仅允许在服务端总闸已开启时操作，绝不越权开启总闸。
+     * 与 scheduleDue 共用单槽行锁互斥，未迁移 018 时返回明确 503 提示而非破坏主流程。
+     */
+    public TrendScheduleStatusVO setSchedulePaused(boolean paused) {
+        boolean scheduleEnabled = module.enabled() && jobs.enabled() && schedule.ready() && scheduled != null;
+        if (!scheduleEnabled) {
+            throw new BusinessException(ErrorCode.CONFLICT, "服务端未开启每日自动采集，无需暂停或恢复");
+        }
+        return transaction.execute(status -> {
+            slot();
+            try {
+                if (mapper.setSchedulePaused(paused) != 1) throw conflict();
+            } catch (BadSqlGrammarException unmigrated) {
+                throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "请先执行 018 数据库迁移以启用急停开关");
+            }
+            return scheduleStatus();
+        });
+    }
+
+    /** 未迁移 018 时安全回退为未暂停，保证仅迁移 010～014 的环境零报错兼容。 */
+    private boolean isSchedulePausedSafe() {
+        try {
+            return Boolean.TRUE.equals(mapper.isSchedulePaused());
+        } catch (BadSqlGrammarException unmigrated) {
+            return false;
+        }
+    }
+
+    private String resolveTodayStatus(boolean scheduleEnabled, boolean schedulePaused, boolean todayPublished, LocalDate today,
                                       ZonedDateTime local, List<TrendJobRecord> recentRecords) {
         if (!scheduleEnabled) return "DISABLED";
         var attempts = scheduled.byDay(today);
@@ -184,6 +217,9 @@ public class TrendJobStore {
         }
         if (todayScheduledJobs.stream().anyMatch(j -> "QUEUED".equals(j.state()) || "RUNNING".equals(j.state()))) {
             return "RUNNING";
+        }
+        if (schedulePaused) {
+            return "PAUSED";
         }
         if (todayPublished) {
             boolean publishedByAuto = todayScheduledJobs.stream().anyMatch(j -> j.reportId() != null);

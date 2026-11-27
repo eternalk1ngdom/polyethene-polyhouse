@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -248,6 +249,40 @@ class TrendAutomationTest {
                 Arguments.of("首次采集失败且未过补偿窗口返回 RETRY_PENDING", true, bj0700, false, List.of(attempt0), List.of(failedCollectingJob), "RETRY_PENDING"),
                 Arguments.of("已过今日采集窗口且无尝试返回 MISSED_WINDOW", true, bj0800, false, List.of(), List.of(), "MISSED_WINDOW")
         );
+    }
+
+    @Test
+    void scheduleKillSwitchReportsPausedAndRefusesToggleWhenServerScheduleDisabled() {
+        var jobMapper = mock(TrendJobMapper.class);
+        var scheduleMapper = mock(TrendScheduleMapper.class);
+        var owners = mock(TrendOwnerAuthorization.class);
+        var archive = mock(TrendArchiveService.class);
+        var txManager = mock(PlatformTransactionManager.class);
+        when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(jobMapper.now()).thenReturn(LocalDateTime.of(2026, 11, 25, 22, 0));
+        when(jobMapper.recent(5)).thenReturn(List.of());
+        when(jobMapper.isSchedulePaused()).thenReturn(true);
+        when(scheduleMapper.published(ANCHOR)).thenReturn(false);
+        when(scheduleMapper.byDay(ANCHOR)).thenReturn(List.of());
+
+        var enabledStore = new TrendJobStore(
+                jobMapper, owners, archive,
+                new TrendProperties(true, null), new TrendJobProperties(true),
+                new TrendAiProperties(false, "", "deepseek-flash", BigDecimal.valueOf(2), BigDecimal.valueOf(8), 10_000_000L, false, "low"),
+                txManager, new TrendScheduleProperties(true, "06:30", 45), scheduleMapper, new TrendBriefingProperties(true));
+        var pausedView = enabledStore.scheduleStatus();
+        assertThat(pausedView.schedulePaused()).isTrue();
+        assertThat(pausedView.todayStatus()).isEqualTo("PAUSED");
+
+        // 服务端总闸关闭时绝不允许通过急停接口越权操作。
+        var disabledStore = new TrendJobStore(
+                jobMapper, owners, archive,
+                new TrendProperties(true, null), new TrendJobProperties(true),
+                new TrendAiProperties(false, "", "deepseek-flash", BigDecimal.valueOf(2), BigDecimal.valueOf(8), 10_000_000L, false, "low"),
+                txManager, new TrendScheduleProperties(false, "06:30", 45), scheduleMapper, new TrendBriefingProperties(true));
+        assertThatThrownBy(() -> disabledStore.setSchedulePaused(true))
+                .isInstanceOfSatisfying(com.polyethene.polyhouse.common.exception.BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(com.polyethene.polyhouse.common.constant.ErrorCode.CONFLICT));
     }
 
     private static TrendJobRecord jobRecord(Long actorId, String state, String phase, String reportId) {

@@ -42,6 +42,14 @@ public class TrendJobController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(service.scheduleStatus(session.token())));
     }
 
+    /** 屋主人工急停或恢复每日自动采集；仅允许在服务端总闸开启时操作，响应禁缓存。 */
+    @PostMapping("/schedule/pause")
+    public ResponseEntity<Result<TrendScheduleStatusVO>> setSchedulePaused(@Valid @RequestBody TrendSchedulePauseDTO request,
+                                                                           @Valid SessionTokenDTO session) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(Result.success(service.setSchedulePaused(request, session.token())));
+    }
+
     /** 冷却拒绝和入口限流保持相同的429/Retry-After/no-store语义。 */
     @ExceptionHandler(TrendJobThrottle.class)
     public ResponseEntity<Result<Void>> throttled(TrendJobThrottle failure) {

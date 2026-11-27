@@ -18,6 +18,15 @@ public interface TrendJobMapper {
     @Select("SELECT active_id,generation,last_accepted_at FROM tool_trend_job_slot WHERE singleton_id=1 FOR UPDATE")
     TrendJobSlot lockSlot();
 
+    /** 读取 018 屋主人工急停标志；须在锁单槽后或只读状态查询中调用。 */
+    @Select("SELECT schedule_paused FROM tool_trend_job_slot WHERE singleton_id=1")
+    @Options(timeout = 3)
+    Boolean isSchedulePaused();
+
+    /** 写入 018 屋主人工急停标志，仅作用于固定单槽行，与定时受理同锁互斥。 */
+    @Update("UPDATE tool_trend_job_slot SET schedule_paused=#{paused} WHERE singleton_id=1")
+    int setSchedulePaused(@Param("paused") boolean paused);
+
     /** 槽锁之后使用当前读，避免MySQL可重复读快照看不到并发完成的事实。 */
     @Select("SELECT * FROM tool_trend_job WHERE id=#{id} FOR UPDATE")
     TrendJobRecord lockJob(@Param("id") String id);
