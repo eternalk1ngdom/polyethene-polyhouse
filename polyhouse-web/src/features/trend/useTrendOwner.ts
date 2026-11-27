@@ -3,7 +3,6 @@ import { ApiError } from '../../api/index'
 import {
   generateTrendBriefing,
   getTrendBriefing,
-  getTrendFees,
   getTrendJob,
   getTrendScheduleStatus,
   isTrendId,
@@ -11,7 +10,6 @@ import {
   submitTrendJob,
   type TrendBriefing,
   type TrendBriefingGenerateOutcome,
-  type TrendFees,
   type TrendJob,
   type TrendScheduleStatus,
 } from '../../api/trend'
@@ -35,25 +33,21 @@ export function useTrendOwner() {
     () => user.isLoggedIn && user.user?.role === 'OWNER' && !user.requiresPasswordChange,
   )
   const job = ref<TrendJob | null>(null)
-  const fees = ref<TrendFees | null>(null)
   const briefing = ref<TrendBriefing | null>(null)
   const scheduleStatus = ref<TrendScheduleStatus | null>(null)
   const intent = ref<string | null>(null)
   const knownJobId = ref<string | null>(null)
   const jobBusy = ref(false)
-  const feesBusy = ref(false)
   const briefingBusy = ref(false)
   const scheduleBusy = ref(false)
   const scheduleToggling = ref(false)
   const briefingGenerating = ref(false)
   const jobError = ref('')
-  const feeError = ref('')
   const briefingError = ref('')
   const scheduleError = ref('')
   const submissionNote = ref('')
   const briefingNote = ref('')
   const jobWaitUntil = ref(0)
-  const feesWaitUntil = ref(0)
   const briefingWaitUntil = ref(0)
   const scheduleWaitUntil = ref(0)
   const waiting = ref(false)
@@ -77,25 +71,21 @@ export function useTrendOwner() {
     clearTimeout(unblock)
     clearTimeout(briefingUnblock)
     job.value = null
-    fees.value = null
     briefing.value = null
     scheduleStatus.value = null
     intent.value = null
     knownJobId.value = null
     jobBusy.value = false
-    feesBusy.value = false
     briefingBusy.value = false
     scheduleBusy.value = false
     scheduleToggling.value = false
     briefingGenerating.value = false
     jobError.value = ''
-    feeError.value = ''
     briefingError.value = ''
     scheduleError.value = ''
     submissionNote.value = ''
     briefingNote.value = ''
     jobWaitUntil.value = 0
-    feesWaitUntil.value = 0
     briefingWaitUntil.value = 0
     scheduleWaitUntil.value = 0
     waiting.value = false
@@ -166,10 +156,9 @@ export function useTrendOwner() {
     jobError.value = '请求较频繁或更新正在冷却，请稍后重试。'
   }
 
-  /** 任务结束后串行联动刷新费用、自动采集状态与公开 7 日简报，确保各卡片即时一致。 */
+  /** 任务结束后联动刷新自动采集状态与公开 7 日简报，确保各卡片即时一致。 */
   async function refreshAfterJobFinished(current: OwnerSession): Promise<void> {
     void refreshBriefing()
-    await refreshFees()
     if (session !== current) return
     await refreshScheduleStatus()
   }
@@ -193,7 +182,7 @@ export function useTrendOwner() {
       if (intent.value === target) intent.value = null
       remember(current)
       if (active.value) schedulePoll()
-      else if (cascade && (wasActive || !fees.value)) void refreshAfterJobFinished(current)
+      else if (cascade && (wasActive || !scheduleStatus.value)) void refreshAfterJobFinished(current)
     } catch (failure: unknown) {
       if (session !== current) return
       if (failure instanceof ApiError && failure.status === 429) {
@@ -267,39 +256,6 @@ export function useTrendOwner() {
     }
   }
 
-  async function refreshFees(append = false): Promise<void> {
-    const current = session
-    const previous = fees.value
-    if (!current || feesBusy.value || Date.now() < feesWaitUntil.value) return
-    if (append && !previous?.nextAfter) return
-    feesBusy.value = true
-    feeError.value = ''
-    try {
-      const result = await runManaged(current, () =>
-        getTrendFees(
-          current.token,
-          append ? (previous?.nextAfter ?? undefined) : undefined,
-          current.requests.signal,
-        ),
-      )
-      if (!result || session !== current) return
-      if (append && previous && previous.month === result.month) {
-        result.pending = [...previous.pending, ...result.pending]
-      } else if (append) {
-        feeError.value = '账本已经跨月，请刷新本月费用。'
-        return
-      }
-      fees.value = result
-    } catch (failure: unknown) {
-      if (session !== current) return
-      if (failure instanceof ApiError && failure.status === 429)
-        feesWaitUntil.value = Date.now() + (failure.retryAfterSeconds ?? 5) * 1000
-      feeError.value = '暂时无法读取费用，请稍后重试。'
-    } finally {
-      if (session === current) feesBusy.value = false
-    }
-  }
-
   function onBriefingRateLimit(failure: ApiError): void {
     const delay = (failure.retryAfterSeconds ?? 15) * 1000
     briefingWaitUntil.value = Date.now() + delay
@@ -314,7 +270,7 @@ export function useTrendOwner() {
   function briefingOutcomeNote(outcome: TrendBriefingGenerateOutcome): string {
     if (outcome === 'GENERATED') return '已生成并发布本期 7 日风口简报。'
     if (outcome === 'REUSED') return '当期快照未变化，已零费用复用现有简报。'
-    if (outcome === 'PENDING') return '当期已有在途或待核对的简报请求，请在下方费用面板核对。'
+    if (outcome === 'PENDING') return '当期已有在途或待核对的简报请求，请稍后刷新状态核对。'
     if (outcome === 'BUDGET_LIMIT') return '本月 AI 预算已达上限或已暂停，未发起新生成。'
     if (outcome === 'INVALID_OUTPUT')
       return '模型输出未通过实名引用或格式校验，已按实际用量结算并保留旧稿。'
@@ -359,7 +315,6 @@ export function useTrendOwner() {
       if (!result || session !== current) return
       briefing.value = result.briefing
       briefingNote.value = briefingOutcomeNote(result.outcome)
-      if (result.charged) void refreshFees()
     } catch (failure: unknown) {
       if (session !== current) return
       if (failure instanceof ApiError && failure.status === 429) {
@@ -367,9 +322,8 @@ export function useTrendOwner() {
       } else if (failure instanceof ApiError && failure.message) {
         briefingError.value = failure.message
       } else {
-        briefingError.value = '风口简报生成未收到完整确认，请先刷新状态与费用账本。'
+        briefingError.value = '风口简报生成未收到完整确认，请先刷新状态确认结果。'
       }
-      void refreshFees()
     } finally {
       if (session === current) briefingGenerating.value = false
     }
@@ -424,7 +378,7 @@ export function useTrendOwner() {
   }
 
   /**
-   * 登录初始化编排：公开只读简报可并行加载，3 个管理读接口严格串行（并发=1），
+   * 登录初始化编排：公开只读简报可并行加载，管理读接口严格串行（并发=1），
    * 为屋主在进页瞬间点击「更新本期日报」或「生成简报」预留 1 个实时并发槽位。
    */
   async function hydrate(current: OwnerSession): Promise<void> {
@@ -432,8 +386,6 @@ export function useTrendOwner() {
     if (intent.value || knownJobId.value) {
       await refreshJob({ cascade: false })
     }
-    if (session !== current) return
-    await refreshFees()
     if (session !== current) return
     await refreshScheduleStatus()
   }
@@ -460,19 +412,16 @@ export function useTrendOwner() {
   return {
     allowed,
     job,
-    fees,
     briefing,
     scheduleStatus,
     intent,
     knownJobId,
     jobBusy,
-    feesBusy,
     briefingBusy,
     scheduleBusy,
     scheduleToggling,
     briefingGenerating,
     jobError,
-    feeError,
     briefingError,
     scheduleError,
     submissionNote,
@@ -482,7 +431,6 @@ export function useTrendOwner() {
     briefingWaiting,
     refreshJob,
     submit,
-    refreshFees,
     refreshBriefing,
     refreshScheduleStatus,
     toggleSchedulePaused,

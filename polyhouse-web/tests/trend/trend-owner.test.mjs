@@ -39,22 +39,6 @@ function makeJob(patch = {}) {
   }
 }
 
-function makeFees(patch = {}) {
-  return {
-    month: '2026-11',
-    budgetMicros: 10_000_000,
-    accountedMicros: 1200,
-    heldMicros: 0,
-    remainingMicros: 9_998_800,
-    conservativeMicros: 0,
-    suspended: false,
-    pending: [],
-    nextAfter: null,
-    usage: null,
-    ...patch,
-  }
-}
-
 function makeSchedule(patch = {}) {
   return {
     moduleEnabled: true,
@@ -134,7 +118,6 @@ async function setupOwnerHarness(t, initialUser) {
     handlers: {
       getTrendJob: async () => makeJob(),
       submitTrendJob: async () => ({ accepted: true, replayed: false, job: makeJob() }),
-      getTrendFees: async () => makeFees(),
       getTrendScheduleStatus: async () => makeSchedule(),
       setTrendSchedulePaused: async (_t, paused) =>
         makeSchedule({ schedulePaused: paused, todayStatus: paused ? 'PAUSED' : 'WAITING_WINDOW' }),
@@ -179,9 +162,6 @@ async function setupOwnerHarness(t, initialUser) {
     export function submitTrendJob(token, requestId, signal) {
       return managed('submitTrendJob', () => h().handlers.submitTrendJob(token, requestId, signal))
     }
-    export function getTrendFees(token, after, signal) {
-      return managed('getTrendFees', () => h().handlers.getTrendFees(token, after, signal))
-    }
     export function getTrendScheduleStatus(token, signal) {
       return managed('getTrendScheduleStatus', () => h().handlers.getTrendScheduleStatus(token, signal))
     }
@@ -220,18 +200,16 @@ async function setupOwnerHarness(t, initialUser) {
   return { useTrendOwner, store, storage, state, ApiError: apiIndexMod.ApiError }
 }
 
-test('useTrendOwner 登录初始化严格串行拉取管理接口，避免 3 并发撞穿限流', async (t) => {
+test('useTrendOwner 登录初始化严格串行拉取管理接口，零费用请求且避免并发撞穿限流', async (t) => {
   const { useTrendOwner, storage, state } = await setupOwnerHarness(t)
   const knownId = '11111111-2222-4333-8444-555555555555'
   storage.setItem('polyhouse:star-tide:42:job', knownId)
 
   const jobGate = deferred()
-  const feesGate = deferred()
   const scheduleGate = deferred()
   const briefingGate = deferred()
 
   state.handlers.getTrendJob = () => jobGate.promise
-  state.handlers.getTrendFees = () => feesGate.promise
   state.handlers.getTrendScheduleStatus = () => scheduleGate.promise
   state.handlers.getTrendBriefing = () => briefingGate.promise
 
@@ -249,18 +227,7 @@ test('useTrendOwner 登录初始化严格串行拉取管理接口，避免 3 并
   await flushMicrotasks()
   assert.equal(state.inFlightManaged, 1)
   assert.equal(state.maxManaged, 1)
-  assert.deepEqual(state.calls, ['getTrendBriefing', 'getTrendJob', 'getTrendFees'])
-
-  feesGate.resolve(makeFees())
-  await flushMicrotasks()
-  assert.equal(state.inFlightManaged, 1)
-  assert.equal(state.maxManaged, 1)
-  assert.deepEqual(state.calls, [
-    'getTrendBriefing',
-    'getTrendJob',
-    'getTrendFees',
-    'getTrendScheduleStatus',
-  ])
+  assert.deepEqual(state.calls, ['getTrendBriefing', 'getTrendJob', 'getTrendScheduleStatus'])
 
   scheduleGate.resolve(makeSchedule())
   briefingGate.resolve(makeBriefing())
@@ -268,12 +235,14 @@ test('useTrendOwner 登录初始化严格串行拉取管理接口，避免 3 并
   assert.equal(state.inFlightManaged, 0)
   assert.equal(state.maxManaged, 1)
   assert.equal(owner.job.value?.jobId, knownId)
-  assert.equal(owner.fees.value?.month, '2026-11')
   assert.equal(owner.scheduleStatus.value?.todayStatus, 'PUBLISHED_MANUAL')
 })
 
 test('useTrendOwner 并发闸门保证同时点击多个管理动作时在途严格不超过 2', async (t) => {
-  const { useTrendOwner, state } = await setupOwnerHarness(t)
+  const { useTrendOwner, storage, state } = await setupOwnerHarness(t)
+  const knownId = '11111111-2222-4333-8444-555555555555'
+  storage.setItem('polyhouse:star-tide:42:job', knownId)
+
   const scope = effectScope()
   t.after(() => scope.stop())
   const owner = scope.run(() => useTrendOwner())
@@ -286,38 +255,40 @@ test('useTrendOwner 并发闸门保证同时点击多个管理动作时在途严
   const g2 = deferred()
   const g3 = deferred()
   const g4 = deferred()
-  state.handlers.getTrendFees = () => g1.promise
+  state.handlers.getTrendJob = () => g1.promise
   state.handlers.getTrendScheduleStatus = () => g2.promise
   state.handlers.generateTrendBriefing = () => g3.promise
-  state.handlers.submitTrendJob = () => g4.promise
+  state.handlers.setTrendSchedulePaused = () => g4.promise
 
-  const p1 = owner.refreshFees()
+  const p1 = owner.refreshJob({ cascade: false })
   const p2 = owner.refreshScheduleStatus()
   const p3 = owner.generateBriefing()
-  const p4 = owner.submit()
+  const p4 = owner.toggleSchedulePaused(true)
   await flushMicrotasks()
 
   assert.equal(state.inFlightManaged, 2)
   assert.equal(state.maxManaged, 2)
-  assert.deepEqual(state.calls, ['getTrendFees', 'getTrendScheduleStatus'])
+  assert.deepEqual(state.calls, ['getTrendJob', 'getTrendScheduleStatus'])
 
-  g1.resolve(makeFees())
+  g1.resolve(makeJob({ jobId: knownId }))
   await flushMicrotasks()
   assert.equal(state.inFlightManaged, 2)
   assert.equal(state.maxManaged, 2)
-  assert.deepEqual(state.calls, [
-    'getTrendFees',
-    'getTrendScheduleStatus',
-    'generateTrendBriefing',
-  ])
+  assert.deepEqual(state.calls, ['getTrendJob', 'getTrendScheduleStatus', 'generateTrendBriefing'])
 
   g2.resolve(makeSchedule())
   await flushMicrotasks()
   assert.equal(state.inFlightManaged, 2)
   assert.equal(state.maxManaged, 2)
+  assert.deepEqual(state.calls, [
+    'getTrendJob',
+    'getTrendScheduleStatus',
+    'generateTrendBriefing',
+    'setTrendSchedulePaused',
+  ])
 
   g3.resolve({ outcome: 'REUSED', charged: false, briefing: makeBriefing() })
-  g4.resolve({ accepted: true, replayed: false, job: makeJob() })
+  g4.resolve(makeSchedule({ schedulePaused: true, todayStatus: 'PAUSED' }))
   await Promise.all([p1, p2, p3, p4])
   assert.equal(state.inFlightManaged, 0)
   assert.equal(state.maxManaged, 2)
@@ -393,7 +364,7 @@ test('useTrendOwner 提交遇明确拒绝清理新建 intent，遇未知错误�
   }
 })
 
-test('useTrendOwner 任务从运行中变为结束后自动联动刷新费用、自动采集状态与简报', async (t) => {
+test('useTrendOwner 任务从运行中变为结束后自动联动刷新自动采集状态与简报', async (t) => {
   const { useTrendOwner, state } = await setupOwnerHarness(t)
   const scope = effectScope()
   t.after(() => scope.stop())
@@ -408,7 +379,6 @@ test('useTrendOwner 任务从运行中变为结束后自动联动刷新费用、
   state.calls.length = 0
   state.maxManaged = 0
   state.handlers.getTrendJob = async () => makeJob({ state: 'SUCCEEDED', phase: 'DONE' })
-  state.handlers.getTrendFees = async () => makeFees({ accountedMicros: 5600 })
   state.handlers.getTrendScheduleStatus = async () =>
     makeSchedule({ todayStatus: 'PUBLISHED_MANUAL', recentJobs: [makeJob()] })
   state.handlers.getTrendBriefing = async () => makeBriefing({ stale: true })
@@ -418,35 +388,36 @@ test('useTrendOwner 任务从运行中变为结束后自动联动刷新费用、
   await flushMicrotasks()
 
   assert.equal(owner.active.value, false)
-  assert.equal(owner.fees.value?.accountedMicros, 5600)
   assert.equal(owner.scheduleStatus.value?.recentJobs.length, 1)
   assert.equal(owner.briefing.value?.stale, true)
-  assert.ok(state.calls.includes('getTrendFees'))
   assert.ok(state.calls.includes('getTrendScheduleStatus'))
   assert.ok(state.calls.includes('getTrendBriefing'))
   assert.ok(state.maxManaged <= 2)
 })
 
 test('useTrendOwner 切换账号或退出登录时中止在途请求并释放排队队列', async (t) => {
-  const { useTrendOwner, store, state } = await setupOwnerHarness(t)
+  const { useTrendOwner, storage, store, state } = await setupOwnerHarness(t)
+  const knownId = '11111111-2222-4333-8444-555555555555'
+  storage.setItem('polyhouse:star-tide:42:job', knownId)
+
   const scope = effectScope()
   t.after(() => scope.stop())
   const owner = scope.run(() => useTrendOwner())
   await flushMicrotasks()
 
   let capturedSignal
-  const slowFees = deferred()
+  const slowJob = deferred()
   const slowSchedule = deferred()
-  state.handlers.getTrendFees = (_t, _a, signal) => {
+  state.handlers.getTrendJob = (_t, _id, signal) => {
     capturedSignal = signal
-    return slowFees.promise
+    return slowJob.promise
   }
   state.handlers.getTrendScheduleStatus = () => slowSchedule.promise
   state.handlers.generateTrendBriefing = async () => {
     throw new Error('退出登录后排队任务绝不应继续发送')
   }
 
-  const p1 = owner.refreshFees()
+  const p1 = owner.refreshJob({ cascade: false })
   const p2 = owner.refreshScheduleStatus()
   const p3 = owner.generateBriefing()
   await flushMicrotasks()
@@ -456,9 +427,9 @@ test('useTrendOwner 切换账号或退出登录时中止在途请求并释放排
   await flushMicrotasks()
 
   assert.equal(capturedSignal?.aborted, true)
-  slowFees.resolve(makeFees({ accountedMicros: 99999 }))
+  slowJob.resolve(makeJob({ jobId: knownId }))
   slowSchedule.resolve(makeSchedule())
   await Promise.all([p1, p2, p3])
-  assert.equal(owner.fees.value, null)
+  assert.equal(owner.job.value, null)
   assert.equal(owner.scheduleStatus.value, null)
 })

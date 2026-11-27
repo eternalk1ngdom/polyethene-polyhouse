@@ -18,8 +18,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -27,20 +29,25 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeController.class)
 @Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.ProbeController.class})
+@TestPropertySource(properties = "logging.level.com.polyethene.polyhouse.common.exception.GlobalExceptionHandler=DEBUG")
 @ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerTest {
 
@@ -175,6 +182,21 @@ class GlobalExceptionHandlerTest {
                 .doesNotContain(PRIVATE_DETAIL, "private-cause-value");
     }
 
+    @Test
+    void shouldSilentlyIgnoreClientAbortWithDebugLogOnly(CapturedOutput output) throws Exception {
+        mvc.perform(get("/__test/common/client-abort"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist(HttpHeaders.CONTENT_TYPE))
+                .andExpect(content().string(""))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(AsyncRequestNotUsableException.class));
+        assertThat(output.getAll())
+                .contains("DEBUG", "Client disconnected before response completed",
+                        "type=org.springframework.web.context.request.async.AsyncRequestNotUsableException",
+                        "ProbeController.clientAbort(")
+                .doesNotContain("Unhandled server exception", "ERROR", PRIVATE_DETAIL, "private-cause-value");
+    }
+
     /** 仅存在于测试源码，覆盖真实 MVC 分发而不增加生产接口。 */
     @RestController
     @RequestMapping("/__test/common")
@@ -222,6 +244,12 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/unexpected")
         public Result<ValidationProbeVO> unexpected() {
             throw new IllegalStateException(PRIVATE_DETAIL, new RuntimeException("private-cause-value"));
+        }
+
+        /** 模拟客户端主动断连触发的响应流不可用异常，验证静默结束且仅记安全调试日志。 */
+        @GetMapping("/client-abort")
+        public Result<ValidationProbeVO> clientAbort() throws IOException {
+            throw new AsyncRequestNotUsableException(PRIVATE_DETAIL, new IOException("private-cause-value"));
         }
     }
 }

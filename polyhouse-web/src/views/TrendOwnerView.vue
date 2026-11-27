@@ -6,7 +6,6 @@ import { starTide } from '../config/starTide'
 import TrendTaskProgress from '../features/trend/TrendTaskProgress.vue'
 import TrendScheduleCard from '../features/trend/TrendScheduleCard.vue'
 import TrendBriefingControl from '../features/trend/TrendBriefingControl.vue'
-import TrendFeeLedger from '../features/trend/TrendFeeLedger.vue'
 import { useTrendOwner } from '../features/trend/useTrendOwner'
 import { useAccountUiStore } from '../stores/useAccountUiStore'
 import { useUserStore } from '../stores/useUserStore'
@@ -16,19 +15,16 @@ const accountUi = useAccountUiStore()
 const {
   allowed,
   job,
-  fees,
   briefing,
   scheduleStatus,
   intent,
   knownJobId,
   jobBusy,
-  feesBusy,
   briefingBusy,
   scheduleBusy,
   scheduleToggling,
   briefingGenerating,
   jobError,
-  feeError,
   briefingError,
   scheduleError,
   submissionNote,
@@ -38,7 +34,6 @@ const {
   briefingWaiting,
   refreshJob,
   submit,
-  refreshFees,
   refreshBriefing,
   refreshScheduleStatus,
   toggleSchedulePaused,
@@ -111,7 +106,6 @@ const {
           @refresh="refreshBriefing"
           @generate="generateBriefing"
         />
-        <TrendFeeLedger :fees="fees" :busy="feesBusy" :error="feeError" @refresh="refreshFees" />
         <TrendScheduleCard
           :status="scheduleStatus"
           :busy="scheduleBusy"

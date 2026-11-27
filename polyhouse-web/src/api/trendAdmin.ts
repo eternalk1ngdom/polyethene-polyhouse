@@ -80,38 +80,6 @@ export interface TrendJobSubmission {
   job: TrendJob
 }
 
-export interface TrendPendingCharge {
-  requestId: string
-  repositoryId: string
-  chargeKind: 'REPO' | 'BRIEFING'
-  state: 'RESERVED' | 'UNKNOWN'
-  reservedMicros: number
-  createdAt: string
-}
-
-/** 本月 AI Token 级汇总与参考平台实扣估算，便于对照 DeepSeek 控制台核账。 */
-export interface TrendFeeUsage {
-  settledRequests: number
-  promptTokens: number
-  cacheHitTokens: number
-  cacheMissTokens: number
-  completionTokens: number
-  estimatedActualMicros: number
-}
-
-export interface TrendFees {
-  month: string
-  budgetMicros: number
-  accountedMicros: number
-  heldMicros: number
-  remainingMicros: number
-  conservativeMicros: number
-  suspended: boolean
-  pending: TrendPendingCharge[]
-  nextAfter: string | null
-  usage: TrendFeeUsage | null
-}
-
 function publicationSummary(value: unknown): TrendPublicationSummary {
   const row = object(value)
   return {
@@ -153,50 +121,6 @@ function submission(value: unknown): TrendJobSubmission {
   return { accepted: truth(row.accepted), replayed: truth(row.replayed), job: job(row.job) }
 }
 
-function pending(value: unknown): TrendPendingCharge {
-  const row = object(value)
-  const kind =
-    row.chargeKind === undefined || row.chargeKind === null
-      ? 'REPO'
-      : choice(row.chargeKind, ['REPO', 'BRIEFING'])
-  return {
-    requestId: id(row.requestId),
-    repositoryId: text(row.repositoryId),
-    chargeKind: kind,
-    state: choice(row.state, ['RESERVED', 'UNKNOWN']),
-    reservedMicros: whole(row.reservedMicros),
-    createdAt: instant(row.createdAt),
-  }
-}
-
-function feeUsage(value: unknown): TrendFeeUsage {
-  const row = object(value)
-  return {
-    settledRequests: whole(row.settledRequests),
-    promptTokens: whole(row.promptTokens),
-    cacheHitTokens: whole(row.cacheHitTokens),
-    cacheMissTokens: whole(row.cacheMissTokens),
-    completionTokens: whole(row.completionTokens),
-    estimatedActualMicros: whole(row.estimatedActualMicros),
-  }
-}
-
-function fees(value: unknown): TrendFees {
-  const row = object(value)
-  return {
-    month: text(row.month),
-    budgetMicros: whole(row.budgetMicros),
-    accountedMicros: whole(row.accountedMicros),
-    heldMicros: whole(row.heldMicros),
-    remainingMicros: whole(row.remainingMicros),
-    conservativeMicros: whole(row.conservativeMicros),
-    suspended: truth(row.suspended),
-    pending: list(row.pending, 50, pending),
-    nextAfter: optional(row.nextAfter, id),
-    usage: optional(row.usage, feeUsage),
-  }
-}
-
 /** 同一操作使用原编号重试，后台决定是否受理或回送已有任务。 */
 export function submitTrendJob(
   token: string,
@@ -234,15 +158,6 @@ function scheduleStatus(value: unknown): TrendScheduleStatus {
     todayPublished: truth(row.todayPublished),
     recentJobs: list(row.recentJobs, 5, job),
   }
-}
-
-/** 费用面板使用本地账本，读取本身不会支付费用。 */
-export function getTrendFees(
-  token: string,
-  after?: string,
-  signal?: AbortSignal,
-): Promise<TrendFees> {
-  return apiRequest({ url: '/manage/trend/fees', params: { after }, signal }, fees, token)
 }
 
 /** 屋主只读查询每日自动采集开关、今日受理状态与最近 5 条任务记录。 */

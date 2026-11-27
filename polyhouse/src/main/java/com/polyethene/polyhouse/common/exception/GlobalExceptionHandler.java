@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -80,6 +81,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 客户端在响应写出前主动断连（如刷新、切页或中止请求）时连接已不可用，
+     * 仅记安全调试日志并静默结束，避免误打 ERROR 日志或尝试写 500 响应引发二次异常。
+     *
+     * @param exception 响应连接不可用异常
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientAbort(AsyncRequestNotUsableException exception) {
+        LOGGER.debug("Client disconnected before response completed: type={}, location={}",
+                exception.getClass().getName(), findApplicationLocation(exception));
+    }
+
+    /**
      * 保留框架错误的 HTTP 状态和必要响应头；其他异常返回 500，并只记录安全定位信息。
      *
      * @param exception 未预期异常
@@ -110,12 +123,16 @@ public class GlobalExceptionHandler {
     }
 
     private void logSafely(Exception exception) {
+        LOGGER.error("Unhandled server exception: type={}, location={}",
+                exception.getClass().getName(), findApplicationLocation(exception));
+    }
+
+    private String findApplicationLocation(Exception exception) {
         // 异常消息和 cause 可能携带密码、Token 或手机号，只保留应用栈帧的类、方法、文件和行号。
-        String location = Arrays.stream(exception.getStackTrace())
+        return Arrays.stream(exception.getStackTrace())
                 .filter(frame -> frame.getClassName().startsWith(APPLICATION_PACKAGE))
                 .findFirst()
                 .map(StackTraceElement::toString)
                 .orElse("unavailable");
-        LOGGER.error("Unhandled server exception: type={}, location={}", exception.getClass().getName(), location);
     }
 }

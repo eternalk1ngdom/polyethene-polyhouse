@@ -77,7 +77,7 @@ function makeBriefingPayload(patch = {}) {
   }
 }
 
-test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 chargeKind', async (t) => {
+test('trend.ts 严格解码 7 日风口简报与触发结果', async (t) => {
   const calls = []
   const fakeIndexUrl = dataUrl(`
     export class ApiError extends Error {
@@ -162,38 +162,6 @@ test('trend.ts 严格解码 7 日风口简报、触发结果与合并待核对 c
   assert.equal(genCall.config.method, 'POST')
   assert.equal(genCall.config.timeout, 65000)
   assert.equal(genCall.token, 'owner-token')
-
-  // 费用面板兼容单仓缺省 chargeKind 与简报 BRIEFING 类型。
-  globalThis.__briefingResp = {
-    month: '2026-11',
-    budgetMicros: 10_000_000,
-    accountedMicros: 5000,
-    heldMicros: 3000,
-    remainingMicros: 9_992_000,
-    conservativeMicros: 0,
-    suspended: false,
-    pending: [
-      {
-        requestId: '11111111-2222-4333-8444-555555555555',
-        repositoryId: '101',
-        state: 'UNKNOWN',
-        reservedMicros: 1500,
-        createdAt: '2026-11-23T02:00:00Z',
-      },
-      {
-        requestId: '22222222-2222-4333-8444-555555555555',
-        repositoryId: 'briefing:2026-11-23',
-        chargeKind: 'BRIEFING',
-        state: 'RESERVED',
-        reservedMicros: 1500,
-        createdAt: '2026-11-23T02:05:00Z',
-      },
-    ],
-    nextAfter: null,
-  }
-  const fees = await trendMod.getTrendFees('owner-token')
-  assert.equal(fees.pending[0].chargeKind, 'REPO')
-  assert.equal(fees.pending[1].chargeKind, 'BRIEFING')
 })
 
 test('TrendWindowBriefing.vue 在 ABSENT 时零占位渲染，在 READY 时渲染导读、证据链接与 stale 提示', async (t) => {
