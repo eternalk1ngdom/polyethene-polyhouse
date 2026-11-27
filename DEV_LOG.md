@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **首轮已收口、待新窗口精修（dev.26）**：[归档日历选择器](docs/plans/reusable-archive-date-picker.md)（分支 `feat/reusable-archive-date-picker` `04168b9`，B1～B3 已验；新窗口聚焦年月切换层级重构后再合 `dev`）。
+- **已收口待合 `dev`（dev.26）**：[归档日历选择器](docs/plans/reusable-archive-date-picker.md)（分支 `feat/reusable-archive-date-picker`，B1～B4 方案 A1 重构与 8080/5 视口巡检已验完，待审批合 `dev`）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

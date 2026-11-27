@@ -349,6 +349,7 @@ watch(
             :highlight-range="windowHighlightRange"
             aria-label="日报日期"
             unit-label="期有日报"
+            empty-month-text="本月暂无日报"
             @update:model-value="selectDate"
             @month-change="loadMonth"
             @retry-month="(ym) => loadMonth(ym, true)"

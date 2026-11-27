@@ -6,8 +6,8 @@
  * 核心能力：
  * 1. 三段式复合导航条（[ ‹ ] [ 日历图标 日期 · 最新 ▾ ] [ › ]），高频翻期免弹层一步直达；
  * 2. 桌面端轻浮层 Popover + 手机端（≤640px）底部抽屉 Bottom Sheet；
- * 3. 年月双层速选网格（月视图 ↔ 12 月网格 ↔ 12 年网格），跨年跳转最多 2 次点击；
- * 4. 仅允许点选有内容的日期，缺采/无内容日置灰且禁用，杜绝盲点 404；
+ * 3. 头部分离式年/月有界速选（[ 2026 年 ▾ ] [ 11 月 ▾ ]）：单年归档自动退化为静态年份文本，多年仅渲染真实有归档年份；
+ * 4. 仅允许点选有内容的日期，缺采/无内容日置灰且禁用，空月按需提供“回到最新月”兜底；
  * 5. 可选区间高亮带（highlightRange）与快捷跳转胶囊（shortcuts），支持完整键盘方向键与 Esc 焦点还原。
  *
  * 复用示例：
@@ -28,10 +28,12 @@ import { ArrowDown, ArrowLeft, ArrowRight, Calendar, Close } from '@element-plus
 import {
   WEEKDAY_LABELS_MONDAY_FIRST,
   buildMonthGrid,
+  clampYearMonthToBounds,
   extractYearMonth,
   findAdjacentAvailableDate,
   formatYearMonth,
   isMonthOutOfBounds,
+  listArchiveYears,
   parseIsoDate,
   parseYearMonth,
   shiftIsoDate,
@@ -78,6 +80,8 @@ export interface ArchiveDatePickerProps {
   emptyHint?: string
   /** 底栏当月有内容天数的量词描述（默认“期有内容”） */
   unitLabel?: string
+  /** 底栏当月无任何归档内容时的克制提示文案（默认“本月暂无内容”） */
+  emptyMonthText?: string
   /** 可选覆写：是否允许点击“上一期”按钮 */
   canStepPrev?: boolean | null
   /** 可选覆写：是否允许点击“下一期”按钮 */
@@ -96,6 +100,7 @@ const props = withDefaults(defineProps<ArchiveDatePickerProps>(), {
   ariaLabel: '归档日期选择',
   emptyHint: '暂无日期',
   unitLabel: '期有内容',
+  emptyMonthText: '本月暂无内容',
   canStepPrev: null,
   canStepNext: null,
 })
@@ -153,7 +158,6 @@ function resolveInitialMonth(): string {
 }
 
 const viewYearMonth = ref<string>(resolveInitialMonth())
-const yearGridStart = ref<number>(Math.floor((parseYearMonth(viewYearMonth.value)?.year ?? 2026) / 12) * 12)
 const focusedDate = ref<string>(activeDate.value)
 
 /** 当外部选中日期变化且面板未打开时，同步浏览月份到当前日期所在月 */
@@ -167,6 +171,7 @@ watch(activeDate, (nextDate) => {
 })
 
 const viewParts = computed(() => parseYearMonth(viewYearMonth.value) ?? { year: 2026, month: 1 })
+const latestYearMonth = computed(() => extractYearMonth(props.latestDate))
 
 const monthGrid = computed(() =>
   buildMonthGrid(viewYearMonth.value, {
@@ -194,6 +199,58 @@ const canGoNextMonth = computed(() => {
   const latestYm = extractYearMonth(props.latestDate)
   return !latestYm || nextMonthYm.value <= latestYm
 })
+
+const selectableYears = computed(() =>
+  listArchiveYears({
+    earliestDate: props.earliestDate,
+    latestDate: props.latestDate,
+    availableDates: props.availableDates,
+    fallbackYear: viewParts.value.year,
+  }),
+)
+
+/** 仅当归档跨度超过 1 个年份时才激活年份下拉胶囊，单年退化为静态年份文本。 */
+const canPickYear = computed(() => selectableYears.value.length > 1)
+
+watch(canPickYear, (allowed) => {
+  if (!allowed && panelMode.value === 'years') {
+    panelMode.value = 'days'
+  }
+})
+
+const canGoPrevYear = computed(() => {
+  if (!canPickYear.value) return false
+  const minYear = selectableYears.value[0]
+  return minYear !== undefined && viewParts.value.year > minYear
+})
+
+const canGoNextYear = computed(() => {
+  if (!canPickYear.value) return false
+  const maxYear = selectableYears.value[selectableYears.value.length - 1]
+  return maxYear !== undefined && viewParts.value.year < maxYear
+})
+
+const canGoHeaderPrev = computed(() => {
+  if (panelMode.value === 'days') return canGoPrevMonth.value
+  if (panelMode.value === 'months') return canGoPrevYear.value
+  return false
+})
+
+const canGoHeaderNext = computed(() => {
+  if (panelMode.value === 'days') return canGoNextMonth.value
+  if (panelMode.value === 'months') return canGoNextYear.value
+  return false
+})
+
+/** 仅在翻到非最新月份且当月无内容时按需显示“回到最新月”兜底入口，平时隐藏不占地。 */
+const showBackToLatestMonth = computed(
+  () =>
+    !props.loadingMonth &&
+    !props.monthError &&
+    monthGrid.value.availableCount === 0 &&
+    latestYearMonth.value !== null &&
+    viewYearMonth.value !== latestYearMonth.value,
+)
 
 const knownPrevDate = computed(() =>
   activeDate.value ? findAdjacentAvailableDate(activeDate.value, props.availableDates, 'prev') : null,
@@ -234,18 +291,13 @@ const monthPickerItems = computed(() => {
 })
 
 const yearPickerItems = computed(() => {
-  const earliestYear = parseIsoDate(props.earliestDate)?.year ?? null
-  const latestYear = parseIsoDate(props.latestDate)?.year ?? null
-  return Array.from({ length: 12 }, (_, idx) => {
-    const year = yearGridStart.value + idx
-    const disabled =
-      (earliestYear !== null && year < earliestYear) || (latestYear !== null && year > latestYear)
-    return {
-      year,
-      current: year === viewParts.value.year,
-      disabled,
-    }
-  })
+  const activeYear = parseIsoDate(activeDate.value)?.year ?? null
+  return selectableYears.value.map((year) => ({
+    year,
+    label: `${year} 年`,
+    current: year === viewParts.value.year,
+    hasActive: year === activeYear,
+  }))
 })
 
 function setViewMonth(targetYm: string) {
@@ -314,31 +366,41 @@ function selectShortcut(shortcut: ArchiveDateShortcut) {
   closePanel(true)
 }
 
-function shiftCurrentMonth(delta: number) {
+function shiftHeader(delta: number) {
   if (panelMode.value === 'days') {
     if (delta < 0 && !canGoPrevMonth.value) return
     if (delta > 0 && !canGoNextMonth.value) return
     const next = shiftMonth(viewYearMonth.value, delta)
     if (next) setViewMonth(next)
   } else if (panelMode.value === 'months') {
+    if (delta < 0 && !canGoPrevYear.value) return
+    if (delta > 0 && !canGoNextYear.value) return
     const targetYear = viewParts.value.year + delta
-    if (targetYear < 1000 || targetYear > 9999) return
-    viewYearMonth.value = formatYearMonth(targetYear, viewParts.value.month)
-  } else {
-    const nextStart = yearGridStart.value + delta * 12
-    if (nextStart < 1000 || nextStart > 9988) return
-    yearGridStart.value = nextStart
+    const clamped = clampYearMonthToBounds(
+      formatYearMonth(targetYear, viewParts.value.month),
+      props.earliestDate,
+      props.latestDate,
+    )
+    if (clamped) viewYearMonth.value = clamped
   }
 }
 
-function cycleHeaderMode() {
-  if (panelMode.value === 'days') {
-    panelMode.value = 'months'
-  } else if (panelMode.value === 'months') {
-    yearGridStart.value = Math.floor(viewParts.value.year / 12) * 12
-    panelMode.value = 'years'
-  } else {
+function toggleYearPicker() {
+  if (!canPickYear.value) return
+  if (panelMode.value === 'years') {
     panelMode.value = 'days'
+    void nextTick(() => focusActiveDayCell())
+  } else {
+    panelMode.value = 'years'
+  }
+}
+
+function toggleMonthPicker() {
+  if (panelMode.value === 'months') {
+    panelMode.value = 'days'
+    void nextTick(() => focusActiveDayCell())
+  } else {
+    panelMode.value = 'months'
   }
 }
 
@@ -349,10 +411,22 @@ function pickMonth(yearMonth: string, disabled: boolean) {
   void nextTick(() => focusActiveDayCell())
 }
 
-function pickYear(year: number, disabled: boolean) {
-  if (disabled) return
-  viewYearMonth.value = formatYearMonth(year, viewParts.value.month)
-  panelMode.value = 'months'
+function pickYear(year: number) {
+  const clamped = clampYearMonthToBounds(
+    formatYearMonth(year, viewParts.value.month),
+    props.earliestDate,
+    props.latestDate,
+  )
+  panelMode.value = 'days'
+  if (clamped) setViewMonth(clamped)
+  void nextTick(() => focusActiveDayCell())
+}
+
+function jumpToLatestMonth() {
+  if (!latestYearMonth.value) return
+  panelMode.value = 'days'
+  setViewMonth(latestYearMonth.value)
+  void nextTick(() => focusActiveDayCell())
 }
 
 function focusDayByIso(isoDate: string) {
@@ -387,6 +461,7 @@ function onDayKeydown(event: KeyboardEvent, cell: CalendarDayCell) {
     if (!nextIso) return
     const nextYm = extractYearMonth(nextIso)
     if (nextYm && nextYm !== viewYearMonth.value) {
+      if (isMonthOutOfBounds(nextYm, props.earliestDate, props.latestDate)) return
       setViewMonth(nextYm)
     }
     focusDayByIso(nextIso)
@@ -394,11 +469,11 @@ function onDayKeydown(event: KeyboardEvent, cell: CalendarDayCell) {
   }
   if (event.key === 'PageUp') {
     event.preventDefault()
-    shiftCurrentMonth(-1)
+    shiftHeader(-1)
     void nextTick(() => focusActiveDayCell())
   } else if (event.key === 'PageDown') {
     event.preventDefault()
-    shiftCurrentMonth(1)
+    shiftHeader(1)
     void nextTick(() => focusActiveDayCell())
   }
 }
@@ -407,9 +482,7 @@ function onPanelKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
-    if (panelMode.value === 'years') {
-      panelMode.value = 'months'
-    } else if (panelMode.value === 'months') {
+    if (panelMode.value !== 'days') {
       panelMode.value = 'days'
       void nextTick(() => focusActiveDayCell())
     } else {
@@ -520,37 +593,67 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="adp-nav-btn"
-          :aria-label="panelMode === 'days' ? '上个月' : panelMode === 'months' ? '上一年' : '上一组年份'"
-          :disabled="panelMode === 'days' && !canGoPrevMonth"
-          @click="shiftCurrentMonth(-1)"
+          :aria-label="panelMode === 'months' ? '上一年' : '上个月'"
+          :disabled="!canGoHeaderPrev"
+          @click="shiftHeader(-1)"
         >
           <ElIcon aria-hidden="true"><ArrowLeft /></ElIcon>
         </button>
 
-        <button
-          type="button"
-          class="adp-title-btn"
-          :aria-label="
-            panelMode === 'days'
-              ? `切换月份选择，当前 ${viewParts.year} 年 ${viewParts.month} 月`
-              : panelMode === 'months'
-                ? `切换年份选择，当前 ${viewParts.year} 年`
-                : '返回月历视图'
-          "
-          @click="cycleHeaderMode"
-        >
-          <span v-if="panelMode === 'days'">{{ viewParts.year }} 年 {{ viewParts.month }} 月</span>
-          <span v-else-if="panelMode === 'months'">{{ viewParts.year }} 年</span>
-          <span v-else>{{ yearGridStart }} – {{ yearGridStart + 11 }}</span>
-          <ElIcon class="adp-title-caret" aria-hidden="true"><ArrowDown /></ElIcon>
-        </button>
+        <div class="adp-header-controls">
+          <button
+            v-if="canPickYear"
+            type="button"
+            class="adp-header-pill adp-year-pill"
+            :class="{ 'is-active': panelMode === 'years' }"
+            :aria-expanded="panelMode === 'years'"
+            :aria-label="
+              panelMode === 'years'
+                ? `收起年份选择，返回月历，当前 ${viewParts.year} 年`
+                : `选择年份，当前 ${viewParts.year} 年`
+            "
+            @click="toggleYearPicker"
+          >
+            <span>{{ viewParts.year }} 年</span>
+            <ElIcon
+              class="adp-title-caret"
+              :class="{ rotated: panelMode === 'years' }"
+              aria-hidden="true"
+            >
+              <ArrowDown />
+            </ElIcon>
+          </button>
+          <span v-else class="adp-year-static">{{ viewParts.year }} 年</span>
+
+          <button
+            type="button"
+            class="adp-header-pill adp-month-pill"
+            :class="{ 'is-active': panelMode === 'months' }"
+            :aria-expanded="panelMode === 'months'"
+            :aria-label="
+              panelMode === 'months'
+                ? `收起月份选择，返回月历，当前 ${viewParts.month} 月`
+                : `选择月份，当前 ${viewParts.month} 月`
+            "
+            @click="toggleMonthPicker"
+          >
+            <span>{{ viewParts.month }} 月</span>
+            <ElIcon
+              class="adp-title-caret"
+              :class="{ rotated: panelMode === 'months' }"
+              aria-hidden="true"
+            >
+              <ArrowDown />
+            </ElIcon>
+          </button>
+        </div>
 
         <button
           type="button"
           class="adp-nav-btn"
-          :aria-label="panelMode === 'days' ? '下个月' : panelMode === 'months' ? '下一年' : '下一组年份'"
-          :disabled="panelMode === 'days' && !canGoNextMonth"
-          @click="shiftCurrentMonth(1)"
+          :aria-label="panelMode === 'months' ? '下一年' : '下个月'"
+          :disabled="!canGoHeaderNext"
+          @click="shiftHeader(1)"
         >
           <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
         </button>
@@ -616,17 +719,22 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-else class="adp-pick-grid" role="grid" aria-label="选择年份">
+      <div
+        v-else
+        class="adp-pick-grid adp-year-grid"
+        :class="{ 'is-compact-years': yearPickerItems.length <= 2 }"
+        role="grid"
+        aria-label="选择年份"
+      >
         <button
           v-for="item in yearPickerItems"
           :key="item.year"
           type="button"
           class="adp-pick-cell"
-          :class="{ current: item.current }"
-          :disabled="item.disabled"
-          @click="pickYear(item.year, item.disabled)"
+          :class="{ current: item.current, active: item.hasActive }"
+          @click="pickYear(item.year)"
         >
-          {{ item.year }}
+          {{ item.label }}
         </button>
       </div>
 
@@ -638,6 +746,17 @@ onBeforeUnmount(() => {
           <span class="adp-status-error">{{ monthError }}</span>
           <button type="button" class="adp-retry-btn" @click="emit('retryMonth', viewYearMonth)">
             重试
+          </button>
+        </template>
+        <template v-else-if="monthGrid.availableCount === 0">
+          <span class="adp-status-text">{{ emptyMonthText }}</span>
+          <button
+            v-if="showBackToLatestMonth"
+            type="button"
+            class="adp-latest-jump-btn"
+            @click="jumpToLatestMonth"
+          >
+            回到最新月
           </button>
         </template>
         <template v-else>
@@ -747,12 +866,13 @@ onBeforeUnmount(() => {
 .adp-step-btn:focus-visible,
 .adp-main-btn:focus-visible,
 .adp-nav-btn:focus-visible,
-.adp-title-btn:focus-visible,
+.adp-header-pill:focus-visible,
 .adp-close-btn:focus-visible,
 .adp-shortcut-btn:focus-visible,
 .adp-day-cell:focus-visible,
 .adp-pick-cell:focus-visible,
-.adp-retry-btn:focus-visible {
+.adp-retry-btn:focus-visible,
+.adp-latest-jump-btn:focus-visible {
   outline: none;
   border-color: var(--adp-border-strong);
   box-shadow: inset 0 0 0 1px var(--adp-border-strong);
@@ -891,35 +1011,71 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-.adp-title-btn {
+.adp-header-controls {
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  min-width: 0;
+}
+
+.adp-year-static {
+  display: inline-flex;
+  align-items: center;
   min-height: 36px;
-  padding: 0 10px;
+  padding: 0 4px;
+  color: var(--adp-ink);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.adp-header-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 9px;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
   color: var(--adp-ink);
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 
-.adp-title-btn:hover {
+.adp-header-pill:hover {
   background: var(--adp-surface-muted);
 }
 
-.adp-title-btn:active {
+.adp-header-pill:active {
   border-color: var(--adp-border-strong);
+}
+
+.adp-header-pill.is-active {
+  background: var(--adp-accent-soft);
+  border-color: var(--adp-accent);
+  color: var(--adp-accent);
 }
 
 .adp-title-caret {
   font-size: 12px;
   color: var(--adp-ink-muted);
+  transition: transform 0.16s ease, color 0.14s ease;
+}
+
+.adp-header-pill.is-active .adp-title-caret {
+  color: var(--adp-accent);
+}
+
+.adp-title-caret.rotated {
+  transform: rotate(180deg);
 }
 
 .adp-weekdays {
@@ -1033,6 +1189,15 @@ onBeforeUnmount(() => {
   padding: 6px 0;
 }
 
+.adp-year-grid {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.adp-year-grid.is-compact-years {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .adp-pick-cell {
   min-height: 44px;
   border: 1px solid var(--adp-border);
@@ -1107,6 +1272,29 @@ onBeforeUnmount(() => {
   background: var(--adp-surface-hover);
 }
 
+.adp-latest-jump-btn {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--adp-accent);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.adp-latest-jump-btn:hover {
+  background: var(--adp-accent-soft);
+}
+
+.adp-latest-jump-btn:active {
+  border-color: var(--adp-border-strong);
+}
+
 @media (max-width: 640px) {
   .adp-backdrop {
     display: block;
@@ -1153,8 +1341,18 @@ onBeforeUnmount(() => {
     height: 44px;
   }
 
-  .adp-title-btn {
+  .adp-year-static,
+  .adp-header-pill {
     min-height: 44px;
+  }
+
+  .adp-header-pill {
+    padding: 0 10px;
+  }
+
+  .adp-latest-jump-btn {
+    min-height: 36px;
+    padding: 0 10px;
   }
 
   .adp-shortcut-btn {
@@ -1171,8 +1369,11 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .adp-step-btn,
   .adp-main-btn,
+  .adp-header-pill,
+  .adp-title-caret,
   .adp-caret-icon,
-  .adp-day-cell {
+  .adp-day-cell,
+  .adp-latest-jump-btn {
     transition: none;
   }
 }

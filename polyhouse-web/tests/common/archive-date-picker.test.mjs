@@ -234,69 +234,197 @@ test('左右跳期支持已知邻期直接跳与跨月未加载交由调用方�
   })
 })
 
-test('年月双层速选网格、快捷跳转、键盘方向键跨月与 Esc 分层关闭', async (t) => {
-  const updated = []
-  const monthChanges = []
-  let restored = false
+test('方案 A1 年月分离胶囊：单年静态退化、多年真实年份与钳位、Esc 退回及快捷跳转', async (t) => {
+  await t.test('单年归档时年份退化为静态文本，仅月份胶囊可切换展开与收起', async () => {
+    const { root } = mountHeadless(t, ArchiveDatePicker, {
+      modelValue: '2026-11-27',
+      latestDate: '2026-11-27',
+      earliestDate: '2026-11-18',
+      availableDates: ['2026-11-18', '2026-11-27'],
+    })
 
-  const { root } = mountHeadless(t, ArchiveDatePicker, {
-    modelValue: '2026-11-01',
-    latestDate: '2026-11-27',
-    earliestDate: '2025-05-01',
-    availableDates: ['2026-11-01', '2026-11-27', '2025-06-15'],
-    shortcuts: [
-      { label: '最新一期', value: '' },
-      { label: '半年前', value: '2025-06-15' },
-    ],
-    'onUpdate:modelValue': (val) => updated.push(val),
-    onMonthChange: (ym) => monthChanges.push(ym),
+    findButtonByLabel(root, '归档日期选择：').props.onClick()
+    await nextTick()
+
+    // 单年归档不渲染年份下拉按钮，仅以静态文本展示 2026 年
+    assert.equal(findButtonByLabel(root, '选择年份'), undefined)
+    assert.ok(collectText(root).includes('2026 年'))
+
+    // 点击月份胶囊展开 12 月网格，按钮进入激活态且上下年箭头均禁用
+    const monthPill = findButtonByLabel(root, '选择月份')
+    assert.ok(monthPill)
+    monthPill.props.onClick()
+    await nextTick()
+
+    const expandedMonthPill = findButtonByLabel(root, '收起月份选择')
+    assert.ok(expandedMonthPill)
+    assert.equal(hasClass(expandedMonthPill, 'is-active'), true)
+    assert.equal(expandedMonthPill.props['aria-expanded'], true)
+    assert.equal(findButtonByLabel(root, '上一年').props.disabled, true)
+    assert.equal(findButtonByLabel(root, '下一年').props.disabled, true)
+
+    // 10 月与 12 月越界禁用，11 月可用（限定在月份网格内查找，避免命中头部月份胶囊）
+    const monthGrid = findAll(root, (n) => n.props?.role === 'grid' && n.props['aria-label'] === '选择月份')[0]
+    assert.ok(monthGrid)
+    const octBtn = findAll(monthGrid, (n) => n.tag === 'button' && collectText(n).trim() === '10 月')[0]
+    const novBtn = findAll(monthGrid, (n) => n.tag === 'button' && collectText(n).trim() === '11 月')[0]
+    const decBtn = findAll(monthGrid, (n) => n.tag === 'button' && collectText(n).trim() === '12 月')[0]
+    assert.equal(octBtn.props.disabled, true)
+    assert.equal(novBtn.props.disabled, false)
+    assert.equal(decBtn.props.disabled, true)
+
+    // 再次点击高亮月份胶囊直接收起回到月历视图
+    expandedMonthPill.props.onClick()
+    await nextTick()
+    assert.equal(
+      findAll(root, (node) => node.type === 'el' && node.tag === 'button' && node.props['data-date']).length,
+      42,
+    )
   })
 
-  const mainBtn = findButtonByLabel(root, '归档日期选择：')
-  mainBtn.focus = () => {
-    restored = true
-  }
-  mainBtn.props.onClick()
-  await nextTick()
+  await t.test('多年归档分离双胶囊仅渲染真实年份、跨年钳位、方向键跨月、Esc 退回与快捷跳转', async () => {
+    const updated = []
+    const monthChanges = []
+    let restored = false
 
-  // 1. 方向键 ArrowLeft 从 2026-11-01 跨月回退到 2026-10-31，自动触发 monthChange('2026-10')
-  const nov1Btn = findDayButton(root, '2026-11-01')
-  nov1Btn.props.onKeydown({ key: 'ArrowLeft', preventDefault() {} })
-  await nextTick()
-  assert.ok(monthChanges.includes('2026-10'))
+    const { root } = mountHeadless(t, ArchiveDatePicker, {
+      modelValue: '2026-11-01',
+      latestDate: '2026-11-27',
+      earliestDate: '2025-05-01',
+      availableDates: ['2026-11-01', '2026-11-27', '2025-06-15'],
+      shortcuts: [
+        { label: '最新一期', value: '' },
+        { label: '半年前', value: '2025-06-15' },
+      ],
+      'onUpdate:modelValue': (val) => updated.push(val),
+      onMonthChange: (ym) => monthChanges.push(ym),
+    })
 
-  // 2. 点击标题进入 12 个月网格，再点进入年份网格；验证越界年份与月份禁用
-  const titleBtn = findButtonByLabel(root, '切换月份选择')
-  titleBtn.props.onClick()
-  await nextTick()
-  const month12Btn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '12 月')[0]
-  assert.equal(month12Btn.props.disabled, true) // 2026-12 晚于 latestDate 2026-11-27
+    const mainBtn = findButtonByLabel(root, '归档日期选择：')
+    mainBtn.focus = () => {
+      restored = true
+    }
+    mainBtn.props.onClick()
+    await nextTick()
 
-  findButtonByLabel(root, '切换年份选择').props.onClick()
-  await nextTick()
-  const year2024Btn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '2024')[0]
-  assert.equal(year2024Btn.props.disabled, true) // 早于 earliestDate 2025-05-01
+    // 1. 方向键 ArrowLeft 从 2026-11-01 跨月回退到 2026-10-31，自动触发 monthChange('2026-10')
+    const nov1Btn = findDayButton(root, '2026-11-01')
+    nov1Btn.props.onKeydown({ key: 'ArrowLeft', preventDefault() {} })
+    await nextTick()
+    assert.ok(monthChanges.includes('2026-10'))
 
-  // 3. Esc 分层退回：years -> months -> days -> 关闭并还原焦点
-  const panel = findAll(root, (n) => n.props?.role === 'dialog')[0]
-  const esc = { key: 'Escape', preventDefault() {}, stopPropagation() {} }
-  panel.props.onKeydown(esc)
-  await nextTick()
-  assert.ok(findButtonByLabel(root, '切换年份选择'))
-  panel.props.onKeydown(esc)
-  await nextTick()
-  assert.ok(findButtonByLabel(root, '切换月份选择'))
-  panel.props.onKeydown(esc)
-  await nextTick()
-  assert.equal(findAll(root, (n) => n.props?.role === 'dialog').length, 0)
-  assert.equal(restored, true)
+    // 2. 点击月份胶囊选到 2026-02，验证 2026-12 禁用
+    findButtonByLabel(root, '选择月份').props.onClick()
+    await nextTick()
+    const month12Btn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '12 月')[0]
+    assert.equal(month12Btn.props.disabled, true)
+    const month2Btn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '2 月')[0]
+    month2Btn.props.onClick()
+    await nextTick()
+    assert.ok(monthChanges.includes('2026-02'))
 
-  // 4. 快捷跳转胶囊点击直接选中并关闭面板
-  mainBtn.props.onClick()
-  await nextTick()
-  const shortcutBtn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '最新一期')[0]
-  shortcutBtn.props.onClick()
-  await nextTick()
-  assert.deepEqual(updated, [''])
-  assert.equal(findAll(root, (n) => n.props?.role === 'dialog').length, 0)
+    // 3. 点击年份胶囊：仅渲染真实归档年份（2025 年、2026 年），不凑 12 年空网格
+    const yearPill = findButtonByLabel(root, '选择年份')
+    assert.ok(yearPill)
+    yearPill.props.onClick()
+    await nextTick()
+
+    const expandedYearPill = findButtonByLabel(root, '收起年份选择')
+    assert.equal(hasClass(expandedYearPill, 'is-active'), true)
+    const yearGrid = findAll(root, (n) => n.props?.role === 'grid' && n.props['aria-label'] === '选择年份')[0]
+    const yearBtns = findAll(yearGrid, (n) => n.tag === 'button')
+    assert.deepEqual(
+      yearBtns.map((b) => collectText(b).trim()),
+      ['2025 年', '2026 年'],
+    )
+
+    // 从 2026-02 切换至 2025 年：2025-02 早于 earliestDate 2025-05-01，自动钳位到 2025-05 并直达月历
+    yearBtns[0].props.onClick()
+    await nextTick()
+    assert.ok(monthChanges.includes('2025-05'))
+    assert.equal(
+      findAll(root, (node) => node.type === 'el' && node.tag === 'button' && node.props['data-date']).length,
+      42,
+    )
+
+    // 4. Esc 最多两步退回：打开月份网格 -> 1 次 Esc 回月历 -> 2 次 Esc 关闭并还原焦点
+    findButtonByLabel(root, '选择月份').props.onClick()
+    await nextTick()
+    const panel = findAll(root, (n) => n.props?.role === 'dialog')[0]
+    const esc = { key: 'Escape', preventDefault() {}, stopPropagation() {} }
+    panel.props.onKeydown(esc)
+    await nextTick()
+    assert.ok(findButtonByLabel(root, '选择月份'))
+    assert.equal(findButtonByLabel(root, '收起月份选择'), undefined)
+    panel.props.onKeydown(esc)
+    await nextTick()
+    assert.equal(findAll(root, (n) => n.props?.role === 'dialog').length, 0)
+    assert.equal(restored, true)
+
+    // 5. 快捷跳转胶囊点击直接选中并关闭面板
+    mainBtn.props.onClick()
+    await nextTick()
+    const shortcutBtn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '最新一期')[0]
+    shortcutBtn.props.onClick()
+    await nextTick()
+    assert.deepEqual(updated, [''])
+    assert.equal(findAll(root, (n) => n.props?.role === 'dialog').length, 0)
+  })
+})
+
+test('空月底栏文案降噪与迷路兜底“回到最新月”按需显隐', async (t) => {
+  await t.test('停留在最新月但当月无内容时仅显示克制文案，不出现缺采计数或回到最新月按钮', async () => {
+    const { root } = mountHeadless(t, ArchiveDatePicker, {
+      modelValue: '2026-11-27',
+      latestDate: '2026-11-27',
+      earliestDate: '2026-10-01',
+      availableDates: [],
+      unitLabel: '期有日报',
+      emptyMonthText: '本月暂无日报',
+    })
+
+    findButtonByLabel(root, '归档日期选择：').props.onClick()
+    await nextTick()
+
+    const text = collectText(root)
+    assert.ok(text.includes('本月暂无日报'))
+    assert.equal(text.includes('缺采'), false)
+    assert.equal(text.includes('回到最新月'), false)
+  })
+
+  await t.test('翻到非最新空月时显示“本月暂无日报”与“回到最新月”，点击后切回最新月并隐藏按钮', async () => {
+    const monthChanges = []
+    const { root } = mountHeadless(t, ArchiveDatePicker, {
+      modelValue: '2026-11-27',
+      latestDate: '2026-11-27',
+      earliestDate: '2026-10-01',
+      availableDates: ['2026-11-27', '2026-11-26'],
+      unitLabel: '期有日报',
+      emptyMonthText: '本月暂无日报',
+      onMonthChange: (ym) => monthChanges.push(ym),
+    })
+
+    findButtonByLabel(root, '归档日期选择：').props.onClick()
+    await nextTick()
+
+    // 在有内容的最新月，不显示回到最新月按钮
+    assert.equal(collectText(root).includes('回到最新月'), false)
+
+    // 翻到上个月 2026-10（无任何归档日）
+    findButtonByLabel(root, '上个月').props.onClick()
+    await nextTick()
+
+    const emptyMonthViewText = collectText(root)
+    assert.ok(emptyMonthViewText.includes('本月暂无日报'))
+    assert.equal(emptyMonthViewText.includes('缺采'), false)
+    const jumpBtn = findAll(root, (n) => n.tag === 'button' && collectText(n).trim() === '回到最新月')[0]
+    assert.ok(jumpBtn)
+
+    // 点击“回到最新月”，切回 2026-11 并重新隐藏按钮
+    jumpBtn.props.onClick()
+    await nextTick()
+    assert.equal(monthChanges[monthChanges.length - 1], '2026-11')
+    assert.equal(collectText(root).includes('回到最新月'), false)
+    assert.ok(collectText(root).includes('本月 2 期有日报'))
+  })
 })

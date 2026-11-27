@@ -154,3 +154,50 @@ test('相邻有值日期查找自动跳过缺采日并正确处理边界与月�
     assert.equal(calendar.isMonthOutOfBounds('2026-12', '2026-10-31', '2026-11-27'), true)
   })
 })
+
+test('有界年份推导与跨年年月钳位不凑空年份且防越界', async (t) => {
+  const yearCases = [
+    {
+      name: '同年双边界仅返回单年',
+      input: { earliestDate: '2026-11-18', latestDate: '2026-11-27' },
+      expected: [2026],
+    },
+    {
+      name: '跨多年双边界按升序返回真实年份区间',
+      input: { earliestDate: '2024-12-01', latestDate: '2026-11-27' },
+      expected: [2024, 2025, 2026],
+    },
+    {
+      name: '缺失 earliestDate 时结合 availableDates 与 latestDate 推导跨年',
+      input: { latestDate: '2026-11-27', availableDates: ['2025-12-30', '2026-11-27'] },
+      expected: [2025, 2026],
+    },
+    {
+      name: '全部线索缺失时回退 fallbackYear',
+      input: { availableDates: [], fallbackYear: 2026 },
+      expected: [2026],
+    },
+    {
+      name: '边界倒置时容错按最小到最大年份覆盖',
+      input: { earliestDate: '2026-05-01', latestDate: '2025-05-01' },
+      expected: [2025, 2026],
+    },
+  ]
+  for (const item of yearCases) {
+    await t.test(item.name, () => {
+      assert.deepEqual(calendar.listArchiveYears(item.input), item.expected)
+    })
+  }
+
+  const clampCases = [
+    { name: '合法范围内原样返回', ym: '2025-08', earliest: '2025-05-01', latest: '2026-11-27', expected: '2025-08' },
+    { name: '早于最早月时钳位到最早月', ym: '2025-02', earliest: '2025-05-01', latest: '2026-11-27', expected: '2025-05' },
+    { name: '晚于最新月时钳位到最新月', ym: '2026-12', earliest: '2025-05-01', latest: '2026-11-27', expected: '2026-11' },
+    { name: '非法年月返回 null', ym: '2026-13', earliest: '2025-05-01', latest: '2026-11-27', expected: null },
+  ]
+  for (const item of clampCases) {
+    await t.test(item.name, () => {
+      assert.equal(calendar.clampYearMonthToBounds(item.ym, item.earliest, item.latest), item.expected)
+    })
+  }
+})

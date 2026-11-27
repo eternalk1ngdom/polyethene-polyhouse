@@ -361,3 +361,80 @@ export function isMonthOutOfBounds(
   if (latestYm && normalized > latestYm) return true
   return false
 }
+
+/** 推导归档可选年份列表的参数 */
+export interface ArchiveYearsOptions {
+  /** 全局最早一期日期（YYYY-MM-DD） */
+  earliestDate?: string | null
+  /** 全局最新一期日期（YYYY-MM-DD） */
+  latestDate?: string | null
+  /** 已知有归档内容的日期集合或列表 */
+  availableDates?: ReadonlySet<string> | readonly string[]
+  /** 当边界与可用日期均缺失时的兜底年份 */
+  fallbackYear?: number
+}
+
+/**
+ * 推导归档真实跨度内的可选年份列表（升序、无重复、绝不凑 12 年空网格）。
+ * - 双边界（earliestDate 与 latestDate）均有效时，直接覆盖 [earliestYear..latestYear]；
+ * - 缺少任一边界时，依据已知边界与 availableDates 覆盖的最小～最大年份推导；
+ * - 若所有线索均为空且 fallbackYear 合法，则返回单元素 [fallbackYear]。
+ */
+export function listArchiveYears(options: ArchiveYearsOptions = {}): number[] {
+  const earliestYear = parseIsoDate(options.earliestDate)?.year ?? null
+  const latestYear = parseIsoDate(options.latestDate)?.year ?? null
+  if (earliestYear !== null && latestYear !== null && earliestYear <= latestYear) {
+    return Array.from({ length: latestYear - earliestYear + 1 }, (_, idx) => earliestYear + idx)
+  }
+
+  let minYear: number | null = earliestYear
+  let maxYear: number | null = latestYear
+  const includeYear = (year: number) => {
+    if (minYear === null || year < minYear) minYear = year
+    if (maxYear === null || year > maxYear) maxYear = year
+  }
+
+  if (earliestYear !== null) includeYear(earliestYear)
+  if (latestYear !== null) includeYear(latestYear)
+  if (options.availableDates) {
+    for (const raw of options.availableDates) {
+      const parsed = parseIsoDate(raw)
+      if (parsed) includeYear(parsed.year)
+    }
+  }
+
+  if (minYear !== null && maxYear !== null && minYear <= maxYear) {
+    return Array.from({ length: maxYear - minYear + 1 }, (_, idx) => minYear! + idx)
+  }
+  if (
+    typeof options.fallbackYear === 'number' &&
+    Number.isInteger(options.fallbackYear) &&
+    options.fallbackYear >= 1000 &&
+    options.fallbackYear <= 9999
+  ) {
+    return [options.fallbackYear]
+  }
+  return []
+}
+
+/**
+ * 将目标年月钳位到归档边界 [earliestDate 所在月, latestDate 所在月] 内。
+ * 用于跨年选择后避免落入早于建档月或晚于最新月的越界空月；入参非法返回 null。
+ */
+export function clampYearMonthToBounds(
+  yearMonth: string,
+  earliestDate?: string | null,
+  latestDate?: string | null,
+): string | null {
+  const ym = parseYearMonth(yearMonth)
+  if (!ym) return null
+  const normalized = formatYearMonth(ym.year, ym.month)
+  const earliestYm = extractYearMonth(earliestDate)
+  const latestYm = extractYearMonth(latestDate)
+  if (earliestYm && latestYm && earliestYm > latestYm) {
+    return normalized
+  }
+  if (earliestYm && normalized < earliestYm) return earliestYm
+  if (latestYm && normalized > latestYm) return latestYm
+  return normalized
+}
