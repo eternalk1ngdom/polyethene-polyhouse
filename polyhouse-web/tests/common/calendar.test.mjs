@@ -99,6 +99,27 @@ test('42 格月历按周一首列对齐、标出区间高亮带且不将未来�
     assert.equal(endCell.isLatest, true)
   })
 
+  await t.test('首月建档之前（早于 earliestDate）与未来自然日均不计入缺采', () => {
+    const grid = calendar.buildMonthGrid('2026-11', {
+      earliestDate: '2026-11-18',
+      latestDate: '2026-11-27',
+      availableDates: [
+        '2026-11-18',
+        '2026-11-19',
+        '2026-11-21',
+        '2026-11-22',
+        '2026-11-23',
+        '2026-11-24',
+        '2026-11-25',
+        '2026-11-26',
+        '2026-11-27',
+      ],
+    })
+    // 11-18～11-27 共 10 天，仅 11-20 真正缺采 1 天；11-01～11-17 建档前与 11-28～11-30 未来均不计入缺采。
+    assert.equal(grid.availableCount, 9)
+    assert.equal(grid.missingCount, 1)
+  })
+
   await t.test('闰年 2024-02 月包含 29 日且无 latestDate 时按整月计缺采', () => {
     const grid = calendar.buildMonthGrid('2024-02', {
       availableDates: new Set(['2024-02-29']),

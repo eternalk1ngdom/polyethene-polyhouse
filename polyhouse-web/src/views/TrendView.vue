@@ -5,9 +5,9 @@ import { ElButton, ElIcon } from 'element-plus'
 import { Back, TopRight } from '@element-plus/icons-vue'
 import tideAtlas from '../assets/startide-tide-atlas.webp'
 import { isTrendDate } from '../api/trend'
-import ArchiveDatePicker, { type ArchiveDateShortcut } from '../components/ArchiveDatePicker.vue'
+import ArchiveDatePicker from '../components/ArchiveDatePicker.vue'
 import { starTide } from '../config/starTide'
-import { buildTrailingDateRange, shiftIsoDate } from '../core/calendar'
+import { buildTrailingDateRange } from '../core/calendar'
 import { useUserStore } from '../stores/useUserStore'
 import {
   categoryCounts,
@@ -67,20 +67,6 @@ const availableDates = computed(() =>
 const windowHighlightRange = computed(() => {
   if (!isWindowView.value || !anchorDate.value) return null
   return buildTrailingDateRange(anchorDate.value, 7)
-})
-const dateShortcuts = computed<ArchiveDateShortcut[]>(() => {
-  const list: ArchiveDateShortcut[] = [{ label: '最新一期', value: '' }]
-  const base = effectiveLatestDate.value
-  if (base) {
-    const weekAgo = shiftIsoDate(base, -6)
-    const fallbackWeekAgo = weekAgo
-      ? availableDates.value.find((d) => d <= weekAgo) ?? null
-      : null
-    if (fallbackWeekAgo && fallbackWeekAgo !== base) {
-      list.push({ label: '近 7 日前', value: fallbackWeekAgo })
-    }
-  }
-  return list
 })
 const language = computed(() => (typeof route.query.lang === 'string' ? route.query.lang : ''))
 const category = computed<TrendCategoryFilter | ''>(() =>
@@ -361,7 +347,6 @@ watch(
             :loading-month="loadingMonth"
             :month-error="monthError"
             :highlight-range="windowHighlightRange"
-            :shortcuts="dateShortcuts"
             aria-label="日报日期"
             unit-label="期有日报"
             @update:model-value="selectDate"

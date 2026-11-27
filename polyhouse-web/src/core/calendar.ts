@@ -58,6 +58,8 @@ export interface CalendarDayCell {
 export interface MonthGridOptions {
   /** 当前选中的 ISO 日期 */
   selectedDate?: string | null
+  /** 最早一期的 ISO 日期（用于排除建档之前自然日的缺采统计） */
+  earliestDate?: string | null
   /** 最新一期的 ISO 日期（用于标识最新期及排除未到来日期的缺采统计） */
   latestDate?: string | null
   /** 有归档内容的日期集合或数组 */
@@ -261,6 +263,7 @@ export function buildMonthGrid(yearMonth: string, options: MonthGridOptions = {}
 
   const availableSet = toDateSet(options.availableDates)
   const selected = parseIsoDate(options.selectedDate) ? options.selectedDate! : null
+  const earliest = parseIsoDate(options.earliestDate) ? options.earliestDate! : null
   const latest = parseIsoDate(options.latestDate) ? options.latestDate! : null
   const validRange =
     options.highlightRange &&
@@ -285,8 +288,8 @@ export function buildMonthGrid(yearMonth: string, options: MonthGridOptions = {}
     if (inCurrentMonth) {
       if (available) {
         availableCount += 1
-      } else if (!latest || iso <= latest) {
-        // 晚于最新一期日期的未来自然日不算缺采，避免本月误报大量缺采。
+      } else if ((!earliest || iso >= earliest) && (!latest || iso <= latest)) {
+        // 建档前（早于 earliestDate）与未来（晚于 latestDate）的自然日均不算缺采，避免首月/当月误报大量缺采。
         missingCount += 1
       }
     }

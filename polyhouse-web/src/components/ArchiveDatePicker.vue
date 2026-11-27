@@ -171,6 +171,7 @@ const viewParts = computed(() => parseYearMonth(viewYearMonth.value) ?? { year: 
 const monthGrid = computed(() =>
   buildMonthGrid(viewYearMonth.value, {
     selectedDate: activeDate.value || null,
+    earliestDate: props.earliestDate,
     latestDate: props.latestDate,
     availableDates: props.availableDates,
     highlightRange: props.highlightRange,
