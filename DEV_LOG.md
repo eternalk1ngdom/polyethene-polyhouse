@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **已立项待实施（dev.26）**：[可复用归档日历选择器与星潮日期体验升级](docs/plans/reusable-archive-date-picker.md)（分支 `feat/reusable-archive-date-picker`，新窗口确认交互细节后按 B1～B3 推进）。
+- **已完成待合入（dev.26）**：[可复用归档日历选择器与星潮日期体验升级](docs/plans/reusable-archive-date-picker.md)（分支 `feat/reusable-archive-date-picker`，B1～B3 全部验收通过，待确认合入 `dev`）。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

@@ -34,7 +34,20 @@ const trendStubUrl = codeUrl(`
       insightComplete: true,
       items: [],
     }),
-    getTrendPeriods: async () => ({ periodType: 'DAILY', items: [], nextBefore: null }),
+    getTrendPeriods: async () => ({
+      periodType: 'DAILY',
+      items: [],
+      nextBefore: null,
+      earliestDate: null,
+      latestDate: null,
+    }),
+    getTrendPeriodsByMonth: async () => ({
+      periodType: 'DAILY',
+      items: [],
+      nextBefore: null,
+      earliestDate: null,
+      latestDate: null,
+    }),
     getTrendWindow: async () => null,
     getTrendBriefing: async () => ({ status: 'ABSENT' }),
   }
@@ -43,15 +56,21 @@ const trendStubUrl = codeUrl(`
   export const isTrendDate = (v) => typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v)
   export const getTrendReport = (...args) => handlers.getTrendReport(...args)
   export const getTrendPeriods = (...args) => handlers.getTrendPeriods(...args)
+  export const getTrendPeriodsByMonth = (...args) => handlers.getTrendPeriodsByMonth(...args)
   export const getTrendWindow = (...args) => handlers.getTrendWindow(...args)
   export const getTrendBriefing = (...args) => handlers.getTrendBriefing(...args)
 `)
+
+const calendarUrl = compile(
+  await readFile(new URL('../../src/core/calendar.ts', import.meta.url), 'utf8'),
+)
 
 const { useTrendEdition } = await import(
   compile(await readFile(new URL('../../src/features/trend/useTrendEdition.ts', import.meta.url), 'utf8'), {
     vue: import.meta.resolve('vue'),
     '../../api/index': apiIndexUrl,
     '../../api/trend': trendStubUrl,
+    '../../core/calendar': calendarUrl,
   })
 )
 const { ApiError } = await import(apiIndexUrl)
@@ -162,4 +181,72 @@ test('追加分页触发 429 限流时，重试历史按可控时钟严格遵守
   assert.equal(state.dateError.value, false)
   assert.deepEqual(cursors, [null, '2026-11-25', '2026-11-25'])
   assert.deepEqual(state.dates.value, ['2026-11-25', '2026-11-24'])
+})
+
+test('按月查询自动缓存已读月份、更新全局边界并支持跨空月解析邻期', async (t) => {
+  t.after(resetHandlers)
+  const monthCalls = []
+  handlers.getTrendPeriods = async () => ({
+    periodType: 'DAILY',
+    items: ['2026-11-02'],
+    nextBefore: null,
+    earliestDate: '2026-09-15',
+    latestDate: '2026-11-25',
+  })
+  handlers.getTrendPeriodsByMonth = async (month) => {
+    monthCalls.push(month)
+    if (month === '2026-11') {
+      return {
+        periodType: 'DAILY',
+        items: ['2026-11-25', '2026-11-02'],
+        nextBefore: null,
+        earliestDate: '2026-09-15',
+        latestDate: '2026-11-25',
+      }
+    }
+    if (month === '2026-10') {
+      return {
+        periodType: 'DAILY',
+        items: [],
+        nextBefore: null,
+        earliestDate: '2026-09-15',
+        latestDate: '2026-11-25',
+      }
+    }
+    if (month === '2026-09') {
+      return {
+        periodType: 'DAILY',
+        items: ['2026-09-28', '2026-09-15'],
+        nextBefore: null,
+        earliestDate: '2026-09-15',
+        latestDate: '2026-11-25',
+      }
+    }
+    return { periodType: 'DAILY', items: [], nextBefore: null, earliestDate: '2026-09-15', latestDate: '2026-11-25' }
+  }
+
+  const scope = effectScope()
+  t.after(() => scope.stop())
+  const state = scope.run(() =>
+    useTrendEdition(
+      computed(() => undefined),
+      computed(() => true),
+      computed(() => false),
+    ),
+  )
+
+  await flushMicrotasks()
+  assert.equal(state.earliestDate.value, '2026-09-15')
+  assert.equal(state.latestDate.value, '2026-11-25')
+  assert.deepEqual(monthCalls, ['2026-11'])
+
+  // 重复请求已缓存的 2026-11 不再发网络请求
+  const cached = await state.loadMonth('2026-11')
+  assert.deepEqual(cached, ['2026-11-25', '2026-11-02'])
+  assert.deepEqual(monthCalls, ['2026-11'])
+
+  // 从 2026-11-02 向前跨月探测：跳过空的 2026-10，直达 2026-09-28
+  const prev = await state.resolveAdjacentDate('2026-11-02', 'prev')
+  assert.equal(prev, '2026-09-28')
+  assert.deepEqual(monthCalls, ['2026-11', '2026-10', '2026-09'])
 })

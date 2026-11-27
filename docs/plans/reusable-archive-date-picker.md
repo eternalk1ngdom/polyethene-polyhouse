@@ -1,6 +1,6 @@
 # 可复用归档日历选择器与星潮日期体验升级计划（dev.26）
 
-> 所属阶段：[v1.0-dev.26.md](../dev-log/v1.0-dev.26.md) · 状态：**已立项待新会话确认视觉细节后实施** · 工作分支：`feat/reusable-archive-date-picker`（基于 `dev` `3fe6fb3`）
+> 所属阶段：[v1.0-dev.26.md](../dev-log/v1.0-dev.26.md) · 状态：**已完成（B1～B3 全验收通过，待确认合入 `dev`）** · 工作分支：`feat/reusable-archive-date-picker`（基于 `dev` `3fe6fb3`）
 
 ---
 

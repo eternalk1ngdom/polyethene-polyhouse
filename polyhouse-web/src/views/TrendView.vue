@@ -2,10 +2,12 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
-import { Back, Calendar, TopRight } from '@element-plus/icons-vue'
+import { Back, TopRight } from '@element-plus/icons-vue'
 import tideAtlas from '../assets/startide-tide-atlas.webp'
 import { isTrendDate } from '../api/trend'
+import ArchiveDatePicker, { type ArchiveDateShortcut } from '../components/ArchiveDatePicker.vue'
 import { starTide } from '../config/starTide'
+import { buildTrailingDateRange, shiftIsoDate } from '../core/calendar'
 import { useUserStore } from '../stores/useUserStore'
 import {
   categoryCounts,
@@ -44,11 +46,12 @@ const {
   noReport,
   loadReport,
   dates,
-  cursor,
-  dateError,
-  loadingDates,
-  loadDates,
-  retryDates,
+  earliestDate,
+  latestDate,
+  loadingMonth,
+  monthError,
+  loadMonth,
+  resolveAdjacentDate,
   windowStats,
   windowBriefing,
   windowError,
@@ -56,9 +59,29 @@ const {
   loadWindow,
 } = useTrendEdition(edition, directory, isWindowView)
 const selectedDate = computed(() => (isTrendDate(edition.value) ? edition.value : ''))
-const dateOptions = computed(() =>
-  [...new Set([selectedDate.value, ...dates.value].filter(Boolean))].sort().reverse(),
+const effectiveLatestDate = computed(() => latestDate.value ?? report.value?.periodKey ?? null)
+const anchorDate = computed(() => selectedDate.value || effectiveLatestDate.value || '')
+const availableDates = computed(() =>
+  [...new Set([selectedDate.value, report.value?.periodKey ?? '', ...dates.value].filter(Boolean))].sort().reverse(),
 )
+const windowHighlightRange = computed(() => {
+  if (!isWindowView.value || !anchorDate.value) return null
+  return buildTrailingDateRange(anchorDate.value, 7)
+})
+const dateShortcuts = computed<ArchiveDateShortcut[]>(() => {
+  const list: ArchiveDateShortcut[] = [{ label: '最新一期', value: '' }]
+  const base = effectiveLatestDate.value
+  if (base) {
+    const weekAgo = shiftIsoDate(base, -6)
+    const fallbackWeekAgo = weekAgo
+      ? availableDates.value.find((d) => d <= weekAgo) ?? null
+      : null
+    if (fallbackWeekAgo && fallbackWeekAgo !== base) {
+      list.push({ label: '近 7 日前', value: fallbackWeekAgo })
+    }
+  }
+  return list
+})
 const language = computed(() => (typeof route.query.lang === 'string' ? route.query.lang : ''))
 const category = computed<TrendCategoryFilter | ''>(() =>
   isTrendCategoryFilter(route.query.cat) ? route.query.cat : '',
@@ -224,10 +247,10 @@ function selectView(view: 'daily' | 'window') {
     ),
   )
 }
-function selectDate(event: Event) {
+function selectDate(nextDate: string) {
   void router.push(
     directoryLocation(
-      (event.target as HTMLSelectElement).value,
+      nextDate,
       '',
       '',
       undefined,
@@ -235,6 +258,12 @@ function selectDate(event: Event) {
       false,
     ),
   )
+}
+async function handleStepDate(direction: 'prev' | 'next', resolvedDate: string | null) {
+  if (resolvedDate) return
+  if (!anchorDate.value) return
+  const target = await resolveAdjacentDate(anchorDate.value, direction)
+  if (target) selectDate(target)
 }
 function selectLanguage(event: Event) {
   void router.replace(
@@ -324,16 +353,22 @@ watch(
               近 7 日风向
             </button>
           </div>
-          <label class="control"
-            ><ElIcon aria-hidden="true"><Calendar /></ElIcon>日报日期
-            <select id="trend-date" :value="selectedDate" @change="selectDate">
-              <option value="">最新一期</option>
-              <option v-for="day in dateOptions" :key="day" :value="day">{{ day }}</option>
-            </select>
-          </label>
-          <ElButton v-if="cursor" :loading="loadingDates" @click="loadDates(true)"
-            >更早日期</ElButton
-          >
+          <ArchiveDatePicker
+            :model-value="selectedDate"
+            :latest-date="effectiveLatestDate"
+            :earliest-date="earliestDate"
+            :available-dates="availableDates"
+            :loading-month="loadingMonth"
+            :month-error="monthError"
+            :highlight-range="windowHighlightRange"
+            :shortcuts="dateShortcuts"
+            aria-label="日报日期"
+            unit-label="期有日报"
+            @update:model-value="selectDate"
+            @month-change="loadMonth"
+            @retry-month="(ym) => loadMonth(ym, true)"
+            @step="handleStepDate"
+          />
           <label class="control" v-if="!isWindowView && (languages.length || language)"
             >编程语言
             <select id="trend-language" :value="language" @change="selectLanguage">
@@ -378,9 +413,6 @@ watch(
             >星潮发布台</RouterLink
           >
         </div>
-        <p v-if="dateError" class="notice" role="status">
-          历史日期暂时无法读取。<ElButton text @click="retryDates()">重试历史</ElButton>
-        </p>
       </template>
       <a v-else class="utility back" :href="router.resolve(returnTo).href" @click="goBack"
         ><ElIcon aria-hidden="true"><Back /></ElIcon>

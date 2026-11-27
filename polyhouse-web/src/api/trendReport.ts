@@ -108,6 +108,8 @@ export interface TrendPeriods {
   periodType: 'DAILY'
   items: string[]
   nextBefore: string | null
+  earliestDate: string | null
+  latestDate: string | null
 }
 
 const windowSampleStatuses = ['INSUFFICIENT', 'LIMITED', 'SUFFICIENT'] as const
@@ -306,8 +308,11 @@ function periods(value: unknown): TrendPeriods {
   const row = object(value)
   return {
     periodType: choice(row.periodType, ['DAILY']),
-    items: list(row.items, 30, date),
+    // 按月查询最多返回 31 天，必须放宽单次解码上限至 31，避免满勤大月被误判为 502。
+    items: list(row.items, 31, date),
     nextBefore: optional(row.nextBefore, date),
+    earliestDate: optional(row.earliestDate, date),
+    latestDate: optional(row.latestDate, date),
   }
 }
 
@@ -427,6 +432,14 @@ export function getTrendReport(periodKey?: string, signal?: AbortSignal): Promis
 /** 传入后端提供的排他游标分页，空列表与无服务分别处理。 */
 export function getTrendPeriods(before?: string, signal?: AbortSignal): Promise<TrendPeriods> {
   return apiRequest({ url: '/trend/periods', params: { before }, signal }, periods)
+}
+
+/** 按指定自然月（YYYY-MM）查询该月全部已发布期号，并附带全局最早/最晚日期边界。 */
+export function getTrendPeriodsByMonth(
+  month: string,
+  signal?: AbortSignal,
+): Promise<TrendPeriods> {
+  return apiRequest({ url: '/trend/periods', params: { month }, signal }, periods)
 }
 
 /** 公共 7 日榜内风向统计不携带会话，零模型调用，只基于已入库日报做确定性聚合。 */
