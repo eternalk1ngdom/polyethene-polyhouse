@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **二期已收口待合 `dev`（dev.26）**：[归档日历二期精修](docs/plans/archive-date-picker-v2-refinement.md)（分支 `feat/reusable-archive-date-picker`，B1～B4 与 C1～C3 已完、前端 605/605 全绿及 8080 巡检通过，待确认合 `dev`）。
+- **dev.26 已合 `dev` 并同步 `origin/dev`**：[归档日历二期精修](docs/plans/archive-date-picker-v2-refinement.md)（B1～B4 与 C1～C3 全部完成，前端 605/605 全绿与本机 8080 巡检通过）；下一阶段聚焦星潮纯前端页头视觉重构。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 

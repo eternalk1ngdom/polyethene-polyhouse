@@ -1,6 +1,6 @@
 # 归档日历二期精修：布局防折行、无噪边界导航、手动输入融合与架构优化计划（dev.26 续）
 
-> 所属阶段：[v1.0-dev.26.md](../dev-log/v1.0-dev.26.md) · 前置基础：[reusable-archive-date-picker.md](reusable-archive-date-picker.md)（B1～B4 已提交 `1415e94`） · 状态：**已按默认推荐项（范式 A + 单月静默静态标题）完成 C1～C3 落地（`e6515d3`、`71299dd`），待屋主确认合入 `dev`** · 工作分支：`feat/reusable-archive-date-picker`
+> 所属阶段：[v1.0-dev.26.md](../dev-log/v1.0-dev.26.md) · 前置基础：[reusable-archive-date-picker.md](reusable-archive-date-picker.md)（B1～B4 已提交 `1415e94`） · 状态：**已按默认推荐项（范式 A + 日历图标前置 + 单月静默静态标题）完成 C1～C3 并快进合入 `dev`、推送 `origin/dev`** · 工作分支：`feat/reusable-archive-date-picker`
 
 ---
 
