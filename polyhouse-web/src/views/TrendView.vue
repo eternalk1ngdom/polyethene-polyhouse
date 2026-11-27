@@ -61,8 +61,9 @@ const {
 const selectedDate = computed(() => (isTrendDate(edition.value) ? edition.value : ''))
 const effectiveLatestDate = computed(() => latestDate.value ?? report.value?.periodKey ?? null)
 const anchorDate = computed(() => selectedDate.value || effectiveLatestDate.value || '')
+// 仅采纳已证实发布的期号，避免地址栏传入 404 缺采日期反向污染日历圆点。
 const availableDates = computed(() =>
-  [...new Set([selectedDate.value, report.value?.periodKey ?? '', ...dates.value].filter(Boolean))].sort().reverse(),
+  [...new Set([report.value?.periodKey ?? '', ...dates.value].filter(Boolean))].sort().reverse(),
 )
 const windowHighlightRange = computed(() => {
   if (!isWindowView.value || !anchorDate.value) return null

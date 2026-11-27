@@ -201,3 +201,57 @@ test('有界年份推导与跨年年月钳位不凑空年份且防越界', async
     })
   }
 })
+
+test('宽容手动日期输入解析支持多分隔符与 8 位纯数字，并严格拒绝不存在的自然日', async (t) => {
+  const validCases = [
+    { name: '标准 ISO 格式', raw: '2026-11-24', expected: '2026-11-24' },
+    { name: '斜杠分隔', raw: '2026/11/24', expected: '2026-11-24' },
+    { name: '点号分隔', raw: '2026.11.24', expected: '2026-11-24' },
+    { name: '8 位纯数字', raw: '20261124', expected: '2026-11-24' },
+    { name: '单位月日自动补零并忽略首尾空白', raw: '  2026-1-5  ', expected: '2026-01-05' },
+    { name: '闰年 2 月 29 日', raw: '2024/2/29', expected: '2024-02-29' },
+  ]
+  for (const item of validCases) {
+    await t.test(item.name, () => {
+      assert.equal(calendar.parseFlexibleDateInput(item.raw), item.expected)
+    })
+  }
+
+  const invalidCases = [
+    { name: '空串与纯空白', raw: '   ' },
+    { name: '2 月 30 日', raw: '2026-02-30' },
+    { name: '平年 2 月 29 日', raw: '2026-02-29' },
+    { name: '13 月', raw: '2026-13-01' },
+    { name: '4 月 31 日', raw: '2026.04.31' },
+    { name: '年份小于 1000', raw: '0999-12-31' },
+    { name: '非日期文本', raw: 'abc' },
+    { name: '7 位残缺数字', raw: '2026112' },
+    { name: 'null 输入', raw: null },
+  ]
+  for (const item of invalidCases) {
+    await t.test(`拒绝 ${item.name}`, () => {
+      assert.equal(calendar.parseFlexibleDateInput(item.raw), null)
+    })
+  }
+})
+
+test('最近有值日期查找按自然日距离择优，同距优先向前取已发布旧期', async (t) => {
+  const pool = ['2026-11-18', '2026-11-19', '2026-11-21', '2026-11-27', '2026-10-31']
+  const cases = [
+    { name: '目标日已有归档直接返回自身', target: '2026-11-21', expected: '2026-11-21' },
+    { name: '前后同距 1 天时优先取较早的已发布旧期', target: '2026-11-20', expected: '2026-11-19' },
+    { name: '偏向较近的后一期时取更近日期', target: '2026-11-25', expected: '2026-11-27' },
+    { name: '偏向较近的前一期时取更近日期', target: '2026-11-23', expected: '2026-11-21' },
+    { name: '跨月自然日精确比距（11-05 距 10-31 为 5 天，距 11-18 为 13 天）', target: '2026-11-05', expected: '2026-10-31' },
+    { name: '非法目标日返回 null', target: '2026-02-30', expected: null },
+  ]
+  for (const item of cases) {
+    await t.test(item.name, () => {
+      assert.equal(calendar.findNearestAvailableDate(item.target, pool), item.expected)
+    })
+  }
+
+  await t.test('空集合返回 null', () => {
+    assert.equal(calendar.findNearestAvailableDate('2026-11-20', []), null)
+  })
+})

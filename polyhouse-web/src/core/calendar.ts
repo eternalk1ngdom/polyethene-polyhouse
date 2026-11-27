@@ -91,6 +91,8 @@ export const WEEKDAY_LABELS_MONDAY_FIRST = ['一', '二', '三', '四', '五', '
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 const YEAR_MONTH_RE = /^(\d{4})-(\d{2})$/
+const COMPACT_DATE_RE = /^(\d{4})(\d{2})(\d{2})$/
+const FLEX_SEP_DATE_RE = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/
 const MONTH_DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const
 // Sakamoto 算法月份偏移表，用于纯整数 O(1) 计算星期几，避免依赖运行环境时区。
 const SAKAMOTO_OFFSETS = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4] as const
@@ -415,6 +417,57 @@ export function listArchiveYears(options: ArchiveYearsOptions = {}): number[] {
     return [options.fallbackYear]
   }
   return []
+}
+
+/**
+ * 宽容解析用户手输的日期文本，归一化为标准 ISO 日期（YYYY-MM-DD）。
+ * 支持 `-`、`/`、`.` 分隔（允许单位月日自动补零）与 8 位纯数字（如 20261124）；
+ * 拒绝不存在的自然日（如 2026-02-30、平年 2 月 29 日）、越界月份或年份 < 1000。
+ */
+export function parseFlexibleDateInput(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  const match = COMPACT_DATE_RE.exec(trimmed) ?? FLEX_SEP_DATE_RE.exec(trimmed)
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (year < 1000 || year > 9999 || month < 1 || month > 12) return null
+  const maxDay = daysInMonth(year, month)
+  if (day < 1 || day > maxDay) return null
+  return formatIsoDate(year, month, day)
+}
+
+/**
+ * 在已知有内容日期集合中，按自然日距离查找离 targetIso 最近的有值日期。
+ * 命中当日（距离 0）直接返回自身；前后距离相同时优先取更早的已发布旧期，
+ * 避免在离散归档缺采日上盲目跳向未来或不确定方向。
+ */
+export function findNearestAvailableDate(
+  targetIso: string,
+  availableDates: ReadonlySet<string> | readonly string[],
+): string | null {
+  const target = parseIsoDate(targetIso)
+  if (!target) return null
+  const targetEpoch = toEpochDay(target.year, target.month, target.day)
+
+  let best: string | null = null
+  let bestDiff = Number.POSITIVE_INFINITY
+  for (const candidate of availableDates) {
+    const parsed = parseIsoDate(candidate)
+    if (!parsed) continue
+    const normalized = formatIsoDate(parsed.year, parsed.month, parsed.day)
+    const diff = Math.abs(toEpochDay(parsed.year, parsed.month, parsed.day) - targetEpoch)
+    if (diff === 0) return normalized
+    if (diff < bestDiff || (diff === bestDiff && best !== null && normalized < best)) {
+      best = normalized
+      bestDiff = diff
+    }
+  }
+  return best
 }
 
 /**
