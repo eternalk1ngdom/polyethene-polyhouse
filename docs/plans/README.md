@@ -6,7 +6,7 @@
 
 | 计划 | 状态 | 所属阶段 |
 | --- | --- | --- |
-| [可复用归档日历选择器与星潮日期体验升级](reusable-archive-date-picker.md) | 已立项待新会话确认交互细节后实施（后端按月日历接口 + 纯 TS 内核 + `ArchiveDatePicker` 公共组件 + 星潮接入） | [dev.26](../dev-log/v1.0-dev.26.md) |
+| [可复用归档日历选择器与星潮日期体验升级](reusable-archive-date-picker.md) | B1～B3 与首轮体验精简已完成（分支 `feat/reusable-archive-date-picker`），待新窗口落地年月切换层级重构后合入 `dev` | [dev.26](../dev-log/v1.0-dev.26.md) |
 | [测试体系升级与仓库维护修复验收计划](testing-upgrade-and-maintenance-verification.md) | 本地 `dev` 已收口（阶段 A～C 与 D1/D2）；`#16` 远端 Pages 双作业首轮发布验收与推送待确认 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [仓库维护计划](repository-maintenance-backlog.md) | 高价值 10 项（#1～#6、#10、#15～#17）已合入本地 `dev`；#14 不实施，其余 6 项延后观察 | [dev.21](../dev-log/v1.0-dev.21.md) |
 | [前端趣味氛围与个性化体验储备计划](frontend-ambience-backlog.md) | 远期低优先级待办（P3 创意储备，未批准实施、暂不排期） | 远期待办 |
