@@ -4,7 +4,7 @@
 
 ## 当前焦点
 
-- **dev.29 已在短期分支 `style/startide-owner-header` 完成本地提交（待确认合入 `dev` 与推送）**：星潮发布台落地纯 CSS 晨雾弥散柔光三段均衡报头并清理退休位图 `startide-tide-atlas.webp`，前端 608/608 与双态五视口/首页巡检全绿。
+- **dev.29 已合 `dev` 并同步 `origin/dev`**：星潮发布台落地纯 CSS 晨雾弥散柔光三段均衡控制台报头（按钮与 `Console` 水印全视口零重合、移动端去冗余留白），安全删除退休位图 `startide-tide-atlas.webp`（零影响首页 `startide-voyage.webp`），前端 608/608 与双态五视口/首页巡检全绿。
 
 ## 🔒 永久钉选区（未经用户确认禁止删除）
 
